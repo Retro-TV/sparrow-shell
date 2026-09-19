@@ -8,9 +8,9 @@ driver for the machine.
 
 ```sh
 sudo pacman -S --needed git
-git clone https://github.com/Retro-TV/sparrow-shell.git \
-  "${XDG_DATA_HOME:-$HOME/.local/share}/sparrow-shell"
-cd "${XDG_DATA_HOME:-$HOME/.local/share}/sparrow-shell"
+mkdir -p ~/.local/share
+git clone https://github.com/Retro-TV/sparrow-shell.git ~/.local/share/sparrow-shell
+cd ~/.local/share/sparrow-shell
 ./scripts/validate.sh
 ./install.sh --dry-run --full
 ./install.sh --full

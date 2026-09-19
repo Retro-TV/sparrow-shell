@@ -65,8 +65,8 @@ bash ~/.config/hypr/scripts/wallpaper.sh resolve
 does not match the official repository. Inspect with:
 
 ```sh
-git -C "${XDG_DATA_HOME:-$HOME/.local/share}/sparrow-shell" status
-git -C "${XDG_DATA_HOME:-$HOME/.local/share}/sparrow-shell" remote -v
+git -C ~/.local/share/sparrow-shell status
+git -C ~/.local/share/sparrow-shell remote -v
 ```
 
 Do not discard local changes until you know what they contain.

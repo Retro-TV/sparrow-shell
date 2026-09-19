@@ -52,9 +52,9 @@ From a terminal with network access and `sudo`:
 
 ```sh
 sudo pacman -S --needed git
-git clone https://github.com/Retro-TV/sparrow-shell.git \
-  "${XDG_DATA_HOME:-$HOME/.local/share}/sparrow-shell"
-cd "${XDG_DATA_HOME:-$HOME/.local/share}/sparrow-shell"
+mkdir -p ~/.local/share
+git clone https://github.com/Retro-TV/sparrow-shell.git ~/.local/share/sparrow-shell
+cd ~/.local/share/sparrow-shell
 ./install.sh --dry-run --full
 ./install.sh --full
 ```

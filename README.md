@@ -59,6 +59,10 @@ cd ~/.local/share/sparrow-shell
 ./install.sh --full
 ```
 
+For a guided setup, run `./install.sh` without options. It presents a numbered
+menu (or a `gum` menu when `gum` is already installed), pauses before Spotify
+and Firefox integration steps, and offers a dry run before applying changes.
+
 The installer backs up replaced files under
 `~/.local/state/sparrow-shell-backups/`. The public monitor configuration uses
 portable `preferred/auto` defaults; your real output names can be added after
@@ -84,6 +88,7 @@ boot checklist.
 | `./install.sh --wallpaper FILE` | Apply a wallpaper and regenerate colors |
 | `./install.sh --system-keymap` | Opt in to the maintainer's Slovenian keymap |
 | `./install.sh --dry-run ...` | Print every planned operation without changing anything |
+| `./install.sh` | Guided interactive installer |
 
 The full machine snapshot remains in `packages/pacman-explicit.txt` for
 reference. It is deliberately **not** installed on other machines; the curated

@@ -22,7 +22,8 @@ for compatibility with the Ricelin-based Quickshell modules.
 - **Quickshell:** watches the generated color JSON and updates immediately.
 - **Hyprland:** reloads generated border and decoration colors.
 - **GTK/Thunar:** receives matching GTK3/GTK4 settings and CSS.
-- **Kitty/Ghostty:** loads generated terminal color fragments.
+- **Kitty/Ghostty:** loads generated terminal color fragments, including the
+  extended ANSI slots used by the Starship rounded prompt.
 - **Firefox:** reads the exported Pywal palette through Pywalfox.
 - **Vesktop:** receives generated QuickCSS while staying opaque for compositor stability.
 - **Fastfetch:** regenerates its accent and lantern colors.

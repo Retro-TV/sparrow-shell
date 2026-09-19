@@ -14,6 +14,7 @@ fish
 git
 gpu-screen-recorder
 grim
+gum
 gvfs
 hypridle
 hyprland

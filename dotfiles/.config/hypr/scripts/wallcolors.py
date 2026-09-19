@@ -463,6 +463,24 @@ def main():
     ]
     for i in range(16):
         lines.append(f'palette = {i}={b["base%02x" % i]}')
+    # Starship uses the same extended ANSI slots as Kitty for its rounded
+    # prompt segments. Ghostty must receive them too, otherwise only the
+    # separators render and the prompt backgrounds disappear.
+    lines.extend([
+        f'palette = 235={b["base07"]}',
+        f'palette = 240={b["base07"]}',
+        f'palette = 243={pill["primary"]}',
+        f'palette = 244={b["base08"]}',
+        f'palette = 245={pill["outline_variant"]}',
+        f'palette = 248={pill["surface_container"]}',
+        f'palette = 249={b["base08"]}',
+        f'palette = 250={pill["surface_container_high"]}',
+        f'palette = 251={b["base0e"]}',
+        f'palette = 252={pill["surface_container_highest"]}',
+        f'palette = 253={b["base0d"]}',
+        f'palette = 254={pill["primary_container"]}',
+        f'palette = 255={pill["surface_container_highest"]}',
+    ])
     (CACHE / "ghostty-colors").write_text("\n".join(lines) + "\n")
     kitty = [
         f'background            {terminal_bg}',

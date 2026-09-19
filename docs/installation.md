@@ -25,6 +25,10 @@ installer bootstraps `yay-bin` when needed.
 The installer never installs the maintainer's complete package snapshot. That
 snapshot is retained only as reference under `packages/pacman-explicit.txt`.
 
+You can also run `./install.sh` with no options for the guided installer. It
+offers a menu, can use `gum` if it is already installed, pauses before Spotify
+and Firefox actions, and offers a dry run before applying the selected mode.
+
 ## Existing configurations and backups
 
 Files replaced by the installer are copied to a timestamped directory:

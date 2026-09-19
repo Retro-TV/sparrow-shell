@@ -1,0 +1,8 @@
+brave-bin
+firefox
+ghostty
+mpv
+spicetify-cli
+spotify
+stremio
+vesktop-bin

@@ -43,10 +43,10 @@ if [[ -z "$ROOT" && -n "${SPARROW_REPO_DIR:-}" ]]; then ROOT=$SPARROW_REPO_DIR; 
 if [[ -z "$ROOT" ]] && git rev-parse --show-toplevel >/dev/null 2>&1; then
     ROOT=$(git rev-parse --show-toplevel)
 fi
-for candidate in "$HOME/Sparrow/sparrow-shell" "$HOME/Ricelin/sparrow-shell" "$HOME/Ricelin/ricelin-dotfiles"; do
+for candidate in "${XDG_DATA_HOME:-$HOME/.local/share}/sparrow-shell" "$HOME/Sparrow/sparrow-shell" "$HOME/Ricelin/sparrow-shell" "$HOME/Ricelin/ricelin-dotfiles"; do
     if [[ -z "$ROOT" && -d "$candidate/.git" ]]; then ROOT=$candidate; break; fi
 done
-ROOT=$(CDPATH= cd -- "${ROOT:-.}" && pwd)
+ROOT=$(CDPATH='' cd -- "${ROOT:-.}" && pwd)
 
 git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
     echo "Sparrow Shell checkout not found. Use --repo PATH." >&2
@@ -74,16 +74,24 @@ if ((DRY_RUN)); then
     echo "Incoming changes from $EXPECTED_REPO ($branch):"
     git -C "$ROOT" diff --stat "HEAD..origin/$branch" || true
     args=()
-    ((PACKAGES)) && args+=(--packages)
-    ((APPS)) && args+=(--apps)
+    if ((PACKAGES && APPS)); then
+        args+=(--full)
+    else
+        ((PACKAGES)) && args+=(--packages)
+        ((APPS)) && args+=(--apps)
+    fi
     "$ROOT/install.sh" --dry-run "${args[@]}"
     exit 0
 fi
 
 git -C "$ROOT" pull --ff-only --quiet
 args=()
-((PACKAGES)) && args+=(--packages)
-((APPS)) && args+=(--apps)
+if ((PACKAGES && APPS)); then
+    args+=(--full)
+else
+    ((PACKAGES)) && args+=(--packages)
+    ((APPS)) && args+=(--apps)
+fi
 "$ROOT/install.sh" "${args[@]}"
 
 if ((UPGRADE_SYSTEM)); then

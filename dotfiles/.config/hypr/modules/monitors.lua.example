@@ -1,14 +1,16 @@
+-- Example multi-monitor layout. Check output names and modes with
+-- `hyprctl monitors all` before copying these values into monitors.lua.
 hl.monitor({
     output   = "DP-1",
-    mode     = "2560x1440@280",
-    position = "2560x0",
+    mode     = "2560x1440@144",
+    position = "0x0",
     scale    = 1,
 })
 
 hl.monitor({
     output   = "HDMI-A-1",
-    mode     = "2560x1440@144",
-    position = "0x0",
+    mode     = "1920x1080@60",
+    position = "2560x0",
     scale    = 1,
 })
 

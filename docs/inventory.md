@@ -8,7 +8,7 @@ Discord/Spotify data, tokens, caches, or the wallpaper collection.
 
 - CachyOS Linux
 - Hyprland 0.56.2 on Wayland
-- Quickshell Sparrow Shell layer and pill
+- Sparrow Shell, using Ricelin as the base for its Quickshell modules and pill
 - Slovenian keyboard layout (`si` / `slovene`)
 - Flat mouse acceleration profile, 40 repeat rate, 400 ms repeat delay
 - Bibata-Modern-Ice cursor, size 24
@@ -49,5 +49,5 @@ brightness, and volume keys.
 - Discord, Vesktop session data, Spotify account data, ChatGPT data
 - GitHub credentials and SSH keys
 - Wallpaper files and current wallpaper state
-- Monitor configuration is included as a reference but should be reviewed on
-  a different machine before use.
+- Portable monitor defaults are active; a multi-monitor example is included
+  for adaptation after checking the target machine's output names.

@@ -31,6 +31,7 @@ movement glitches.
 
 ## Hardware review
 
-Review monitors, GPU-specific options, output names, and device-specific
-window rules before applying them to a different computer. The repository
-captures the current desktop layout as a reference, not a universal default.
+The active monitor file uses portable defaults. Review GPU-specific options,
+output names, and device-specific window rules after the first boot. The
+motherboard RGB synchronization unit is hardware-specific and remains disabled
+unless a user explicitly enables and adapts it.

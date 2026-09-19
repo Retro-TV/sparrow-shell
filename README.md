@@ -1,115 +1,138 @@
+<div align="center">
+
 # Sparrow Shell
 
-Reproducible desktop rice for CachyOS + Hyprland + Quickshell. Sparrow Shell
-is the maintained configuration layer around the Ricelin shell components; it
-is a configuration repository, not a backup of personal data.
+**A complete, wallpaper-driven Hyprland rice for Arch Linux and CachyOS.**
 
-## What it contains
+[![Hyprland](https://img.shields.io/badge/WM-Hyprland-58E1FF?style=flat-square)](https://hypr.land/)
+[![Quickshell](https://img.shields.io/badge/Shell-Quickshell-8BA4D2?style=flat-square)](https://quickshell.outfoxxed.me/)
+[![Ricelin](https://img.shields.io/badge/Based_on-Ricelin-E0563B?style=flat-square)](https://github.com/Gakuseei/Ricelin)
+[![Arch](https://img.shields.io/badge/Arch-CachyOS-1793D1?style=flat-square)](https://cachyos.org/)
+[![Validate](https://img.shields.io/github/actions/workflow/status/Retro-TV/sparrow-shell/validate.yml?branch=master&style=flat-square&label=checks)](https://github.com/Retro-TV/sparrow-shell/actions)
+[![License](https://img.shields.io/badge/license-MIT-7A7A7A?style=flat-square)](LICENSE)
 
-- Hyprland Lua configuration, keybinds, input settings, startup, window rules,
-  wallpaper rotation, screenshots, locking, recording, and helper scripts
-- Quickshell launcher, pill, lock screen, settings, media, workspace,
-  wallpaper, network, Bluetooth, audio, and recorder surfaces
-- Matugen wallpaper palette generation and the GTK, terminal, Fastfetch,
-  Firefox/Pywalfox, and Vesktop integrations
-- Fish, Ghostty, Kitty, Fastfetch, GTK, Thunar, Vesktop, Spicetify Marketplace,
-  and selected Spicetify theme files
-- Package snapshots, default applications, locale/keymap facts, and enabled
-  user-service facts under `packages/` and `system/`
+</div>
 
-## Quick start
+![Sparrow Shell desktop](docs/assets/desktop-dark.png)
 
-Review first:
+Sparrow Shell turns a minimal Arch-based install into a coordinated desktop:
+Hyprland behavior, a morphing Quickshell pill, launcher and lock screen, dynamic
+wallpaper colors, themed applications, terminal styling, screenshots, recording,
+clipboard history, networking, media controls, and a safe update workflow.
 
-```sh
-./scripts/validate.sh
-./install.sh --dry-run
-```
+The Quickshell foundation is based on [Ricelin](https://github.com/Gakuseei/Ricelin)
+by Gakuseei. Sparrow Shell keeps that interaction model and substantially
+customizes the palette system, app integration, Hyprland behavior, portability,
+packaging, and update flow into a complete personal rice.
 
-Install the configuration with a timestamped backup:
+## What is included
 
-```sh
-./install.sh
-```
+| Layer | Sparrow Shell configuration |
+| --- | --- |
+| Window manager | Hyprland Lua config, workspaces, stash, rules, animations and keybinds |
+| Desktop shell | Ricelin-based Quickshell pill, launcher, lock screen, OSDs and settings |
+| Dynamic colors | Wallpaper analysis through Matugen with readable dark/light palettes |
+| Themed apps | Firefox/Pywalfox, Vesktop, GTK/Thunar, Kitty, Ghostty and Fastfetch |
+| Media | MPRIS controls, animated media pill, Spotify/Spicetify integration |
+| Utilities | rishot, recorder, clipboard history, wallpaper picker and color picker |
+| Maintenance | Backed-up installs, curated package sets and `sparrow-update` |
 
-For the simplest repeatable setup on an empty Arch-based terminal:
+![Sparrow Shell media surface](docs/assets/media-pill.png)
+
+[Watch the 56-second desktop demo](docs/assets/demo.mp4)
+
+## Install
+
+> [!IMPORTANT]
+> Sparrow Shell configures an existing Arch Linux or CachyOS installation. It
+> does not partition disks, install a bootloader, GPU drivers, or a display
+> manager. Read the dry run before applying it to an existing desktop.
+
+From a terminal with network access and `sudo`:
 
 ```sh
 sudo pacman -S --needed git
-git clone https://github.com/Retro-TV/sparrow-shell.git "$HOME/Sparrow/sparrow-shell"
-cd "$HOME/Sparrow/sparrow-shell"
-./install.sh --packages --apps --system-keymap
+git clone https://github.com/Retro-TV/sparrow-shell.git \
+  "${XDG_DATA_HOME:-$HOME/.local/share}/sparrow-shell"
+cd "${XDG_DATA_HOME:-$HOME/.local/share}/sparrow-shell"
+./install.sh --dry-run --full
+./install.sh --full
 ```
 
-The package mode bootstraps an AUR helper when needed, installs the recorded
-Hyprland/Sparrow Shell dependencies, and then applies the tracked configuration.
-Review the monitor file before using it on different hardware.
+The installer backs up replaced files under
+`~/.local/state/sparrow-shell-backups/`. The public monitor configuration uses
+portable `preferred/auto` defaults; your real output names can be added after
+the first boot.
 
-Install packages too, when the target is an Arch/CachyOS machine:
+Log out and select Hyprland from your display manager, or start it from a TTY:
 
 ```sh
-./install.sh --packages
+Hyprland
 ```
 
-Apply the recorded defaults, Spicetify Marketplace integration, and Pywalfox
-native helper:
+See [Installation](docs/installation.md) for modes, prerequisites and the first
+boot checklist.
+
+## Installer modes
+
+| Command | Effect |
+| --- | --- |
+| `./install.sh` | Dotfiles and Sparrow commands only |
+| `./install.sh --packages` | Dotfiles plus the curated desktop core |
+| `./install.sh --apps` | Configure already-installed themed apps |
+| `./install.sh --full` | Core packages, themed apps and integrations |
+| `./install.sh --wallpaper FILE` | Apply a wallpaper and regenerate colors |
+| `./install.sh --system-keymap` | Opt in to the maintainer's Slovenian keymap |
+| `./install.sh --dry-run ...` | Print every planned operation without changing anything |
+
+The full machine snapshot remains in `packages/pacman-explicit.txt` for
+reference. It is deliberately **not** installed on other machines; the curated
+`core.txt` and `apps.txt` manifests are used instead.
+
+## Daily use
 
 ```sh
-./install.sh --apps
-```
-
-Set the Slovenian system keymap explicitly:
-
-```sh
-./install.sh --system-keymap
-```
-
-Regenerate the live palette after choosing a wallpaper:
-
-```sh
-./install.sh --wallpaper /path/to/wallpaper.jpg
-```
-
-## Update an installed Sparrow Shell
-
-On any machine using the public rice, update from GitHub with:
-
-```sh
+sparrow-shell status
+sparrow-shell restart pill
+sparrow-shell log pill
+sparrow-update --dry-run
 sparrow-update
 ```
 
-This pulls fast-forward-only changes from the official repository, applies the
-tracked configuration, and reconciles the package and app integrations. It
-does not commit or push anything. Use `sparrow-update --dry-run` to preview an
-update, `--no-packages` or `--no-apps` to skip parts, and
-`--upgrade-system` to opt into a full `yay`/`paru` system upgrade.
+`sparrow-update` only accepts the official repository remote, refuses a dirty
+checkout, pulls with fast-forward only, reapplies the rice, and never commits or
+pushes. A full system upgrade is intentionally opt-in with
+`sparrow-update --upgrade-system`.
 
-The maintainer command `rice-update` is deliberately private and is not part
-of this repository. It snapshots the allowlisted configuration and system
-facts, scans for obvious secrets, commits the diff, and pushes it to GitHub.
-That separation means installing Sparrow Shell cannot grant a stranger a way
-to publish changes to the repository.
+The maintainer-only publisher remains a separate local command named
+`rice-update`. Its source and GitHub credentials are not distributed here.
 
-The snapshot policy is intentionally allowlisted: it does not inspect or copy
-browser profiles, app sessions, cookies, tokens, SSH keys, arbitrary home
-files, or wallpaper files. When the maintainer adds a new kind of rice
-component, its path is added to the private snapshot policy before it becomes
-public.
+## Documentation
 
-The installer never copies browser profiles, app accounts, tokens, wallpaper
-files, or GitHub credentials. It also does not blindly install the current
-monitor geometry; review `dotfiles/.config/hypr/modules/monitors.lua` first on
-another machine.
+- [Installation and first boot](docs/installation.md)
+- [Dynamic theming](docs/theming.md)
+- [Architecture and update model](docs/architecture.md)
+- [Keybindings](docs/keybindings.md)
+- [Troubleshooting](docs/troubleshooting.md)
+- [Captured system inventory](docs/inventory.md)
+- [Manual integration steps](docs/manual-steps.md)
+- [Third-party credits](THIRD_PARTY.md)
 
-## Repository maintenance
+## Scope and privacy
 
-The public repository is:
+The repository contains configuration—not account state. It excludes browser
+profiles, cookies, tokens, Discord/Spotify sessions, SSH keys, wallpaper
+collections, screenshots from daily use, caches, and GitHub credentials.
+Hardware-specific RGB support is included as an optional example and is not
+enabled automatically.
 
-```text
-https://github.com/Retro-TV/sparrow-shell
-```
+## Credits
 
-Only the maintainer should publish changes. Review the allowlisted diff and
-run the private `rice-update` command from the maintainer machine. Never add
-credentials, browser profiles, account data, wallpaper collections, or the
-private publisher command to this repository.
+Sparrow Shell uses modified Quickshell and Hyprland components from
+[Gakuseei/Ricelin](https://github.com/Gakuseei/Ricelin), licensed under MIT.
+[rishot](https://github.com/Gakuseei/rishot) is also authored by Gakuseei and is
+installed from its own repository. Full notices are in [THIRD_PARTY.md](THIRD_PARTY.md).
+
+## License
+
+MIT. See [LICENSE](LICENSE). Third-party components retain their own notices.

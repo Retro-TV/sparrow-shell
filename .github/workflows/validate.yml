@@ -1,0 +1,23 @@
+name: Validate
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  repository:
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install validation tools
+        run: pacman -Syu --noconfirm diffutils git jq nodejs python ripgrep rsync shellcheck
+      - name: Validate repository
+        run: ./scripts/validate.sh
+      - name: ShellCheck public entry points
+        run: shellcheck install.sh scripts/sparrow-update
+      - name: Installer dry run
+        run: ./install.sh --dry-run --full

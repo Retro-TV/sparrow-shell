@@ -16,14 +16,14 @@ body {
 }
 
 :root {
-    --systemcolor-base: #ffb4a8;
-    --bg-1: rgba(71, 47, 43, 0.98);
-    --bg-2: rgba(59, 36, 33, 0.98);
-    --bg-3: rgba(43, 22, 19, 0.98);
-    --bg-4: rgba(33, 14, 11, 0.98);
+    --systemcolor-base: #b9c5ef;
+    --bg-1: rgba(52, 52, 55, 0.98);
+    --bg-2: rgba(42, 42, 44, 0.98);
+    --bg-3: rgba(27, 27, 30, 0.98);
+    --bg-4: rgba(19, 19, 22, 0.98);
     --hover: rgba(247, 247, 248, 0.08);
-    --active: rgba(255, 180, 168, 0.22);
-    --active-2: rgba(255, 180, 168, 0.30);
+    --active: rgba(185, 197, 239, 0.22);
+    --active-2: rgba(185, 197, 239, 0.30);
     --message-hover: var(--hover);
     --text-0: #f7f7f8;
     --text-1: #f7f7f8;
@@ -31,11 +31,11 @@ body {
     --text-3: #d3cdd8;
     --text-4: #aaa2b2;
     --text-5: #aaa2b2;
-    --accent-1: #ffb4a8;
-    --accent-2: #ffb4a8;
-    --accent-3: #ffb4a8;
-    --accent-4: #000000;
-    --accent-5: #ff5541;
+    --accent-1: #b9c5ef;
+    --accent-2: #b9c5ef;
+    --accent-3: #b9c5ef;
+    --accent-4: #dde3ff;
+    --accent-5: #3c486b;
     --border-light: rgba(247, 247, 248, 0.09);
     --border: rgba(247, 247, 248, 0.13);
     --border-hover: rgba(247, 247, 248, 0.24);

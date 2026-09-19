@@ -28,6 +28,8 @@ import "Singletons"
 ShellRoot {
     id: root
 
+    OnScreenKeyboard {}
+
     property string openMon: ""
     property string openSurface: ""
     property string peekMon: ""

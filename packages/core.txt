@@ -49,3 +49,4 @@ wireplumber
 wl-clipboard
 xdg-desktop-portal-hyprland
 xdg-user-dirs
+ydotool

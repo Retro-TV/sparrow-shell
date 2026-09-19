@@ -39,7 +39,7 @@ done
 
 HOME_DIR=${HOME:?HOME is not set}
 STAMP=$(date +%Y%m%d-%H%M%S)
-BACKUP="$HOME_DIR/.local/state/ricelin-dotfiles-backups/$STAMP"
+BACKUP="$HOME_DIR/.local/state/sparrow-shell-backups/$STAMP"
 
 run() {
     printf '+ '; printf '%q ' "$@"; printf '\n'
@@ -61,7 +61,7 @@ if ((INSTALL_PACKAGES)) && ! command -v rsync >/dev/null; then
 fi
 run mkdir -p "$BACKUP"
 run rsync -a --backup --backup-dir="$BACKUP" "$ROOT/dotfiles/" "$HOME_DIR/"
-run install -Dm755 "$ROOT/scripts/rice-update" "$HOME_DIR/.local/bin/rice-update"
+run install -Dm755 "$ROOT/scripts/sparrow-update" "$HOME_DIR/.local/bin/sparrow-update"
 
 if ((INSTALL_PACKAGES)); then
     command -v pacman >/dev/null || { echo "pacman is required" >&2; exit 1; }

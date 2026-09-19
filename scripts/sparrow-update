@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+EXPECTED_REPO="https://github.com/Retro-TV/sparrow-shell.git"
+ROOT="${SPARROW_REPO_DIR:-}"
+DRY_RUN=0
+PACKAGES=1
+APPS=1
+UPGRADE_SYSTEM=0
+
+usage() {
+    cat <<'EOF'
+Usage: sparrow-update [options]
+
+Pull the official Sparrow Shell configuration and apply it safely.
+
+  --repo PATH          Use a specific Sparrow Shell checkout
+  --dry-run            Show incoming and planned changes without applying
+  --no-packages        Do not reconcile packages with pacman/AUR
+  --no-apps            Do not update default apps, Spicetify, or Pywalfox
+  --upgrade-system     Also run a full yay system upgrade (opt-in)
+  -h, --help           Show this help
+
+This command never commits or pushes. The owner-only rice-update command is
+intentionally not distributed in the public repository.
+EOF
+}
+
+while (($#)); do
+    case "$1" in
+        --repo) ROOT=${2:?--repo needs a path}; shift ;;
+        --dry-run) DRY_RUN=1 ;;
+        --no-packages) PACKAGES=0 ;;
+        --no-apps) APPS=0 ;;
+        --upgrade-system) UPGRADE_SYSTEM=1 ;;
+        -h|--help) usage; exit 0 ;;
+        *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
+    esac
+    shift
+done
+
+if [[ -z "$ROOT" && -n "${SPARROW_REPO_DIR:-}" ]]; then ROOT=$SPARROW_REPO_DIR; fi
+if [[ -z "$ROOT" ]] && git rev-parse --show-toplevel >/dev/null 2>&1; then
+    ROOT=$(git rev-parse --show-toplevel)
+fi
+for candidate in "$HOME/Sparrow/sparrow-shell" "$HOME/Ricelin/sparrow-shell" "$HOME/Ricelin/ricelin-dotfiles"; do
+    if [[ -z "$ROOT" && -d "$candidate/.git" ]]; then ROOT=$candidate; break; fi
+done
+ROOT=$(CDPATH= cd -- "${ROOT:-.}" && pwd)
+
+git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
+    echo "Sparrow Shell checkout not found. Use --repo PATH." >&2
+    exit 1
+}
+
+remote=$(git -C "$ROOT" remote get-url origin 2>/dev/null || true)
+case "$remote" in
+    "$EXPECTED_REPO"|git@github.com:Retro-TV/sparrow-shell.git) ;;
+    *)
+        echo "Refusing unexpected repository remote: $remote" >&2
+        echo "Expected: $EXPECTED_REPO" >&2
+        exit 1
+        ;;
+esac
+
+if ! git -C "$ROOT" diff --quiet || ! git -C "$ROOT" diff --cached --quiet; then
+    echo "Local Sparrow Shell checkout has uncommitted changes; refusing to overwrite them." >&2
+    exit 1
+fi
+
+git -C "$ROOT" fetch --quiet origin
+branch=$(git -C "$ROOT" branch --show-current)
+if ((DRY_RUN)); then
+    echo "Incoming changes from $EXPECTED_REPO ($branch):"
+    git -C "$ROOT" diff --stat "HEAD..origin/$branch" || true
+    args=()
+    ((PACKAGES)) && args+=(--packages)
+    ((APPS)) && args+=(--apps)
+    "$ROOT/install.sh" --dry-run "${args[@]}"
+    exit 0
+fi
+
+git -C "$ROOT" pull --ff-only --quiet
+args=()
+((PACKAGES)) && args+=(--packages)
+((APPS)) && args+=(--apps)
+"$ROOT/install.sh" "${args[@]}"
+
+if ((UPGRADE_SYSTEM)); then
+    helper=$(command -v yay || command -v paru || true)
+    [[ -n "$helper" ]] || { echo "No yay/paru helper found." >&2; exit 1; }
+    "$helper" -Syu
+fi
+
+echo "Sparrow Shell is up to date."

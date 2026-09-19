@@ -1,4 +1,4 @@
-# Current system inventory
+# Sparrow Shell system inventory
 
 This repository captures the intentional personal layer discovered on the
 source CachyOS machine. It does not capture accounts, browser profiles,
@@ -8,7 +8,7 @@ Discord/Spotify data, tokens, caches, or the wallpaper collection.
 
 - CachyOS Linux
 - Hyprland 0.56.2 on Wayland
-- Quickshell Ricelin shell and pill
+- Quickshell Sparrow Shell layer and pill
 - Slovenian keyboard layout (`si` / `slovene`)
 - Flat mouse acceleration profile, 40 repeat rate, 400 ms repeat delay
 - Bibata-Modern-Ice cursor, size 24
@@ -51,4 +51,3 @@ brightness, and volume keys.
 - Wallpaper files and current wallpaper state
 - Monitor configuration is included as a reference but should be reviewed on
   a different machine before use.
-

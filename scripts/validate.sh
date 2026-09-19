@@ -13,10 +13,10 @@ check() {
 }
 check 'wallcolor Python syntax' python3 -m py_compile "$ROOT/dotfiles/.config/hypr/scripts/wallcolors.py"
 check 'wallpaper shell syntax' bash -n "$ROOT/dotfiles/.config/hypr/scripts/wallpaper.sh"
+check 'Sparrow updater shell syntax' bash -n "$ROOT/scripts/sparrow-update"
 check 'Ricelin updater Python syntax' python3 -m py_compile "$ROOT/dotfiles/.config/hypr/scripts/ricelin-update.py"
 if command -v jq >/dev/null && [[ -f "$ROOT/dotfiles/.config/vesktop/settings/settings.json" ]]; then
     check 'Vesktop settings JSON' jq empty "$ROOT/dotfiles/.config/vesktop/settings/settings.json"
 fi
 if ((fail)); then exit 1; fi
 echo 'Validation complete.'
-

@@ -1,4 +1,4 @@
-# Manual steps on a new machine
+# Sparrow Shell manual steps on a new machine
 
 Some integrations intentionally cannot be copied as raw profile data.
 
@@ -34,4 +34,3 @@ movement glitches.
 Review monitors, GPU-specific options, output names, and device-specific
 window rules before applying them to a different computer. The repository
 captures the current desktop layout as a reference, not a universal default.
-

@@ -135,6 +135,10 @@ if ((INSTALL_APPS)); then
         done < "$ROOT/system/default-apps.tsv"
     fi
     if command -v spicetify >/dev/null; then
+        # Spicetify refuses to operate reliably when the prefs file or path is
+        # missing. Create the target first, then set the path explicitly.
+        run mkdir -p "$HOME_DIR/.config/spotify"
+        run touch "$HOME_DIR/.config/spotify/prefs"
         if [[ -d /opt/spotify/Apps && ! -w /opt/spotify/Apps ]] && command -v setfacl >/dev/null; then
             if ((DRY_RUN)); then
                 echo "Would grant the current user write access to /opt/spotify for Spicetify."
@@ -155,6 +159,7 @@ if ((INSTALL_APPS)); then
         [[ -n "$pywalfox_bin" ]] || pywalfox_bin="$HOME_DIR/.local/bin/pywalfox"
         if [[ -x "$pywalfox_bin" ]] || ((DRY_RUN)); then
             run "$pywalfox_bin" install
+            echo "Firefox step: install and enable the Pywalfox extension in Firefox, then use its Fetch colors action once."
         fi
     else
         echo "pipx not found; install Pywalfox manually from docs/manual-steps.md." >&2
@@ -176,6 +181,16 @@ if ((INSTALL_PACKAGES)); then
     fi
 fi
 
+# A Ricelin installation normally already records the active wallpaper. Use it
+# to render the app palette immediately after copying the files, so a new
+# machine does not boot with stale tracked GTK/terminal/Firefox colors.
+if [[ -z "$WALLPAPER" ]]; then
+    wallpaper_state="$HOME_DIR/.local/state/ricelin-wallpaper"
+    if [[ -r "$wallpaper_state" ]]; then
+        candidate=$(head -n1 "$wallpaper_state")
+        [[ -f "$candidate" ]] && WALLPAPER=$candidate
+    fi
+fi
 if [[ -n "$WALLPAPER" ]]; then
     [[ -f "$WALLPAPER" ]] || { echo "Wallpaper not found: $WALLPAPER" >&2; exit 1; }
     run python3 "$HOME_DIR/.config/hypr/scripts/wallcolors.py" "$WALLPAPER"

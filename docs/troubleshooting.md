@@ -13,7 +13,7 @@ available.
 
 ## Firefox stays on its default theme
 
-Install and enable the Pywalfox Firefox extension. Then run:
+Install and enable the [Pywalfox Firefox extension](https://addons.mozilla.org/firefox/addon/pywalfox/). The native helper is not the browser extension. Then run:
 
 ```sh
 pipx install pywalfox

@@ -4,16 +4,19 @@ Some integrations intentionally cannot be copied as raw profile data.
 
 ## Firefox dynamic colors
 
-Install Pywalfox in the target Firefox profile, then install the native helper
-if it is not already present:
+The native helper alone does not theme Firefox. Install the Pywalfox extension
+from [Mozilla Add-ons](https://addons.mozilla.org/firefox/addon/pywalfox/) in
+the target Firefox profile, then install the helper if it is not already
+present:
 
 ```sh
 pipx install pywalfox
 pywalfox install
 ```
 
-Enable the Pywalfox extension and use its update/fetch action once. The
-wallpaper script then exports the shared palette and calls `pywalfox update`.
+Enable the extension and use its Fetch colors action once. The installer now
+creates the Spotify prefs file, renders the current Ricelin wallpaper palette
+immediately, and the wallpaper script calls `pywalfox update` thereafter.
 
 ## Spotify
 

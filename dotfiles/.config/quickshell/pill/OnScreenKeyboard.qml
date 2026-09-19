@@ -81,7 +81,8 @@ Scope {
 
             Rectangle {
                 id: keyboardCard
-                anchors { left: parent.left; right: parent.right; bottom: parent.bottom; margins: 12 }
+                anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; margins: 12 }
+                width: 820
                 implicitHeight: content.implicitHeight + 24
                 radius: 18
                 color: Qt.alpha(Theme.cardBot, 0.98)
@@ -132,6 +133,8 @@ Scope {
                     }
                 }
             }
+
+            mask: Region { item: keyboardCard }
         }
     }
 }

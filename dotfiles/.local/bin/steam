@@ -1,0 +1,3 @@
+#!/bin/sh
+export DISPLAY="${DISPLAY:-:0}"
+exec /usr/bin/steam "$@"

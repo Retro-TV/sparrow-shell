@@ -52,8 +52,16 @@ if ((DRY_RUN)); then
 else
     mkdir -p "$BACKUP"
 fi
+if ((INSTALL_PACKAGES)) && ! command -v rsync >/dev/null; then
+    if ((DRY_RUN)); then
+        echo "Would bootstrap rsync before copying dotfiles."
+    else
+        sudo pacman -S --needed --noconfirm rsync
+    fi
+fi
 run mkdir -p "$BACKUP"
 run rsync -a --backup --backup-dir="$BACKUP" "$ROOT/dotfiles/" "$HOME_DIR/"
+run install -Dm755 "$ROOT/scripts/rice-update" "$HOME_DIR/.local/bin/rice-update"
 
 if ((INSTALL_PACKAGES)); then
     command -v pacman >/dev/null || { echo "pacman is required" >&2; exit 1; }
@@ -64,10 +72,18 @@ if ((INSTALL_PACKAGES)); then
     else
         sudo pacman -S --needed -- < "$native"
         helper=$(command -v yay || command -v paru || true)
+        if [[ -z "$helper" && -s "$ROOT/packages/aur.txt" && $DRY_RUN -eq 0 ]]; then
+            sudo pacman -S --needed --noconfirm base-devel git
+            build_dir=$(mktemp -d)
+            trap 'rm -rf "$build_dir"' EXIT
+            git clone https://aur.archlinux.org/yay-bin.git "$build_dir/yay-bin"
+            (cd "$build_dir/yay-bin" && makepkg -si --noconfirm)
+            helper=$(command -v yay || command -v paru || true)
+        fi
         if [[ -n "$helper" && -s "$ROOT/packages/aur.txt" ]]; then
             "$helper" -S --needed -- < "$ROOT/packages/aur.txt"
-        else
-            echo "No yay/paru found; skipping AUR packages." >&2
+        elif [[ -z "$helper" && -s "$ROOT/packages/aur.txt" ]]; then
+            echo "No AUR helper available; skipping AUR packages." >&2
         fi
     fi
     rm -f "$native"

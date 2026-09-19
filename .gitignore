@@ -25,4 +25,6 @@ dotfiles/.config/gh/hosts.yml
 *.lock
 *.pyc
 __pycache__/
-
+**/screenshots/
+**/default.target.wants/
+**/graphical-session.target.wants/

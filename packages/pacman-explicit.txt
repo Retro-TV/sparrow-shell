@@ -155,6 +155,7 @@ noto-fonts-emoji
 npm
 nss-mdns
 opencl-mesa
+openrgb
 openssh
 os-prober
 pacman-contrib

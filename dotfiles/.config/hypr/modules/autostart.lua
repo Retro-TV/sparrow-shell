@@ -6,6 +6,7 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("systemctl --user start hyprpolkitagent")
     hl.exec_cmd(os.getenv("HOME") .. "/.config/hypr/scripts/watchdog.sh pill")
     hl.exec_cmd(os.getenv("HOME") .. "/.config/hypr/scripts/watchdog.sh lock")
+    hl.exec_cmd("pgrep -u " .. os.getenv("USER") .. " -f 'wallpaper-rgb-sync.sh' >/dev/null || " .. os.getenv("HOME") .. "/.local/bin/wallpaper-rgb-sync.sh >/dev/null 2>&1 &")
     hl.exec_cmd("systemctl --user restart hypridle")
     -- warm the page cache so a user's first fastfetch run doesn't stall on cold pacman db reads
     hl.exec_cmd("fastfetch")

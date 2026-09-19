@@ -31,6 +31,19 @@ Install the configuration with a timestamped backup:
 ./install.sh
 ```
 
+For the simplest repeatable setup on an empty Arch-based terminal:
+
+```sh
+sudo pacman -S --needed git
+git clone https://github.com/Retro-TV/ricelin-dotfiles.git "$HOME/Ricelin/ricelin-dotfiles"
+cd "$HOME/Ricelin/ricelin-dotfiles"
+./install.sh --packages --apps --system-keymap
+```
+
+The package mode bootstraps an AUR helper when needed, installs the recorded
+Hyprland/Ricelin dependencies, and then applies the tracked configuration.
+Review the monitor file before using it on different hardware.
+
 Install packages too, when the target is an Arch/CachyOS machine:
 
 ```sh
@@ -55,6 +68,25 @@ Regenerate the live palette after choosing a wallpaper:
 ```sh
 ./install.sh --wallpaper /path/to/wallpaper.jpg
 ```
+
+## Save future changes
+
+After changing a supported part of the rice, run:
+
+```sh
+rice-update
+```
+
+It snapshots the allowlisted configuration and system facts, scans for obvious
+credential material, commits the diff, and pushes it to GitHub. Use
+`rice-update --dry-run` to inspect the next commit or `rice-update --no-push`
+to commit locally only. New package installs, default-app changes, keybind
+edits, theme edits, and wallpaper-palette changes are included automatically.
+
+The command is intentionally allowlisted: it does not inspect or copy browser
+profiles, app sessions, cookies, tokens, SSH keys, arbitrary home files, or
+wallpaper files. If you add a new kind of rice component, add its path to
+`scripts/rice-update` once; after that it is automatic.
 
 The installer never copies browser profiles, app accounts, tokens, wallpaper
 files, or GitHub credentials. It also does not blindly install the current

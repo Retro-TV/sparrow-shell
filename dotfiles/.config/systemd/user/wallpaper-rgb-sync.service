@@ -1,0 +1,14 @@
+[Unit]
+Description=Synchronize motherboard RGB with the visible wallpaper
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/wallpaper-rgb-sync.sh
+Restart=always
+RestartSec=3
+Environment=QT_QPA_PLATFORM=xcb
+
+[Install]
+WantedBy=default.target

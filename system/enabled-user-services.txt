@@ -4,5 +4,6 @@ p11-kit-server.socket
 pipewire-pulse.socket
 pipewire.socket
 ricelin-personal-addon.path
+wallpaper-rgb-sync.service
 wireplumber.service
 xdg-user-dirs.service

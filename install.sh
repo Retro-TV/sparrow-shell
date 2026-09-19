@@ -93,6 +93,16 @@ if ((INSTALL_APPS)); then
         run spicetify config custom_apps marketplace
         run spicetify apply
     fi
+    if command -v pipx >/dev/null; then
+        if ! command -v pywalfox >/dev/null; then
+            run pipx install pywalfox
+        fi
+        if command -v pywalfox >/dev/null; then
+            run pywalfox install
+        fi
+    else
+        echo "pipx not found; install Pywalfox manually from docs/manual-steps.md." >&2
+    fi
 fi
 
 if [[ -n "$WALLPAPER" ]]; then

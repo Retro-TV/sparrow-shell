@@ -11,8 +11,8 @@ desktop. This is a configuration repository, not a backup of personal data.
   wallpaper, network, Bluetooth, audio, and recorder surfaces
 - Matugen wallpaper palette generation and the GTK, terminal, Fastfetch,
   Firefox/Pywalfox, and Vesktop integrations
-- Fish, Ghostty, Kitty, Fastfetch, GTK, Thunar, Vesktop, and selected Spicetify
-  theme files
+- Fish, Ghostty, Kitty, Fastfetch, GTK, Thunar, Vesktop, Spicetify Marketplace,
+  and selected Spicetify theme files
 - Package snapshots, default applications, locale/keymap facts, and enabled
   user-service facts under `packages/` and `system/`
 
@@ -37,7 +37,8 @@ Install packages too, when the target is an Arch/CachyOS machine:
 ./install.sh --packages
 ```
 
-Apply the recorded defaults and Spicetify Marketplace integration:
+Apply the recorded defaults, Spicetify Marketplace integration, and Pywalfox
+native helper:
 
 ```sh
 ./install.sh --apps
@@ -74,4 +75,3 @@ gh repo create ricelin-dotfiles --private --source=. --remote=origin --push
 ```
 
 Use `--public` instead of `--private` only after reviewing the files again.
-

@@ -1,0 +1,28 @@
+# Machine state, secrets, caches, generated palette output, and account data.
+.env
+.env.*
+**/Cache/
+**/Code Cache/
+**/GPUCache/
+**/Crashpad/
+**/sessionData/
+**/Local Storage/
+**/Service Worker/
+**/WebStorage/
+**/cookies.sqlite*
+**/logins.json
+**/key4.db
+**/places.sqlite*
+dotfiles/.cache/
+dotfiles/.local/state/
+dotfiles/.config/mozilla/
+dotfiles/.config/BraveSoftware/
+dotfiles/.config/discord/
+dotfiles/.config/spotify/
+dotfiles/.config/Codex/
+dotfiles/.config/gh/hosts.yml
+*.log
+*.lock
+*.pyc
+__pycache__/
+

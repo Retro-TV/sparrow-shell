@@ -1,0 +1,8 @@
+codex-remote-control.service
+hyprsunset.service
+p11-kit-server.socket
+pipewire-pulse.socket
+pipewire.socket
+ricelin-personal-addon.path
+wireplumber.service
+xdg-user-dirs.service

@@ -1,0 +1,13 @@
+System Locale: LANG=en_GB.UTF-8
+               LC_NUMERIC=sl_SI.UTF-8
+               LC_TIME=sl_SI.UTF-8
+               LC_MONETARY=sl_SI.UTF-8
+               LC_PAPER=sl_SI.UTF-8
+               LC_NAME=sl_SI.UTF-8
+               LC_ADDRESS=sl_SI.UTF-8
+               LC_TELEPHONE=sl_SI.UTF-8
+               LC_MEASUREMENT=sl_SI.UTF-8
+               LC_IDENTIFICATION=sl_SI.UTF-8
+    VC Keymap: slovene
+   X11 Layout: si
+    X11 Model: pc105

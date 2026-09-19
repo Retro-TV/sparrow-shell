@@ -1,0 +1,9 @@
+bibata-cursor-theme-bin
+dotool
+electron-castlab-bin
+libelectron
+papirus-folders
+rustdesk-bin
+spicetify-cli
+spotify
+stremio

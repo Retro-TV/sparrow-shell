@@ -124,8 +124,12 @@ if ! command -v rsync >/dev/null && ((INSTALL_PACKAGES == 0)); then
     echo "rsync is required. Install it or rerun with --packages/--full." >&2
     exit 1
 fi
+
 run mkdir -p "$BACKUP"
-run rsync -a --backup --backup-dir="$BACKUP" "$ROOT/dotfiles/" "$HOME_DIR/"
+run rsync -a --backup --backup-dir="$BACKUP" \
+    --exclude='.config/systemd/user/default.target.wants/' \
+    --exclude='.config/systemd/user/graphical-session.target.wants/' \
+    "$ROOT/dotfiles/" "$HOME_DIR/"
 run install -Dm755 "$ROOT/scripts/sparrow-update" "$BIN_DIR/sparrow-update"
 run install -Dm755 "$ROOT/dotfiles/.config/hypr/scripts/ricelin" "$BIN_DIR/sparrow-shell"
 run install -Dm755 "$ROOT/dotfiles/.config/hypr/scripts/ricelin" "$BIN_DIR/sparrow"
@@ -273,38 +277,58 @@ fi
 if [[ -n "$WALLPAPER" ]]; then
     [[ -f "$WALLPAPER" ]] || { echo "Wallpaper not found: $WALLPAPER" >&2; exit 1; }
     run python3 "$HOME_DIR/.config/hypr/scripts/wallcolors.py" "$WALLPAPER"
+else
+    # A fresh machine has no wallpaper state yet, but Kitty and Starship still
+    # require the generated extended palette. Seed a neutral dark palette so
+    # the first terminal never falls back to defaults or loses prompt fills.
+    run python3 "$HOME_DIR/.config/hypr/scripts/wallcolors.py" --hue 260 dark 0.18
 fi
 
 if ((DRY_RUN == 0)); then
+    for generated in \
+        "$HOME_DIR/.cache/ricelin/colors.json" \
+        "$HOME_DIR/.cache/ricelin/kitty-colors.conf" \
+        "$HOME_DIR/.cache/ricelin/ghostty-colors"; do
+        [[ -s "$generated" ]] || { echo "Generated theme file is missing: $generated" >&2; exit 1; }
+    done
+
     systemctl --user daemon-reload 2>/dev/null || true
     if command -v ydotool >/dev/null 2>&1; then
-        if ! id -nG "$CURRENT_USER" | tr ' ' '\n' | grep -qx input; then
-            sudo usermod -aG input "$CURRENT_USER"
-            echo "Added $CURRENT_USER to the input group for future logins."
-        fi
-
-        # Group changes do not enter an already-running desktop session.  Give
-        # this login access immediately, then restart the daemon so a fresh
-        # install can type without requiring a logout first.  The input-group
-        # membership above provides the persistent permission after reboot.
-        if [[ ! -e /dev/uinput ]]; then
-            sudo modprobe uinput 2>/dev/null || true
-        fi
-        if [[ -e /dev/uinput ]] && command -v setfacl >/dev/null 2>&1; then
-            sudo setfacl -m "u:${CURRENT_USER}:rw" /dev/uinput
-        fi
-        systemctl --user enable ydotool.service >/dev/null 2>&1 || true
-        systemctl --user restart ydotool.service 2>/dev/null || true
-        sleep 0.3
+        # Upstream documents that ydotoold normally needs root access to
+        # /dev/uinput. A user service happens to work on some machines through
+        # group/ACL state, but that state is session-dependent and was the
+        # reason the same keyboard worked on the desktop and failed on a
+        # laptop. Run one root-owned daemon with a 0600 socket owned by this
+        # desktop user: reliable device access without exposing input injection
+        # to other users.
+        uid=$(id -u "$CURRENT_USER")
+        gid=$(id -g "$CURRENT_USER")
+        service_tmp=$(mktemp)
+        sed -e "s/__UID__/$uid/g" -e "s/__GID__/$gid/g" \
+            "$ROOT/system/sparrow-ydotool.service.in" > "$service_tmp"
+        sudo install -Dm644 "$service_tmp" /etc/systemd/system/sparrow-ydotool.service
+        rm -f "$service_tmp"
+        systemctl --user disable --now ydotool.service >/dev/null 2>&1 || true
         ydotool_socket="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/.ydotool_socket"
-        if ! systemctl --user is-active --quiet ydotool.service || [[ ! -S "$ydotool_socket" ]]; then
-            echo "Warning: the keyboard input service is not ready. Run: systemctl --user status ydotool.service" >&2
+        rm -f "$ydotool_socket"
+        sudo systemctl daemon-reload
+        sudo systemctl enable --now sparrow-ydotool.service
+        sleep 0.8
+        if ! sudo systemctl is-active --quiet sparrow-ydotool.service \
+            || [[ ! -S "$ydotool_socket" ]] \
+            || ! YDOTOOL_SOCKET="$ydotool_socket" ydotool key 0:1 0:0 >/dev/null 2>&1; then
+            echo "Keyboard backend failed its input test." >&2
+            sudo systemctl status sparrow-ydotool.service --no-pager >&2 || true
+            exit 1
         fi
     fi
     if command -v hyprctl >/dev/null 2>&1 && hyprctl monitors >/dev/null 2>&1; then
         hyprctl reload >/dev/null 2>&1 || true
         "$BIN_DIR/sparrow-shell" restart all >/dev/null 2>&1 || true
     fi
+    version_state="$HOME_DIR/.local/state/sparrow-shell/version"
+    mkdir -p "$(dirname "$version_state")"
+    git -C "$ROOT" rev-parse HEAD > "$version_state" 2>/dev/null || printf 'unknown\n' > "$version_state"
     echo "Installed. Backup: $BACKUP"
     echo "Commands: sparrow, sparrow-shell, sparrow-update"
     echo "Keyboard: Super+K, 'sparrow keyboard', or tap the keyboard icon in the expanded pill"

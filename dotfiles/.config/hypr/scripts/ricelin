@@ -84,6 +84,11 @@ wd_up() { pgrep -f "watchdog.sh $1" >/dev/null 2>&1; }
 start_wd() { setsid sh "$WATCHDOG" "$1" >/dev/null 2>&1 & }
 
 installed_version() {
+    version_file="${XDG_STATE_HOME:-$HOME/.local/state}/sparrow-shell/version"
+    if [ -r "$version_file" ]; then
+        version=$(head -n1 "$version_file" | cut -c1-7)
+        [ -n "$version" ] && { printf '%s' "$version"; return; }
+    fi
     qsdir="${XDG_CONFIG_HOME:-$HOME/.config}/quickshell"
     if [ -L "$qsdir" ]; then
         repo=$(git -C "$(readlink -f "$qsdir")" rev-parse --show-toplevel 2>/dev/null)
@@ -168,12 +173,23 @@ cmd_status() {
         if wd_up "$s"; then wdt="${dim}watchdog up${rst}"; else wdt="${faint}no watchdog${rst}"; fi
         row "$mk $lab   $stt   $wdt"
     done
+    socket="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/.ydotool_socket"
+    if [ -S "$socket" ] && { systemctl is-active --quiet sparrow-ydotool.service 2>/dev/null \
+        || systemctl --user is-active --quiet ydotool.service 2>/dev/null; }; then
+        row "${flame}●${rst} ${cream}keyboard${rst}   ${cream}input backend ready${rst}"
+    else
+        row "${faint}○${rst} ${dim}keyboard${rst}   ${verm}input backend unavailable${rst}"
+    fi
     gap
     row "${dim}version${rst}   ${cream}$(installed_version)${rst}"
     gap
 }
 
 cmd_keyboard() {
+    socket="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/.ydotool_socket"
+    [ -S "$socket" ] || die "keyboard input backend is unavailable; rerun the Sparrow installer"
+    YDOTOOL_SOCKET="$socket" ydotool key 0:1 0:0 >/dev/null 2>&1 || \
+        die "keyboard input test failed; run: sparrow status"
     if ! is_up pill; then
         start_wd pill
         sleep 1

@@ -27,12 +27,14 @@ immediately without restarting the shell.
 
 ## The on-screen keyboard opens but does not type
 
-Rerun `./install.sh --packages`. It gives the current login immediate access to
-`/dev/uinput`, records persistent `input` group membership, and restarts the
-keyboard input service. Check the result with:
+Rerun `./install.sh --packages`. It replaces the session-dependent user daemon
+with Sparrow's root-owned input daemon and a private socket belonging to the
+desktop user. The installer performs a client connection test before it exits.
+Check the result with:
 
 ```sh
-systemctl --user status ydotool.service
+systemctl status sparrow-ydotool.service
+sparrow status
 ```
 
 For touch-only access, tap the top pill to expand it and tap the keyboard icon.

@@ -268,6 +268,11 @@ if [ "$cmd" = "init" ]; then
         if map_has_video && ! pgrep -x mpvpaper >/dev/null 2>&1; then
             sync_videos
         fi
+        # awww commonly survives a shell restart. Its presence says nothing
+        # about the generated app/terminal palette, so always repair that state
+        # before returning. This prevents stale GTK colors and Kitty falling
+        # back to defaults after login or an interrupted update.
+        palette_update
         exit 0
     fi
     restore_all

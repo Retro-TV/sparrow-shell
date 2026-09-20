@@ -49,9 +49,9 @@ replaced by the installer.
 4. Open Firefox, enable the Pywalfox extension, and fetch the native colors once.
 5. Sign in to Vesktop and Spotify normally; account state is intentionally absent.
 6. Run `sparrow status` and confirm the pill and lock watchdogs are running.
-7. Press `Super+K` and verify that the tablet keyboard opens. The full installer
-   enables its `ydotool` user service and grants the current login access to the
-   input device automatically. In tablet mode, tap the top pill to expand it,
+7. Press `Super+K` and verify that the tablet keyboard opens. The installer
+   enables Sparrow's private `ydotoold` system service and verifies a real
+   client connection before reporting success. In tablet mode, tap the top pill to expand it,
    then tap its keyboard icon; no physical key is required.
    Drag the grip above the keys to reposition it; choose S, M, or L to save a
    comfortable size for that display.

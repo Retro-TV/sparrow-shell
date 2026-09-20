@@ -443,7 +443,27 @@ def main():
             b = {k: v[terminal_mode]["color"] for k, v in
                  matugen(tint(hue, sat, 0.45) if chromatic else "#787878")["base16"].items()}
     except (OSError, ValueError, KeyError, subprocess.SubprocessError):
-        return 0
+        # Terminal output is mandatory: Kitty includes this file and Starship
+        # uses its extended ANSI slots. A Matugen failure must degrade to a
+        # coherent palette, never to a missing file and hollow prompt pills.
+        b = {
+            "base00": pill["surface"],
+            "base01": pill["surface_container_low"],
+            "base02": pill["surface_container"],
+            "base03": pill["outline_variant"],
+            "base04": pill["dim"],
+            "base05": pill["bright"],
+            "base06": pill["cream"],
+            "base07": pill["bright"],
+            "base08": "#e06c75",
+            "base09": pill["tertiary"],
+            "base0a": pill["secondary"],
+            "base0b": "#98c379",
+            "base0c": pill["primary"],
+            "base0d": pill["primary"],
+            "base0e": pill["tertiary"],
+            "base0f": pill["primary_container"],
+        }
 
     # Keep the terminal's main background exactly equal to the shared surface.
     terminal_bg = pill["surface"]
@@ -507,7 +527,7 @@ def main():
         f'color235              {b["base07"]}',
     ])
     (CACHE / "kitty-colors.conf").write_text("\n".join(kitty) + "\n")
-    subprocess.run([str(Path.home() / ".local/bin/ricelin-personal-palette.py")], check=False)
+    subprocess.run([str(Path.home() / ".local/bin/sparrow-terminal-palette.py")], check=True)
     return 0
 
 

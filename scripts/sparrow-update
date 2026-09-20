@@ -39,14 +39,35 @@ while (($#)); do
     shift
 done
 
-if [[ -z "$ROOT" && -n "${SPARROW_REPO_DIR:-}" ]]; then ROOT=$SPARROW_REPO_DIR; fi
+is_official_checkout() {
+    local path=$1 remote
+    [[ -d "$path/.git" ]] || return 1
+    remote=$(git -C "$path" remote get-url origin 2>/dev/null || true)
+    [[ "$remote" == "$EXPECTED_REPO" || "$remote" == "git@github.com:Retro-TV/sparrow-shell.git" ]]
+}
+
 if [[ -z "$ROOT" ]] && git rev-parse --show-toplevel >/dev/null 2>&1; then
-    ROOT=$(git rev-parse --show-toplevel)
+    candidate=$(git rev-parse --show-toplevel)
+    is_official_checkout "$candidate" && ROOT=$candidate
 fi
 for candidate in "${XDG_DATA_HOME:-$HOME/.local/share}/sparrow-shell" "$HOME/Sparrow/sparrow-shell" "$HOME/Ricelin/sparrow-shell" "$HOME/Ricelin/ricelin-dotfiles"; do
-    if [[ -z "$ROOT" && -d "$candidate/.git" ]]; then ROOT=$candidate; break; fi
+    if [[ -z "$ROOT" ]] && is_official_checkout "$candidate"; then ROOT=$candidate; break; fi
 done
-ROOT=$(CDPATH='' cd -- "${ROOT:-.}" && pwd)
+
+# Public installs should not depend on remembering where the original clone
+# lived. If no official checkout can be found, recreate the canonical managed
+# checkout and continue the update from there.
+if [[ -z "$ROOT" ]]; then
+    ROOT="${XDG_DATA_HOME:-$HOME/.local/share}/sparrow-shell"
+    if [[ -e "$ROOT" ]]; then
+        echo "Cannot create the managed checkout because this path already exists: $ROOT" >&2
+        exit 1
+    fi
+    mkdir -p "$(dirname "$ROOT")"
+    echo "Sparrow Shell checkout not found; cloning the official repository."
+    git clone --quiet "$EXPECTED_REPO" "$ROOT"
+fi
+ROOT=$(CDPATH='' cd -- "$ROOT" && pwd)
 
 git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
     echo "Sparrow Shell checkout not found. Use --repo PATH." >&2

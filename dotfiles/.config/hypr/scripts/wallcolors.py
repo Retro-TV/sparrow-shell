@@ -165,23 +165,50 @@ def normalize_palette(pill):
 
 
 def normalize_terminal_palette(base16, pill):
-    """Map Base16 roles to ANSI order and protect every terminal text color."""
+    """Build distinct ANSI semantics on top of the wallpaper-derived surface."""
     bg = pill["surface"]
+    dark = relative_luminance(bg) < 0.35
+    normal_tone = 0.68 if dark else 0.30
+    bright_tone = 0.78 if dark else 0.20
+
+    # ANSI color names carry meaning in shells, compilers and TUI programs.
+    # Matugen can collapse them all into one hue on monochrome wallpapers, so
+    # preserve the familiar semantic families while the terminal surface,
+    # selection and prompt remain fully wallpaper-driven.
+    semantic_hues = {
+        "base08": 2 / 360,    # red
+        "base09": 28 / 360,   # orange
+        "base0a": 48 / 360,   # yellow
+        "base0b": 132 / 360,  # green
+        "base0c": 184 / 360,  # cyan
+        "base0d": 218 / 360,  # blue
+        "base0e": 292 / 360,  # magenta
+        "base0f": 338 / 360,  # rose
+    }
+    semantic = {
+        key: ensure_contrast(tint(hue, 0.62, normal_tone), bg, 4.5)
+        for key, hue in semantic_hues.items()
+    }
+    semantic_bright = {
+        key: ensure_contrast(tint(hue, 0.72, bright_tone), bg, 4.5)
+        for key, hue in semantic_hues.items()
+    }
     base16.update({
         "base00": bg,
         "base01": pill["surface_container_low"],
         "base02": pill["surface_container"],
-        "base03": ensure_contrast(base16.get("base03", pill["dim"]), bg, 4.5),
-        "base04": ensure_contrast(base16.get("base04", pill["subtle"]), bg, 4.5),
+        "base03": ensure_contrast(pill["dim"], bg, 4.5),
+        "base04": ensure_contrast(pill["subtle"], bg, 4.5),
         "base05": pill["bright"],
         "base06": pill["cream"],
         "base07": pill["bright"],
+        **semantic,
     })
-    for key in ("base08", "base09", "base0a", "base0b", "base0c", "base0d", "base0e", "base0f"):
-        base16[key] = ensure_contrast(base16.get(key, pill["primary"]), bg, 4.5)
     normal = ["base00", "base08", "base0b", "base0a", "base0d", "base0e", "base0c", "base05"]
-    bright = ["base03", "base08", "base0b", "base0a", "base0d", "base0e", "base0c", "base07"]
-    return base16, [base16[key] for key in normal + bright]
+    bright = [base16["base03"]] + [semantic_bright[key] for key in
+                                   ("base08", "base0b", "base0a", "base0d", "base0e", "base0c")]
+    bright.append(base16["base07"])
+    return base16, [base16[key] for key in normal] + bright
 
 
 def render_fastfetch(pill):

@@ -17,6 +17,7 @@ usage() {
 Usage: ./install.sh [options]
 
   --dry-run                 Show planned changes without writing anything
+  --settings                Apply settings only; useful for non-interactive updates
   --packages                Install the curated Sparrow Shell core packages
   --apps                    Configure installed themed applications
   --full                    Install core + themed apps, then configure them
@@ -33,6 +34,7 @@ EOF
 while (($#)); do
     case "$1" in
         --dry-run) DRY_RUN=1 ;;
+        --settings) ;;
         --packages) INSTALL_PACKAGES=1 ;;
         --apps) INSTALL_APPS=1 ;;
         --full) INSTALL_PACKAGES=1; INSTALL_APP_PACKAGES=1; INSTALL_APPS=1 ;;
@@ -201,10 +203,17 @@ run install -Dm755 "$ROOT/dotfiles/.local/bin/sparrow-ydotool-key" "$BIN_DIR/spa
 # Also install the public commands in the normal system command path.  The
 # per-user copies remain useful as a fallback, while /usr/local/bin makes the
 # commands available immediately from Fish, Bash, Zsh and a newly opened TTY.
-run sudo install -Dm755 "$ROOT/scripts/sparrow-update" "$SYSTEM_BIN_DIR/sparrow-update"
-run sudo install -Dm755 "$ROOT/dotfiles/.config/hypr/scripts/ricelin" "$SYSTEM_BIN_DIR/sparrow-shell"
-run sudo install -Dm755 "$ROOT/dotfiles/.config/hypr/scripts/ricelin" "$SYSTEM_BIN_DIR/sparrow"
-run sudo install -Dm755 "$ROOT/dotfiles/.local/bin/sparrow-ydotool-key" "$SYSTEM_BIN_DIR/sparrow-ydotool-key"
+if ((DRY_RUN)); then
+    echo "Would refresh optional system-wide command shims when sudo is available."
+elif sudo -n true 2>/dev/null; then
+    run sudo -n install -Dm755 "$ROOT/scripts/sparrow-update" "$SYSTEM_BIN_DIR/sparrow-update"
+    run sudo -n install -Dm755 "$ROOT/dotfiles/.config/hypr/scripts/ricelin" "$SYSTEM_BIN_DIR/sparrow-shell"
+    run sudo -n install -Dm755 "$ROOT/dotfiles/.config/hypr/scripts/ricelin" "$SYSTEM_BIN_DIR/sparrow"
+    run sudo -n install -Dm755 "$ROOT/dotfiles/.local/bin/sparrow-ydotool-key" "$SYSTEM_BIN_DIR/sparrow-ydotool-key"
+else
+    echo "System-wide command shims were not refreshed (sudo is not cached)."
+    echo "The current per-user commands are installed in $BIN_DIR."
+fi
 
 # Sparrow's default shell is Fish. A universal Fish path updates running Fish
 # sessions as well as future ones; .profile covers POSIX login shells.

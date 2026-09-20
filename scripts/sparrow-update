@@ -100,6 +100,7 @@ if ((DRY_RUN)); then
     else
         ((PACKAGES)) && args+=(--packages)
         ((APPS)) && args+=(--apps)
+        ((${#args[@]})) || args+=(--settings)
     fi
     "$ROOT/install.sh" --dry-run "${args[@]}"
     exit 0
@@ -112,6 +113,7 @@ if ((PACKAGES && APPS)); then
 else
     ((PACKAGES)) && args+=(--packages)
     ((APPS)) && args+=(--apps)
+    ((${#args[@]})) || args+=(--settings)
 fi
 "$ROOT/install.sh" "${args[@]}"
 

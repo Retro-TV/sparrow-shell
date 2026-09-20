@@ -383,6 +383,19 @@ else
     run python3 "$HOME_DIR/.config/hypr/scripts/wallcolors.py" --hue 260 dark 0.18
 fi
 
+# Palette generation updates Pywalfox's cache even during settings-only
+# updates. If Firefox is already open, apply the matching template immediately
+# instead of waiting for the next wallpaper change or a manual Fetch Colors.
+if ((DRY_RUN == 0)) && command -v pywalfox >/dev/null 2>&1 \
+    && pgrep -x firefox >/dev/null 2>&1; then
+    pywalfox_mode=$(cat "$HOME_DIR/.cache/ricelin/mode" 2>/dev/null || echo dark)
+    case "$pywalfox_mode" in
+        light) run_optional pywalfox light ;;
+        *) run_optional pywalfox dark ;;
+    esac
+    run_optional pywalfox update
+fi
+
 if ((DRY_RUN == 0)); then
     for generated in \
         "$HOME_DIR/.cache/ricelin/colors.json" \

@@ -213,8 +213,10 @@ palette_update() {
     else
         python3 "$(dirname "$0")/wallcolors.py" "$show" >>"$WLOG" 2>&1 || true
     fi
-    if pgrep -x firefox >/dev/null 2>&1; then
-        pywalfox update >>"$WLOG" 2>&1 || true
+    pywalfox_bin=$(command -v pywalfox 2>/dev/null || true)
+    [ -n "$pywalfox_bin" ] || [ ! -x "$HOME/.local/bin/pywalfox" ] || pywalfox_bin="$HOME/.local/bin/pywalfox"
+    if pgrep -x firefox >/dev/null 2>&1 && [ -n "$pywalfox_bin" ]; then
+        "$pywalfox_bin" update >>"$WLOG" 2>&1 || true
     fi
     # The GTK portal is a long-lived process and otherwise keeps the previous
     # wallpaper palette until it is restarted.

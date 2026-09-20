@@ -527,7 +527,9 @@ def main():
         f'color235              {b["base07"]}',
     ])
     (CACHE / "kitty-colors.conf").write_text("\n".join(kitty) + "\n")
-    subprocess.run([str(Path.home() / ".local/bin/sparrow-terminal-palette.py")], check=True)
+    terminal_helper = Path.home() / ".local/bin/sparrow-terminal-palette.py"
+    if terminal_helper.is_file():
+        subprocess.run([str(terminal_helper)], check=True)
     return 0
 
 

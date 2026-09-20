@@ -133,6 +133,7 @@ run rsync -a --backup --backup-dir="$BACKUP" \
 run install -Dm755 "$ROOT/scripts/sparrow-update" "$BIN_DIR/sparrow-update"
 run install -Dm755 "$ROOT/dotfiles/.config/hypr/scripts/ricelin" "$BIN_DIR/sparrow-shell"
 run install -Dm755 "$ROOT/dotfiles/.config/hypr/scripts/ricelin" "$BIN_DIR/sparrow"
+run install -Dm755 "$ROOT/dotfiles/.local/bin/sparrow-ydotool-key" "$BIN_DIR/sparrow-ydotool-key"
 
 # Also install the public commands in the normal system command path.  The
 # per-user copies remain useful as a fallback, while /usr/local/bin makes the
@@ -140,6 +141,7 @@ run install -Dm755 "$ROOT/dotfiles/.config/hypr/scripts/ricelin" "$BIN_DIR/sparr
 run sudo install -Dm755 "$ROOT/scripts/sparrow-update" "$SYSTEM_BIN_DIR/sparrow-update"
 run sudo install -Dm755 "$ROOT/dotfiles/.config/hypr/scripts/ricelin" "$SYSTEM_BIN_DIR/sparrow-shell"
 run sudo install -Dm755 "$ROOT/dotfiles/.config/hypr/scripts/ricelin" "$SYSTEM_BIN_DIR/sparrow"
+run sudo install -Dm755 "$ROOT/dotfiles/.local/bin/sparrow-ydotool-key" "$SYSTEM_BIN_DIR/sparrow-ydotool-key"
 
 # Sparrow's default shell is Fish. A universal Fish path updates running Fish
 # sessions as well as future ones; .profile covers POSIX login shells.
@@ -316,7 +318,7 @@ if ((DRY_RUN == 0)); then
         sleep 0.8
         if ! sudo systemctl is-active --quiet sparrow-ydotool.service \
             || [[ ! -S "$ydotool_socket" ]] \
-            || ! YDOTOOL_SOCKET="$ydotool_socket" ydotool key 0:1 0:0 >/dev/null 2>&1; then
+            || ! "$BIN_DIR/sparrow-ydotool-key" 0:1 0:0 >/dev/null 2>&1; then
             echo "Keyboard backend failed its input test." >&2
             sudo systemctl status sparrow-ydotool.service --no-pager >&2 || true
             exit 1

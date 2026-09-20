@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+
+# ydotool's default socket varies between package builds. Sparrow owns one
+# private daemon per desktop user at this stable runtime path.
+runtime_dir=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
+socket=${YDOTOOL_SOCKET:-$runtime_dir/.ydotool_socket}
+
+if [ ! -S "$socket" ]; then
+    printf 'Sparrow keyboard backend is unavailable: %s\n' "$socket" >&2
+    exit 1
+fi
+
+export YDOTOOL_SOCKET=$socket
+exec /usr/bin/ydotool key "$@"

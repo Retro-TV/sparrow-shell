@@ -37,6 +37,11 @@ systemctl status sparrow-ydotool.service
 sparrow status
 ```
 
+Sparrow's keyboard calls the `sparrow-ydotool-key` client rather than invoking
+`ydotool` directly. This is required because distro builds disagree about the
+default socket path, while Sparrow's private daemon always uses the current
+user's runtime directory.
+
 For touch-only access, tap the top pill to expand it and tap the keyboard icon.
 `Super+K` and `sparrow keyboard` remain available when a physical keyboard or
 terminal is convenient.

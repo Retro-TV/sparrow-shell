@@ -86,7 +86,12 @@ Scope {
         }
 
         var mods = Object.keys(latched).map(function(k) { return Number(k); });
-        var args = ["ydotool", "key", "--key-delay", "0"];
+        // Always route through Sparrow's socket-aware client.  The system
+        // daemon intentionally keeps its private socket under XDG_RUNTIME_DIR;
+        // invoking ydotool directly only worked on hosts that happened to
+        // have a second daemon on ydotool's compiled-in default socket.
+        var client = Quickshell.env("HOME") + "/.local/bin/sparrow-ydotool-key";
+        var args = [client, "--key-delay", "0"];
         for (var i = 0; i < mods.length; i++)
             args.push(String(mods[i]) + ":1");
         args.push(String(key.c) + ":1", String(key.c) + ":0");

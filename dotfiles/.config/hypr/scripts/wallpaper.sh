@@ -216,6 +216,11 @@ palette_update() {
     pywalfox_bin=$(command -v pywalfox 2>/dev/null || true)
     [ -n "$pywalfox_bin" ] || [ ! -x "$HOME/.local/bin/pywalfox" ] || pywalfox_bin="$HOME/.local/bin/pywalfox"
     if pgrep -x firefox >/dev/null 2>&1 && [ -n "$pywalfox_bin" ]; then
+        pywalfox_mode=$(cat "$HOME/.cache/ricelin/mode" 2>/dev/null || echo dark)
+        case "$pywalfox_mode" in
+            light) "$pywalfox_bin" light >>"$WLOG" 2>&1 || true ;;
+            *) "$pywalfox_bin" dark >>"$WLOG" 2>&1 || true ;;
+        esac
         "$pywalfox_bin" update >>"$WLOG" 2>&1 || true
     fi
     # The GTK portal is a long-lived process and otherwise keeps the previous

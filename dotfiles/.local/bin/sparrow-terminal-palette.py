@@ -15,7 +15,8 @@ for line in (cache / "ghostty-colors").read_text().splitlines():
         palette[int(key)] = value.lstrip("#")
 
 primary = colors["primary"].lstrip("#")
-on_primary = colors["on_primary_container"].lstrip("#")
+selection = colors["primary_container"].lstrip("#")
+selection_text = colors["on_primary_container"].lstrip("#")
 bg = palette.get(0, "14151a")
 fg = palette.get(7, "a8aab1")
 
@@ -25,12 +26,11 @@ foot = [
     f"background={bg}",
     f"foreground={fg}",
     f"cursor={primary} {bg}",
-    f"selection-background={palette.get(2, bg)}",
-    f"selection-foreground={fg}",
+    f"selection-background={selection}",
+    f"selection-foreground={selection_text}",
 ]
 foot += [f"regular{i}={palette.get(i, fg)}" for i in range(8)]
-bright = [fg, primary, on_primary, on_primary, primary, on_primary, primary, fg]
-foot += [f"bright{i}={value}" for i, value in enumerate(bright)]
+foot += [f"bright{i}={palette.get(i + 8, fg)}" for i in range(8)]
 (cache / "foot-colors").write_text("\n".join(foot) + "\n")
 
 # Starship deliberately stays as a tracked, static layout. It references the

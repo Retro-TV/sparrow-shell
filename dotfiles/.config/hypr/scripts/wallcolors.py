@@ -12,6 +12,7 @@ reads; the pill JSON carries surfaces, accent and the contrast-matched text.
 """
 import colorsys
 import json
+import os
 import re
 import subprocess
 import sys
@@ -103,6 +104,86 @@ def lerp(x, x0, x1, y0, y1):
     return y0 + t * (y1 - y0)
 
 
+def rgb(hex_color):
+    value = hex_color.lstrip("#")
+    return tuple(int(value[i:i + 2], 16) / 255.0 for i in (0, 2, 4))
+
+
+def relative_luminance(hex_color):
+    """WCAG relative luminance for an sRGB hex color."""
+    channels = []
+    for value in rgb(hex_color):
+        channels.append(value / 12.92 if value <= 0.04045
+                        else ((value + 0.055) / 1.055) ** 2.4)
+    return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
+
+
+def contrast_ratio(first, second):
+    high, low = sorted((relative_luminance(first), relative_luminance(second)), reverse=True)
+    return (high + 0.05) / (low + 0.05)
+
+
+def ensure_contrast(color, backgrounds, minimum=4.5):
+    """Keep a color's hue while finding the nearest readable HSL tone."""
+    if isinstance(backgrounds, str):
+        backgrounds = [backgrounds]
+    if all(contrast_ratio(color, bg) >= minimum for bg in backgrounds):
+        return color.lower()
+    red, green, blue = rgb(color)
+    hue, lightness, saturation = colorsys.rgb_to_hls(red, green, blue)
+    candidates = []
+    for step in range(1001):
+        tone = step / 1000.0
+        candidate = tint(hue, saturation, tone)
+        score = min(contrast_ratio(candidate, bg) for bg in backgrounds)
+        if score >= minimum:
+            candidates.append((abs(tone - lightness), -score, candidate))
+    if candidates:
+        return min(candidates)[2]
+    endpoints = ("#000000", "#ffffff")
+    return max(endpoints, key=lambda item: min(contrast_ratio(item, bg) for bg in backgrounds))
+
+
+def normalize_palette(pill):
+    """Guarantee readable shared UI roles without flattening wallpaper hues."""
+    surfaces = [pill[name] for name in SURF_NAMES[:5]]
+    main_surfaces = surfaces[:3]
+    pill["bright"] = ensure_contrast(pill["bright"], surfaces, 7.0)
+    pill["cream"] = ensure_contrast(pill["cream"], surfaces, 7.0)
+    for key in ("subtle", "dim", "icon_dim", "tick_rest"):
+        pill[key] = ensure_contrast(pill[key], main_surfaces, 4.5)
+    pill["faint"] = ensure_contrast(pill["faint"], main_surfaces, 3.0)
+    pill["outline"] = ensure_contrast(pill["outline"], main_surfaces, 3.0)
+    pill["outline_variant"] = ensure_contrast(pill["outline_variant"], pill["surface"], 3.0)
+    for key in ("primary", "secondary", "tertiary"):
+        pill[key] = ensure_contrast(pill[key], main_surfaces, 4.5)
+    pill["on_primary"] = ensure_contrast(pill.get("on_primary", pill["bright"]),
+                                           pill["primary"], 4.5)
+    pill["on_primary_container"] = ensure_contrast(pill["on_primary_container"],
+                                                     pill["primary_container"], 4.5)
+    return pill
+
+
+def normalize_terminal_palette(base16, pill):
+    """Map Base16 roles to ANSI order and protect every terminal text color."""
+    bg = pill["surface"]
+    base16.update({
+        "base00": bg,
+        "base01": pill["surface_container_low"],
+        "base02": pill["surface_container"],
+        "base03": ensure_contrast(base16.get("base03", pill["dim"]), bg, 4.5),
+        "base04": ensure_contrast(base16.get("base04", pill["subtle"]), bg, 4.5),
+        "base05": pill["bright"],
+        "base06": pill["cream"],
+        "base07": pill["bright"],
+    })
+    for key in ("base08", "base09", "base0a", "base0b", "base0c", "base0d", "base0e", "base0f"):
+        base16[key] = ensure_contrast(base16.get(key, pill["primary"]), bg, 4.5)
+    normal = ["base00", "base08", "base0b", "base0a", "base0d", "base0e", "base0c", "base05"]
+    bright = ["base03", "base08", "base0b", "base0a", "base0d", "base0e", "base0c", "base07"]
+    return base16, [base16[key] for key in normal + bright]
+
+
 def render_fastfetch(pill):
     """
     Recolour the fastfetch readout from the same pill palette. fastfetch has no
@@ -124,7 +205,7 @@ def render_fastfetch(pill):
         "__KEYS__": seq(pill["primary"]),
         "__SEP__": seq(pill["dim"]),
         "__LOGO1__": seq(pill["primary"]),
-        "__LOGO2__": seq(pill["on_primary_container"]),
+        "__LOGO2__": seq(pill["on_primary"]),
         "__LOGO3__": seq(pill["surface_container"]),
         "__LOGO4__": seq(pill["surface_container_high"]),
         "__LOGO5__": seq(pill["subtle"]),
@@ -206,7 +287,7 @@ body {{
     --accent-1: {pill['primary']};
     --accent-2: {pill['primary']};
     --accent-3: {pill['primary']};
-    --accent-4: {pill['on_primary_container']};
+    --accent-4: {pill['on_primary']};
     --accent-5: {pill['primary_container']};
     --border-light: {rgba(discord_text, 0.09)};
     --border: {rgba(discord_text, 0.13)};
@@ -248,18 +329,32 @@ misc            = {bare(pill['outline_variant'])}
     (theme_dir / "color.ini").write_text(color_ini)
 
 
-def render_pywalfox(pill):
-    """Expose the Ricelin palette in pywal's format for the Firefox bridge."""
+def render_pywalfox(pill, light):
+    """Expose semantic, contrast-safe slots for Pywalfox's active template."""
     wal_dir = Path.home() / ".cache" / "wal"
     wal_dir.mkdir(parents=True, exist_ok=True)
-    colors = [
-        pill["surface"], pill["primary_container"], pill["primary"],
-        pill["on_primary_container"], pill["surface_container_high"],
-        pill["outline_variant"], pill["secondary"], pill["subtle"],
-        pill["dim"], pill["tertiary"], pill["on_primary_container"],
-        pill["bright"], pill["primary"], pill["outline"],
-        pill["primary_container"], pill["bright"],
-    ]
+    if light:
+        # Pywalfox's light preset derives its backgrounds from slot 7 and its
+        # focused text from slot 0. Keep those roles explicit instead of
+        # assuming a pywal palette always describes a dark terminal.
+        colors = [
+            pill["bright"], pill["surface_container_low"], pill["surface_container"],
+            pill["primary"], pill["surface_container_high"], pill["secondary"],
+            pill["tertiary"], pill["surface"], pill["dim"], pill["tertiary"],
+            pill["primary"], pill["subtle"], pill["primary"], pill["secondary"],
+            pill["tertiary"], pill["bright"],
+        ]
+    else:
+        # The dark preset consumes 0 as the frame, 10/13 as accents and 15 as
+        # text. `on_*` colors can legitimately be black, so they must never be
+        # exported as accents.
+        colors = [
+            pill["surface"], pill["surface_container_low"], pill["surface_container"],
+            pill["primary"], pill["surface_container_high"], pill["secondary"],
+            pill["tertiary"], pill["bright"], pill["dim"], pill["tertiary"],
+            pill["primary"], pill["subtle"], pill["primary"], pill["secondary"],
+            pill["tertiary"], pill["bright"],
+        ]
     (wal_dir / "colors.json").write_text(json.dumps({
         "special": {
             "background": pill["surface"],
@@ -287,7 +382,7 @@ gtk-primary-button-warps-slider=false
 """.format(theme=theme, icon_theme=icon_theme, dark=0 if light else 1)
     for path in (gtk3 / "settings.ini", gtk4 / "settings.ini"):
         path.write_text(settings)
-    accent, accent_text = pill["primary"], pill["on_primary_container"]
+    accent, accent_text = pill["primary"], pill["on_primary"]
     bg = pill["surface"]
     base = pill["surface_container_low"]
     raised = pill["surface_container"]
@@ -342,7 +437,7 @@ filechooser .search-bar {{ background-color: {raised}; color: {fg}; }}
         path.write(gtk3_extra)
     with (gtk4 / "gtk.css").open("a") as path:
         path.write(gtk4_extra)
-    if Path("/usr/bin/gsettings").exists():
+    if Path("/usr/bin/gsettings").exists() and not os.environ.get("SPARROW_THEME_NO_APPLY"):
         subprocess.run(["gsettings", "set", "org.gnome.desktop.interface", "gtk-theme", theme], check=False)
         subprocess.run(["gsettings", "set", "org.gnome.desktop.interface", "color-scheme",
                         "prefer-light" if light else "prefer-dark"], check=False)
@@ -353,9 +448,11 @@ def main():
     if len(sys.argv) < 2:
         return 1
     wallpaper_path = ""
+    manual_light = None
     if sys.argv[1] == "--hue":
         hue = (float(sys.argv[2]) % 360) / 360.0
         mode = sys.argv[3] if len(sys.argv) > 3 else "dark"
+        manual_light = mode == "light"
         sat = float(sys.argv[4]) if len(sys.argv) > 4 else 0.5
         sat = max(0.0, min(1.0, sat))
         mean_l = 0.85 if mode == "light" else 0.12
@@ -374,7 +471,7 @@ def main():
     # Brightness alone should not wash chromatic wallpapers into white. Keep a
     # dark aesthetic for colorful wallpapers; use light mode only when the
     # wallpaper is genuinely bright and close to grayscale.
-    light = mean_l >= 0.72 and not chromatic
+    light = manual_light if manual_light is not None else mean_l >= 0.72 and not chromatic
     mat = None
     if wallpaper_path:
         try:
@@ -416,21 +513,37 @@ def main():
         # Keep the old path only as a safety fallback if Matugen cannot parse
         # a particular image.
         surf_sat = min(max(sat, 0.34 if chromatic else 0.0), 0.56)
-        base = lerp(mean_l, 0.0, 0.40, 0.045, 0.20)
-        pill = {name: tint(hue, surf_sat, base + step) for name, step in zip(SURF_NAMES, DARK_STEPS)}
-        pill["primary"] = tint(hue, min(max(sat, 0.30) + 0.12, 0.82), 0.70)
-        pill["secondary"] = tint(hue, 0.25, 0.62)
-        pill["tertiary"] = tint((hue + 0.08) % 1.0, 0.35, 0.68)
-        pill["primary_container"] = tint(hue, min(max(sat, 0.30) + 0.18, 0.9), 0.34)
-        pill["on_primary_container"] = "#ffffff"
-        pill["outline"] = tint(hue, surf_sat, base + 0.35)
-        for key, (lit, st) in zip(TEXT_KEYS, DARK_TEXT):
-            pill[key] = tint(hue, st, lit)
+        if light:
+            base = 0.92
+            pill = {name: tint(hue, surf_sat * 0.42, base + step)
+                    for name, step in zip(SURF_NAMES, LIGHT_STEPS)}
+            pill["primary"] = tint(hue, min(max(sat, 0.35), 0.78), 0.35)
+            pill["secondary"] = tint(hue, 0.35, 0.39)
+            pill["tertiary"] = tint((hue + 0.08) % 1.0, 0.40, 0.36)
+            pill["primary_container"] = tint(hue, min(max(sat, 0.22), 0.55), 0.80)
+            pill["on_primary_container"] = tint(hue, 0.30, 0.18)
+            pill["outline"] = tint(hue, surf_sat * 0.35, 0.43)
+            for key, (lit, st) in zip(TEXT_KEYS, LIGHT_TEXT):
+                pill[key] = tint(hue, st, lit)
+        else:
+            base = lerp(mean_l, 0.0, 0.40, 0.045, 0.20)
+            pill = {name: tint(hue, surf_sat, base + step)
+                    for name, step in zip(SURF_NAMES, DARK_STEPS)}
+            pill["primary"] = tint(hue, min(max(sat, 0.30) + 0.12, 0.82), 0.70)
+            pill["secondary"] = tint(hue, 0.25, 0.62)
+            pill["tertiary"] = tint((hue + 0.08) % 1.0, 0.35, 0.68)
+            pill["primary_container"] = tint(hue, min(max(sat, 0.30) + 0.18, 0.9), 0.34)
+            pill["on_primary_container"] = "#ffffff"
+            pill["outline"] = tint(hue, surf_sat, base + 0.35)
+            for key, (lit, st) in zip(TEXT_KEYS, DARK_TEXT):
+                pill[key] = tint(hue, st, lit)
+    pill = normalize_palette(pill)
     (CACHE / "colors.json").write_text(json.dumps(pill, indent=2) + "\n")
+    (CACHE / "mode").write_text(("light" if light else "dark") + "\n")
     render_vesktop(pill, hue, sat, light)
     render_spotify(pill)
     pill["wallpaper"] = wallpaper_path
-    render_pywalfox(pill)
+    render_pywalfox(pill, light)
     render_gtk(pill, light)
     render_fastfetch(pill)
 
@@ -465,10 +578,13 @@ def main():
             "base0f": pill["primary_container"],
         }
 
+    b, ansi = normalize_terminal_palette(b, pill)
+
     # Keep the terminal's main background exactly equal to the shared surface.
     terminal_bg = pill["surface"]
     terminal_fg = pill["bright"]
-    terminal_selection = pill["surface_container_highest"]
+    terminal_selection = pill["primary_container"]
+    terminal_selection_text = pill["on_primary_container"]
 
     (CACHE / "hypr-colors.lua").write_text(
         'return {\n    active = "%s",\n    inactive = "%s",\n}\n'
@@ -479,10 +595,10 @@ def main():
         f'foreground = {terminal_fg}',
         f'cursor-color = {pill["primary"]}',
         f'selection-background = {terminal_selection}',
-        f'selection-foreground = {terminal_fg}',
+        f'selection-foreground = {terminal_selection_text}',
     ]
-    for i in range(16):
-        lines.append(f'palette = {i}={b["base%02x" % i]}')
+    for i, color in enumerate(ansi):
+        lines.append(f'palette = {i}={color}')
     # Starship uses the same extended ANSI slots as Kitty for its rounded
     # prompt segments. Ghostty must receive them too, otherwise only the
     # separators render and the prompt backgrounds disappear.
@@ -506,11 +622,11 @@ def main():
         f'background            {terminal_bg}',
         f'foreground            {terminal_fg}',
         f'cursor                {terminal_fg}',
-        f'selection_background  {pill["on_primary_container"]}',
-        f'selection_foreground  {terminal_fg}',
+        f'selection_background  {terminal_selection}',
+        f'selection_foreground  {terminal_selection_text}',
     ]
-    for i in range(16):
-        kitty.append(f'color{i}                {b["base%02x" % i]}')
+    for i, color in enumerate(ansi):
+        kitty.append(f'color{i}                {color}')
     kitty.extend([
         f'color255              {pill["surface_container_highest"]}',
         f'color254              {pill["primary_container"]}',
@@ -528,7 +644,7 @@ def main():
     ])
     (CACHE / "kitty-colors.conf").write_text("\n".join(kitty) + "\n")
     terminal_helper = Path.home() / ".local/bin/sparrow-terminal-palette.py"
-    if terminal_helper.is_file():
+    if terminal_helper.is_file() and not os.environ.get("SPARROW_THEME_NO_APPLY"):
         subprocess.run([str(terminal_helper)], check=True)
     return 0
 

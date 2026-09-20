@@ -17,6 +17,19 @@ wallpaper
 The generated cache lives under `~/.cache/ricelin/`. The internal name is kept
 for compatibility with the Ricelin-based Quickshell modules.
 
+## Contrast policy
+
+Matugen supplies the wallpaper-aware Material roles; Sparrow then validates the
+roles at the points where GTK, terminal ANSI and Pywalfox templates reinterpret
+them. Normal text and every printable ANSI color are adjusted along their own
+hue to at least a 4.5:1 contrast ratio. Primary reading text targets 7:1, while
+non-text outlines target 3:1. This keeps the wallpaper identity without allowing
+a red error, dim prompt or browser toolbar label to disappear into its surface.
+
+Terminal colors use the standard Base16-to-ANSI role mapping. Firefox receives
+separate semantic exports for Pywalfox's light and dark templates, and the
+template mode follows Sparrow's current palette mode on every wallpaper change.
+
 ## Applications
 
 - **Quickshell:** watches the generated color JSON and updates immediately.

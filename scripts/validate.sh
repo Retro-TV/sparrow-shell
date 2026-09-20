@@ -20,6 +20,7 @@ for tool in bash diff python3 rg; do
     fi
 done
 check 'wallcolor Python syntax' python3 -m py_compile "$ROOT/dotfiles/.config/hypr/scripts/wallcolors.py"
+check 'wallcolor contrast policy' python3 "$ROOT/scripts/test-palette.py"
 check 'terminal palette Python syntax' python3 -m py_compile "$ROOT/dotfiles/.local/bin/sparrow-terminal-palette.py"
 check 'wallpaper shell syntax' bash -n "$ROOT/dotfiles/.config/hypr/scripts/wallpaper.sh"
 check 'Sparrow updater shell syntax' bash -n "$ROOT/scripts/sparrow-update"

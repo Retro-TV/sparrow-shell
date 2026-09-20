@@ -120,6 +120,24 @@ install_keyboard_backend() {
     # The tablet keyboard is core infrastructure, not an optional app. Install
     # its one package independently so an unrelated package/AUR failure cannot
     # leave the visible keyboard without an input daemon.
+    ydotool_socket="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/.ydotool_socket"
+    if systemctl is-active --quiet sparrow-ydotool.service 2>/dev/null \
+        && [[ -S "$ydotool_socket" ]] \
+        && "$BIN_DIR/sparrow-ydotool-key" 0:1 0:0 >/dev/null 2>&1; then
+        echo "Keyboard backend: ready"
+        return 0
+    fi
+
+    # A routine settings update must never stop on a sudo prompt. Full/new
+    # installs still configure the system service; settings-only updates leave
+    # an unavailable backend alone and report how to repair it later.
+    if ((INSTALL_PACKAGES == 0 && INSTALL_APPS == 0 && DRY_RUN == 0)) \
+        && ! sudo -n true 2>/dev/null; then
+        echo "Keyboard backend was not changed (it needs an interactive sudo session)."
+        echo "Run the guided/full installer later if this machine needs tablet input."
+        return 0
+    fi
+
     if ! command -v ydotool >/dev/null 2>&1; then
         if ((INSTALL_PACKAGES)); then
             run sudo pacman -S --needed --noconfirm ydotool
@@ -149,7 +167,6 @@ install_keyboard_backend() {
     fi
 
     systemctl --user disable --now ydotool.service >/dev/null 2>&1 || true
-    ydotool_socket="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/.ydotool_socket"
     rm -f "$ydotool_socket"
     sudo systemctl daemon-reload
     sudo systemctl enable --now sparrow-ydotool.service

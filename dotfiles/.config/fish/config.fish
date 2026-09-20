@@ -1,3 +1,5 @@
+fish_add_path -g "$HOME/.local/bin"
+
 if type -q zoxide
     zoxide init fish | source
 end

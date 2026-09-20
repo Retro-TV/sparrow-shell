@@ -93,6 +93,7 @@ fi
 
 HOME_DIR=${HOME:?HOME is not set}
 CURRENT_USER=${USER:-$(id -un)}
+BIN_DIR="$HOME_DIR/.local/bin"
 STAMP=$(date +%Y%m%d-%H%M%S)
 BACKUP="$HOME_DIR/.local/state/sparrow-shell-backups/$STAMP"
 
@@ -124,8 +125,23 @@ if ! command -v rsync >/dev/null && ((INSTALL_PACKAGES == 0)); then
 fi
 run mkdir -p "$BACKUP"
 run rsync -a --backup --backup-dir="$BACKUP" "$ROOT/dotfiles/" "$HOME_DIR/"
-run install -Dm755 "$ROOT/scripts/sparrow-update" "$HOME_DIR/.local/bin/sparrow-update"
-run install -Dm755 "$ROOT/dotfiles/.config/hypr/scripts/ricelin" "$HOME_DIR/.local/bin/sparrow-shell"
+run install -Dm755 "$ROOT/scripts/sparrow-update" "$BIN_DIR/sparrow-update"
+run install -Dm755 "$ROOT/dotfiles/.config/hypr/scripts/ricelin" "$BIN_DIR/sparrow-shell"
+run install -Dm755 "$ROOT/dotfiles/.config/hypr/scripts/ricelin" "$BIN_DIR/sparrow"
+
+# Sparrow's default shell is Fish. A universal Fish path updates running Fish
+# sessions as well as future ones; .profile covers POSIX login shells.
+if command -v fish >/dev/null 2>&1; then
+    run fish -c "fish_add_path -U '$BIN_DIR'"
+fi
+if ((DRY_RUN)); then
+    echo "Would ensure $BIN_DIR is exported from $HOME_DIR/.profile."
+else
+    touch "$HOME_DIR/.profile"
+    if ! grep -Fq 'Sparrow Shell commands' "$HOME_DIR/.profile"; then
+        printf '\n# Sparrow Shell commands\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$HOME_DIR/.profile"
+    fi
+fi
 pause_point "Base files and the backup are ready. Continue with package and app setup?"
 
 if ((INSTALL_PACKAGES)); then
@@ -191,6 +207,7 @@ if ((INSTALL_APPS)); then
         # missing. Create the target first, then set the path explicitly.
         run mkdir -p "$HOME_DIR/.config/spotify"
         run touch "$HOME_DIR/.config/spotify/prefs"
+        run spicetify config prefs_path "$HOME_DIR/.config/spotify/prefs"
         pause_point "Close Spotify completely, then continue with the Spicetify backup/apply step."
         if [[ -d /opt/spotify/Apps && ! -w /opt/spotify/Apps ]] && command -v setfacl >/dev/null; then
             if ((DRY_RUN)); then
@@ -201,7 +218,6 @@ if ((INSTALL_APPS)); then
             fi
         fi
         run spicetify backup apply
-        run spicetify config prefs_path "$HOME_DIR/.config/spotify/prefs"
         run spicetify config custom_apps marketplace
         run spicetify apply
     fi
@@ -253,5 +269,19 @@ fi
 
 if ((DRY_RUN == 0)); then
     systemctl --user daemon-reload 2>/dev/null || true
+    if command -v ydotool >/dev/null 2>&1; then
+        if ! id -nG "$CURRENT_USER" | tr ' ' '\n' | grep -qx input; then
+            sudo usermod -aG input "$CURRENT_USER"
+            echo "Added $CURRENT_USER to the input group; log out once before testing the keyboard."
+        fi
+        systemctl --user enable --now ydotool.service 2>/dev/null || \
+            echo "Warning: ydotool.service did not start; inspect it with systemctl --user status ydotool.service." >&2
+    fi
+    if command -v hyprctl >/dev/null 2>&1 && hyprctl monitors >/dev/null 2>&1; then
+        hyprctl reload >/dev/null 2>&1 || true
+        "$BIN_DIR/sparrow-shell" restart all >/dev/null 2>&1 || true
+    fi
     echo "Installed. Backup: $BACKUP"
+    echo "Commands: sparrow, sparrow-shell, sparrow-update"
+    echo "Keyboard: Super+K"
 fi

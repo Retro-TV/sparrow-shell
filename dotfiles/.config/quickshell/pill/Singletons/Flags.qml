@@ -53,6 +53,9 @@ Singleton {
     property alias nightLightTemp: adapter.nightLightTemp
     property alias nightLightOnMin: adapter.nightLightOnMin
     property alias nightLightOffMin: adapter.nightLightOffMin
+    property alias oskScale: adapter.oskScale
+    property alias oskX: adapter.oskX
+    property alias oskY: adapter.oskY
 
     FileView {
         id: file
@@ -105,6 +108,10 @@ Singleton {
             property int idleSuspendMin: 0
             property string weatherCity: ""
             property bool musicViz: true
+            /** On-screen keyboard size and normalized position within its monitor. */
+            property real oskScale: 1.0
+            property real oskX: 0.5
+            property real oskY: 0.98
             property bool gameMode: false
             property bool gamePrevDnd: false
             property bool gamePrevViz: true

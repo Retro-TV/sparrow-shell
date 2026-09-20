@@ -6,187 +6,297 @@ import Quickshell.Wayland
 import Quickshell.Hyprland
 import "Singletons"
 
-// Compact desktop keyboard based on end-4's full physical-keyboard layout.
-// Modifiers are one-shot: tapping Super then Q emits Super+Q atomically.
+// Tablet keyboard with ANSI 75% geometry. Rows share one exact outer width;
+// variable-width keys absorb the natural spacing difference so the frame stays
+// rectangular like a physical keyboard rather than becoming a ragged key list.
 Scope {
     id: root
 
     property bool opened: false
     property var latched: ({})
-    readonly property int keyW: 44
-    readonly property int keyH: 44
-    readonly property int gap: 4
+
+    readonly property real sizeScale: Math.max(0.78, Math.min(1.18, Flags.oskScale))
+    readonly property int unit: Math.round(44 * sizeScale)
+    readonly property int keyHeight: Math.round(42 * sizeScale)
+    readonly property int gap: Math.round(5 * sizeScale)
+    readonly property int boardWidth: unit * 16 + gap * 15
+    readonly property int pad: Math.round(12 * sizeScale)
+    readonly property int toolbarHeight: Math.round(30 * sizeScale)
 
     readonly property var rows: [
         [
-            {l:"Esc", c:1, t:"fn"}, {l:"F1", c:59, t:"fn"}, {l:"F2", c:60, t:"fn"}, {l:"F3", c:61, t:"fn"},
-            {l:"F4", c:62, t:"fn"}, {l:"F5", c:63, t:"fn"}, {l:"F6", c:64, t:"fn"}, {l:"F7", c:65, t:"fn"},
-            {l:"F8", c:66, t:"fn"}, {l:"F9", c:67, t:"fn"}, {l:"F10", c:68, t:"fn"}, {l:"F11", c:87, t:"fn"},
-            {l:"F12", c:88, t:"fn"}, {l:"PrtSc", c:99, t:"fn"}, {l:"Del", c:111, t:"fn"}
+            {l:"Esc",c:1},{l:"F1",c:59},{l:"F2",c:60},{l:"F3",c:61},{l:"F4",c:62},
+            {l:"F5",c:63},{l:"F6",c:64},{l:"F7",c:65},{l:"F8",c:66},{l:"F9",c:67},
+            {l:"F10",c:68},{l:"F11",c:87},{l:"F12",c:88},{l:"Prt",c:99},{l:"Del",c:111},
+            {l:"Ins",c:110}
         ],
         [
-            {l:"\`", s:"~", c:41}, {l:"1", s:"!", c:2}, {l:"2", s:"@", c:3}, {l:"3", s:"#", c:4},
-            {l:"4", s:"$", c:5}, {l:"5", s:"%", c:6}, {l:"6", s:"^", c:7}, {l:"7", s:"&", c:8},
-            {l:"8", s:"*", c:9}, {l:"9", s:"(", c:10}, {l:"0", s:")", c:11}, {l:"-", s:"_", c:12},
-            {l:"=", s:"+", c:13}, {l:"Backspace", c:14, t:"wide"}
+            {l:"\u0060",s:"~",c:41},{l:"1",s:"!",c:2},{l:"2",s:"@",c:3},{l:"3",s:"#",c:4},
+            {l:"4",s:"$",c:5},{l:"5",s:"%",c:6},{l:"6",s:"^",c:7},{l:"7",s:"&",c:8},
+            {l:"8",s:"*",c:9},{l:"9",s:"(",c:10},{l:"0",s:")",c:11},{l:"-",s:"_",c:12},
+            {l:"=",s:"+",c:13},{l:"Backspace",c:14,u:2,fill:true},{l:"Home",c:102}
         ],
         [
-            {l:"Tab", c:15, t:"tab"}, {l:"q", s:"Q", c:16}, {l:"w", s:"W", c:17}, {l:"e", s:"E", c:18},
-            {l:"r", s:"R", c:19}, {l:"t", s:"T", c:20}, {l:"y", s:"Y", c:21}, {l:"u", s:"U", c:22},
-            {l:"i", s:"I", c:23}, {l:"o", s:"O", c:24}, {l:"p", s:"P", c:25}, {l:"[", s:"{", c:26},
-            {l:"]", s:"}", c:27}, {l:"\\", s:"|", c:43, t:"wide"}
+            {l:"Tab",c:15,u:1.5},{l:"Q",c:16},{l:"W",c:17},{l:"E",c:18},{l:"R",c:19},
+            {l:"T",c:20},{l:"Y",c:21},{l:"U",c:22},{l:"I",c:23},{l:"O",c:24},{l:"P",c:25},
+            {l:"[",s:"{",c:26},{l:"]",s:"}",c:27},{l:"\\",s:"|",c:43,u:1.5,fill:true},{l:"PgUp",c:104}
         ],
         [
-            {l:"", c:0, t:"spacer"}, {l:"", c:0, t:"spacer"}, {l:"a", s:"A", c:30}, {l:"s", s:"S", c:31},
-            {l:"d", s:"D", c:32}, {l:"f", s:"F", c:33}, {l:"g", s:"G", c:34}, {l:"h", s:"H", c:35},
-            {l:"j", s:"J", c:36}, {l:"k", s:"K", c:37}, {l:"l", s:"L", c:38}, {l:";", s:":", c:39},
-            {l:"'", s:"\"", c:40}, {l:"Enter", c:28, t:"wide"}
+            {l:"Caps",c:58,u:1.75},{l:"A",c:30},{l:"S",c:31},{l:"D",c:32},{l:"F",c:33},
+            {l:"G",c:34},{l:"H",c:35},{l:"J",c:36},{l:"K",c:37},{l:"L",c:38},
+            {l:";",s:":",c:39},{l:"'",s:"\"",c:40},{l:"Enter",c:28,u:2.25,fill:true},{l:"PgDn",c:109}
         ],
         [
-            {l:"Shift", c:42, t:"modwide"}, {l:"z", s:"Z", c:44}, {l:"x", s:"X", c:45}, {l:"c", s:"C", c:46},
-            {l:"v", s:"V", c:47}, {l:"b", s:"B", c:48}, {l:"n", s:"N", c:49}, {l:"m", s:"M", c:50},
-            {l:",", s:"<", c:51}, {l:".", s:">", c:52}, {l:"/", s:"?", c:53}, {l:"Shift", c:54, t:"modwide"},
-            {l:"↑", c:103}
+            {l:"Shift",c:42,u:2.25,t:"mod"},{l:"Z",c:44},{l:"X",c:45},{l:"C",c:46},
+            {l:"V",c:47},{l:"B",c:48},{l:"N",c:49},{l:"M",c:50},{l:",",s:"<",c:51},
+            {l:".",s:">",c:52},{l:"/",s:"?",c:53},{l:"Shift",c:54,u:1.75,t:"mod",fill:true},
+            {l:"↑",c:103},{l:"End",c:107}
         ],
         [
-            {l:"Ctrl", c:29, t:"mod"}, {l:"Super", c:125, t:"mod"}, {l:"Alt", c:56, t:"mod"},
-            {l:"Space", c:57, t:"space"}, {l:"AltGr", c:100, t:"mod"}, {l:"Menu", c:139},
-            {l:"Ctrl", c:97, t:"mod"}, {l:"←", c:105}, {l:"↓", c:108}, {l:"→", c:106}
-        ],
-        [
-            {l:"Home", c:102}, {l:"End", c:107}, {l:"PgUp", c:104}, {l:"PgDn", c:109},
-            {l:"Insert", c:110}, {l:"Pause", c:119}
+            {l:"Ctrl",c:29,u:1.25,t:"mod"},{l:"Super",c:125,u:1.25,t:"mod"},
+            {l:"Alt",c:56,u:1.25,t:"mod"},{l:"Space",c:57,u:5.5,fill:true},
+            {l:"AltGr",c:100,u:1.25,t:"mod"},{l:"Menu",c:139,u:1.25},
+            {l:"Ctrl",c:97,u:1.25,t:"mod"},{l:"←",c:105},{l:"↓",c:108},{l:"→",c:106}
         ]
     ]
 
-    function isLatched(code) { return !!latched[String(code)]; }
-
-    function send(codes) {
-        if (!codes || codes.length === 0) return;
-        var args = ["ydotool", "key", "--key-delay", "0"];
-        for (var i = 0; i < codes.length; i++) args.push(String(codes[i]) + ":1");
-        for (var j = codes.length - 1; j >= 0; j--) args.push(String(codes[j]) + ":0");
-        Quickshell.execDetached(args);
+    function isLatched(code) {
+        return !!latched[String(code)];
     }
 
-    function tap(key) {
-        var mods = Object.keys(latched).map(function(k) { return Number(k); });
-        send(mods.concat([key.c]));
-        latched = {};
+    function shifted() {
+        return isLatched(42) || isLatched(54);
     }
 
     function toggleModifier(key) {
         var next = Object.assign({}, latched);
         var name = String(key.c);
-        if (next[name]) delete next[name]; else next[name] = true;
+        if (next[name])
+            delete next[name];
+        else
+            next[name] = true;
         latched = next;
     }
 
-    function releaseAll() { latched = {}; }
+    function sendKey(key) {
+        if (key.t === "close") {
+            opened = false;
+            latched = {};
+            return;
+        }
+
+        var mods = Object.keys(latched).map(function(k) { return Number(k); });
+        var args = ["ydotool", "key", "--key-delay", "0"];
+        for (var i = 0; i < mods.length; i++)
+            args.push(String(mods[i]) + ":1");
+        args.push(String(key.c) + ":1", String(key.c) + ":0");
+        for (var j = mods.length - 1; j >= 0; j--)
+            args.push(String(mods[j]) + ":0");
+        Quickshell.execDetached(args);
+
+        latched = {};
+    }
+
+    function toggle() {
+        opened = !opened;
+        if (!opened)
+            latched = {};
+    }
+
+    function setScale(value) {
+        Flags.oskScale = value;
+    }
 
     IpcHandler {
         target: "osk"
-        function toggle(): void { root.opened = !root.opened; if (!root.opened) root.releaseAll(); }
+        function toggle(): void { root.toggle(); }
         function open(): void { root.opened = true; }
-        function close(): void { root.opened = false; root.releaseAll(); }
+        function close(): void { root.opened = false; root.latched = {}; }
     }
 
     GlobalShortcut {
         appid: "quickshell"
         name: "oskToggle"
-        description: "Toggle desktop on-screen keyboard"
-        onPressed: { root.opened = !root.opened; if (!root.opened) root.releaseAll(); }
+        description: "Toggle the on-screen keyboard"
+        onPressed: root.toggle()
     }
 
     Loader {
         active: root.opened
+
         sourceComponent: PanelWindow {
-            id: window
+            id: keyboardWindow
             visible: root.opened
-            anchors { left: true; right: true; bottom: true }
-            implicitHeight: card.implicitHeight + 24
+            anchors { left: true; right: true; top: true; bottom: true }
             exclusiveZone: 0
             color: "transparent"
             WlrLayershell.layer: WlrLayer.Overlay
             WlrLayershell.namespace: "sparrow-osk"
-            WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
+            // Pointer/touch input still reaches the masked board, while the
+            // previously focused app keeps keyboard focus for ydotool input.
+            WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
 
             Rectangle {
-                id: card
-                anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; margins: 12 }
-                width: 760
-                implicitHeight: body.implicitHeight + 24
-                radius: 18
+                id: board
+                readonly property real edge: 12
+                readonly property real travelX: Math.max(0, keyboardWindow.width - width - edge * 2)
+                readonly property real travelY: Math.max(0, keyboardWindow.height - height - edge * 2)
+                x: edge + travelX * Math.max(0, Math.min(1, Flags.oskX))
+                y: edge + travelY * Math.max(0, Math.min(1, Flags.oskY))
+                width: root.boardWidth + root.pad * 2
+                height: root.toolbarHeight + keys.implicitHeight + root.pad * 2 + root.gap
+                radius: Math.round(15 * root.sizeScale)
                 color: Theme.cardBot
                 border.width: 1
                 border.color: Theme.border
 
-                Column {
-                    id: body
-                    anchors { left: parent.left; right: parent.right; top: parent.top; margins: 12 }
-                    spacing: root.gap
+                function savePosition() {
+                    Flags.oskX = travelX > 0 ? Math.max(0, Math.min(1, (x - edge) / travelX)) : 0.5;
+                    Flags.oskY = travelY > 0 ? Math.max(0, Math.min(1, (y - edge) / travelY)) : 1.0;
+                }
 
-                    RowLayout {
-                        width: parent.width
-                        height: 24
-                        Text {
-                            text: "Keyboard"
-                            color: Theme.subtle
-                            font.family: Theme.font
-                            font.pixelSize: 12
-                            Layout.fillWidth: true
-                        }
-                        Rectangle {
-                            width: 28; height: 24; radius: 12
-                            color: closeMouse.pressed ? Theme.verm : Theme.cardTop
-                            Text { anchors.centerIn: parent; text: "×"; color: Theme.bright; font.pixelSize: 18 }
-                            MouseArea {
-                                id: closeMouse
-                                anchors.fill: parent
-                                onClicked: { root.opened = false; root.releaseAll(); }
+                Rectangle {
+                    id: toolbar
+                    anchors { left: parent.left; right: parent.right; top: parent.top }
+                    height: root.toolbarHeight + root.pad
+                    color: "transparent"
+
+                    Rectangle {
+                        id: dragGrip
+                        anchors { left: parent.left; right: sizeControls.left; top: parent.top; bottom: parent.bottom }
+                        anchors.leftMargin: root.pad
+                        anchors.rightMargin: root.gap
+                        color: "transparent"
+
+                        Row {
+                            anchors.centerIn: parent
+                            spacing: 4
+                            Repeater {
+                                model: 3
+                                Rectangle {
+                                    width: Math.round(18 * root.sizeScale)
+                                    height: Math.max(2, Math.round(3 * root.sizeScale))
+                                    radius: height / 2
+                                    color: dragger.active ? Theme.onGlow : Theme.dim
+                                }
                             }
+                        }
+
+                        DragHandler {
+                            id: dragger
+                            target: board
+                            xAxis.minimum: board.edge
+                            xAxis.maximum: keyboardWindow.width - board.width - board.edge
+                            yAxis.minimum: board.edge
+                            yAxis.maximum: keyboardWindow.height - board.height - board.edge
+                            onActiveChanged: if (!active) board.savePosition()
                         }
                     }
 
+                    Row {
+                        id: sizeControls
+                        anchors { right: parent.right; rightMargin: root.pad; verticalCenter: parent.verticalCenter }
+                        spacing: root.gap
+
+                        Repeater {
+                            model: [
+                                { label: "S", value: 0.78 },
+                                { label: "M", value: 1.0 },
+                                { label: "L", value: 1.18 }
+                            ]
+                            delegate: Rectangle {
+                                required property var modelData
+                                width: root.toolbarHeight
+                                height: root.toolbarHeight
+                                radius: height / 2
+                                color: Math.abs(root.sizeScale - modelData.value) < 0.03 ? Theme.vermLit : Theme.cardTop
+                                border.width: 1
+                                border.color: Theme.border
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: parent.modelData.label
+                                    color: Theme.bright
+                                    font.family: Theme.font
+                                    font.pixelSize: Math.round(11 * root.sizeScale)
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: root.setScale(parent.modelData.value)
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            width: root.toolbarHeight
+                            height: root.toolbarHeight
+                            radius: height / 2
+                            color: closeMouse.pressed ? Theme.vermLit : Theme.cardTop
+                            border.width: 1
+                            border.color: Theme.border
+                            Text {
+                                anchors.centerIn: parent
+                                text: "×"
+                                color: Theme.bright
+                                font.family: Theme.font
+                                font.pixelSize: Math.round(17 * root.sizeScale)
+                            }
+                            MouseArea {
+                                id: closeMouse
+                                anchors.fill: parent
+                                onClicked: root.sendKey({t: "close"})
+                            }
+                        }
+                    }
+                }
+
+                Column {
+                    id: keys
+                    anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: root.pad }
+                    width: root.boardWidth
+                    spacing: root.gap
+
                     Repeater {
                         model: root.rows
-                        delegate: Row {
+
+                        delegate: RowLayout {
+                            id: keyRow
                             required property var modelData
+                            width: root.boardWidth
+                            height: root.keyHeight
                             spacing: root.gap
-                            width: implicitWidth
-                            height: modelData[0].t === "fn" ? 30 : root.keyH
-                            anchors.horizontalCenter: parent.horizontalCenter
 
                             Repeater {
-                                model: parent.modelData
+                                model: keyRow.modelData
+
                                 delegate: Rectangle {
+                                    id: keycap
                                     required property var modelData
-                                    readonly property real scale: modelData.t === "wide" ? 1.65 :
-                                        modelData.t === "tab" ? 1.65 :
-                                        modelData.t === "modwide" ? 2.35 :
-                                        modelData.t === "mod" ? 1.35 :
-                                        modelData.t === "space" ? 4.8 :
-                                        modelData.t === "spacer" ? 0.5 : 1
-                                    width: root.keyW * scale
-                                    height: modelData.t === "fn" ? 30 : root.keyH
-                                    radius: 8
-                                    color: modelData.t === "spacer" ? "transparent" :
-                                        mouse.pressed || root.isLatched(modelData.c) ? Theme.verm : Theme.cardTop
-                                    border.width: modelData.t === "spacer" ? 0 : 1
-                                    border.color: Theme.border
+                                    Layout.preferredWidth: root.unit * (modelData.u || 1)
+                                    Layout.minimumWidth: Layout.preferredWidth
+                                    Layout.fillWidth: modelData.fill || false
+                                    Layout.fillHeight: true
+                                    radius: Math.round(7 * root.sizeScale)
+                                    color: keyMouse.pressed || root.isLatched(modelData.c)
+                                        ? Theme.vermLit : Theme.cardTop
+                                    border.width: 1
+                                    border.color: root.isLatched(modelData.c)
+                                        ? Theme.onGlow : Theme.border
+
                                     Text {
                                         anchors.centerIn: parent
-                                        text: root.isLatched(modelData.c) && modelData.s ? modelData.s : modelData.l
-                                        color: modelData.t === "spacer" ? "transparent" : Theme.bright
+                                        text: root.shifted() && keycap.modelData.s
+                                            ? keycap.modelData.s : keycap.modelData.l
+                                        color: Theme.bright
                                         font.family: Theme.font
-                                        font.pixelSize: modelData.t === "fn" ? 10 : modelData.l.length > 5 ? 10 : 13
+                                        font.pixelSize: Math.round((keycap.modelData.l.length > 5 ? 10 : 13) * root.sizeScale)
                                     }
+
                                     MouseArea {
-                                        id: mouse
+                                        id: keyMouse
                                         anchors.fill: parent
-                                        enabled: modelData.t !== "spacer"
-                                        onClicked: modelData.t === "mod" || modelData.t === "modwide"
-                                            ? root.toggleModifier(modelData) : root.tap(modelData)
+                                        onClicked: keycap.modelData.t === "mod"
+                                            ? root.toggleModifier(keycap.modelData)
+                                            : root.sendKey(keycap.modelData)
                                     }
                                 }
                             }
@@ -195,7 +305,7 @@ Scope {
                 }
             }
 
-            mask: Region { item: card }
+            mask: Region { item: board }
         }
     }
 }

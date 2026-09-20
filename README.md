@@ -81,14 +81,13 @@ boot checklist.
 
 | Command | Effect |
 | --- | --- |
-| `./install.sh` | Dotfiles and Sparrow commands only |
+| `./install.sh` | Guided installer for settings-only, themed-app, or full setup |
 | `./install.sh --packages` | Dotfiles plus the curated desktop core |
 | `./install.sh --apps` | Configure already-installed themed apps |
 | `./install.sh --full` | Core packages, themed apps and integrations |
 | `./install.sh --wallpaper FILE` | Apply a wallpaper and regenerate colors |
 | `./install.sh --system-keymap` | Opt in to the maintainer's Slovenian keymap |
 | `./install.sh --dry-run ...` | Print every planned operation without changing anything |
-| `./install.sh` | Guided interactive installer |
 
 The full machine snapshot remains in `packages/pacman-explicit.txt` for
 reference. It is deliberately **not** installed on other machines; the curated
@@ -97,14 +96,17 @@ reference. It is deliberately **not** installed on other machines; the curated
 ## Daily use
 
 ```sh
-sparrow-shell status
-sparrow-shell restart pill
-sparrow-shell log pill
+sparrow status
+sparrow restart pill
+sparrow log pill
+sparrow keyboard
 sparrow-update --dry-run
 sparrow-update
 ```
 
-`sparrow-update` only accepts the official repository remote, refuses a dirty
+`sparrow`, `sparrow-shell`, and `sparrow-update` are installed in
+`~/.local/bin`; the installer adds that directory to Fish and POSIX login-shell
+paths. `sparrow-update` only accepts the official repository remote, refuses a dirty
 checkout, pulls with fast-forward only, reapplies the rice, and never commits or
 pushes. A full system upgrade is intentionally opt-in with
 `sparrow-update --upgrade-system`.

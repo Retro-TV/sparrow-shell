@@ -6,6 +6,7 @@ The authoritative bindings live in
 | Binding | Action |
 | --- | --- |
 | `Super + Return` / `Super + T` | Open Kitty |
+| `Super + K` | Toggle the movable on-screen keyboard |
 | `Super + F` | Open Firefox |
 | `Super + E` | Open Thunar |
 | `Super + Space` | Application launcher |

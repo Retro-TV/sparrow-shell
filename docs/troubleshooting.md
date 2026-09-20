@@ -3,9 +3,9 @@
 ## The pill or lock screen is missing
 
 ```sh
-sparrow-shell status
-sparrow-shell restart all
-sparrow-shell log pill
+sparrow status
+sparrow restart all
+sparrow log pill
 ```
 
 Confirm that `qs`, `jq` and the scripts under `~/.config/hypr/scripts` are

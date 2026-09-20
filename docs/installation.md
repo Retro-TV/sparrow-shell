@@ -48,7 +48,11 @@ replaced by the installer.
 3. Press `Super+C` and select a wallpaper to generate the first live palette.
 4. Open Firefox, enable the Pywalfox extension, and fetch the native colors once.
 5. Sign in to Vesktop and Spotify normally; account state is intentionally absent.
-6. Run `sparrow-shell status` and confirm the pill and lock watchdogs are running.
+6. Run `sparrow status` and confirm the pill and lock watchdogs are running.
+7. Press `Super+K` and verify that the tablet keyboard opens. The full installer
+   enables its `ydotool` user service automatically.
+   Drag the grip above the keys to reposition it; choose S, M, or L to save a
+   comfortable size for that display.
 
 ## Monitors
 

@@ -272,6 +272,7 @@ Item {
     property string dragStage: ""
 
     signal requestSurface(string name)
+    signal requestKeyboard()
     signal requestClose()
 
     /**
@@ -769,6 +770,8 @@ Item {
             return inboxIcon.mapToItem(pill, inboxIcon.width / 2, inboxIcon.height + drop * 0.55);
         if (soulTarget === "mixer")
             return mixerIcon.mapToItem(pill, mixerIcon.width / 2, mixerIcon.height + drop * 0.55);
+        if (soulTarget === "keyboard")
+            return keyboardIcon.mapToItem(pill, keyboardIcon.width / 2, keyboardIcon.height + drop * 0.55);
         if (soulTarget === "power")
             return powerIcon.mapToItem(pill, powerIcon.width / 2, powerIcon.height + drop * 0.55);
         if (soulTarget === "settings")
@@ -1811,6 +1814,31 @@ Item {
                                 ScreenRec.stop();
                         }
                         onContainsMouseChanged: if (containsMouse) pill.soulTarget = "recorder"
+                    }
+                }
+
+                Item {
+                    id: keyboardIcon
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 17 * pill.s
+                    height: 17 * pill.s
+
+                    GlyphIcon {
+                        anchors.fill: parent
+                        name: "keyboard"
+                        color: keyboardArea.containsMouse ? Theme.cream : Theme.iconDim
+                        stroke: 1.7
+                    }
+
+                    MouseArea {
+                        id: keyboardArea
+                        anchors.fill: parent
+                        anchors.margins: -6 * pill.s
+                        hoverEnabled: true
+                        enabled: hover.live
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: pill.requestKeyboard()
+                        onContainsMouseChanged: if (containsMouse) pill.soulTarget = "keyboard"
                     }
                 }
 

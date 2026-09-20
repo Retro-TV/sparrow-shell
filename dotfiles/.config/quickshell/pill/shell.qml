@@ -28,7 +28,7 @@ import "Singletons"
 ShellRoot {
     id: root
 
-    OnScreenKeyboard {}
+    OnScreenKeyboard { id: osk }
 
     property string openMon: ""
     property string openSurface: ""
@@ -503,6 +503,7 @@ ShellRoot {
                     ]
 
                     onRequestSurface: (name) => root.toggleSurface(overlay.modelData.name, name)
+                    onRequestKeyboard: osk.toggle()
                     onRequestClose: root.close()
                 }
                 }

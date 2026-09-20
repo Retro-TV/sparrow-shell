@@ -105,8 +105,8 @@ sparrow-update
 ```
 
 `sparrow`, `sparrow-shell`, and `sparrow-update` are installed in
-`~/.local/bin`; the installer adds that directory to Fish and POSIX login-shell
-paths. `sparrow-update` only accepts the official repository remote, refuses a dirty
+`/usr/local/bin`, with per-user fallback copies in `~/.local/bin`, so they work
+immediately in Fish, Bash, Zsh and a TTY. `sparrow-update` only accepts the official repository remote, refuses a dirty
 checkout, pulls with fast-forward only, reapplies the rice, and never commits or
 pushes. A full system upgrade is intentionally opt-in with
 `sparrow-update --upgrade-system`.

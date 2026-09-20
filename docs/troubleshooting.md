@@ -11,6 +11,34 @@ sparrow log pill
 Confirm that `qs`, `jq` and the scripts under `~/.config/hypr/scripts` are
 available.
 
+## Sparrow commands are not found
+
+Current installers place the public commands in `/usr/local/bin` as well as
+`~/.local/bin`. From an older checkout, rerun the installer once:
+
+```sh
+cd ~/.local/share/sparrow-shell
+git pull --ff-only
+./install.sh --packages
+```
+
+The `sparrow`, `sparrow-shell`, and `sparrow-update` commands are then available
+immediately without restarting the shell.
+
+## The on-screen keyboard opens but does not type
+
+Rerun `./install.sh --packages`. It gives the current login immediate access to
+`/dev/uinput`, records persistent `input` group membership, and restarts the
+keyboard input service. Check the result with:
+
+```sh
+systemctl --user status ydotool.service
+```
+
+For touch-only access, tap the top pill to expand it and tap the keyboard icon.
+`Super+K` and `sparrow keyboard` remain available when a physical keyboard or
+terminal is convenient.
+
 ## Firefox stays on its default theme
 
 Install and enable the [Pywalfox Firefox extension](https://addons.mozilla.org/firefox/addon/pywalfox/). The native helper is not the browser extension. Then run:

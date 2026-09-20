@@ -94,6 +94,7 @@ fi
 HOME_DIR=${HOME:?HOME is not set}
 CURRENT_USER=${USER:-$(id -un)}
 BIN_DIR="$HOME_DIR/.local/bin"
+SYSTEM_BIN_DIR="/usr/local/bin"
 STAMP=$(date +%Y%m%d-%H%M%S)
 BACKUP="$HOME_DIR/.local/state/sparrow-shell-backups/$STAMP"
 
@@ -128,6 +129,13 @@ run rsync -a --backup --backup-dir="$BACKUP" "$ROOT/dotfiles/" "$HOME_DIR/"
 run install -Dm755 "$ROOT/scripts/sparrow-update" "$BIN_DIR/sparrow-update"
 run install -Dm755 "$ROOT/dotfiles/.config/hypr/scripts/ricelin" "$BIN_DIR/sparrow-shell"
 run install -Dm755 "$ROOT/dotfiles/.config/hypr/scripts/ricelin" "$BIN_DIR/sparrow"
+
+# Also install the public commands in the normal system command path.  The
+# per-user copies remain useful as a fallback, while /usr/local/bin makes the
+# commands available immediately from Fish, Bash, Zsh and a newly opened TTY.
+run sudo install -Dm755 "$ROOT/scripts/sparrow-update" "$SYSTEM_BIN_DIR/sparrow-update"
+run sudo install -Dm755 "$ROOT/dotfiles/.config/hypr/scripts/ricelin" "$SYSTEM_BIN_DIR/sparrow-shell"
+run sudo install -Dm755 "$ROOT/dotfiles/.config/hypr/scripts/ricelin" "$SYSTEM_BIN_DIR/sparrow"
 
 # Sparrow's default shell is Fish. A universal Fish path updates running Fish
 # sessions as well as future ones; .profile covers POSIX login shells.
@@ -272,10 +280,26 @@ if ((DRY_RUN == 0)); then
     if command -v ydotool >/dev/null 2>&1; then
         if ! id -nG "$CURRENT_USER" | tr ' ' '\n' | grep -qx input; then
             sudo usermod -aG input "$CURRENT_USER"
-            echo "Added $CURRENT_USER to the input group; log out once before testing the keyboard."
+            echo "Added $CURRENT_USER to the input group for future logins."
         fi
-        systemctl --user enable --now ydotool.service 2>/dev/null || \
-            echo "Warning: ydotool.service did not start; inspect it with systemctl --user status ydotool.service." >&2
+
+        # Group changes do not enter an already-running desktop session.  Give
+        # this login access immediately, then restart the daemon so a fresh
+        # install can type without requiring a logout first.  The input-group
+        # membership above provides the persistent permission after reboot.
+        if [[ ! -e /dev/uinput ]]; then
+            sudo modprobe uinput 2>/dev/null || true
+        fi
+        if [[ -e /dev/uinput ]] && command -v setfacl >/dev/null 2>&1; then
+            sudo setfacl -m "u:${CURRENT_USER}:rw" /dev/uinput
+        fi
+        systemctl --user enable ydotool.service >/dev/null 2>&1 || true
+        systemctl --user restart ydotool.service 2>/dev/null || true
+        sleep 0.3
+        ydotool_socket="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/.ydotool_socket"
+        if ! systemctl --user is-active --quiet ydotool.service || [[ ! -S "$ydotool_socket" ]]; then
+            echo "Warning: the keyboard input service is not ready. Run: systemctl --user status ydotool.service" >&2
+        fi
     fi
     if command -v hyprctl >/dev/null 2>&1 && hyprctl monitors >/dev/null 2>&1; then
         hyprctl reload >/dev/null 2>&1 || true
@@ -283,5 +307,5 @@ if ((DRY_RUN == 0)); then
     fi
     echo "Installed. Backup: $BACKUP"
     echo "Commands: sparrow, sparrow-shell, sparrow-update"
-    echo "Keyboard: Super+K"
+    echo "Keyboard: Super+K, 'sparrow keyboard', or tap the keyboard icon in the expanded pill"
 fi

@@ -209,6 +209,46 @@ if ((SET_SYSTEM_KEYMAP)); then
     fi
 fi
 
+# Bring up tablet input before configuring optional applications.  App setup
+# (notably Spicetify) may legitimately need user attention or fail against a
+# newly installed application; that must never leave the on-screen keyboard
+# copied into Quickshell without its input daemon.
+if command -v ydotool >/dev/null 2>&1; then
+    # Upstream documents that ydotoold normally needs root access to
+    # /dev/uinput. Run one root-owned daemon with a private 0600 socket owned
+    # by this desktop user so input works consistently across machines.
+    uid=$(id -u "$CURRENT_USER")
+    gid=$(id -g "$CURRENT_USER")
+    service_tmp=$(mktemp)
+    sed -e "s/__UID__/$uid/g" -e "s/__GID__/$gid/g" \
+        "$ROOT/system/sparrow-ydotool.service.in" > "$service_tmp"
+    run sudo install -Dm644 "$service_tmp" /etc/systemd/system/sparrow-ydotool.service
+    rm -f "$service_tmp"
+    if ((DRY_RUN)); then
+        echo "Would replace any session-dependent ydotool user daemon with Sparrow's system daemon."
+    else
+        systemctl --user disable --now ydotool.service >/dev/null 2>&1 || true
+        ydotool_socket="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/.ydotool_socket"
+        rm -f "$ydotool_socket"
+        sudo systemctl daemon-reload
+        sudo systemctl enable --now sparrow-ydotool.service
+        sleep 0.8
+        if ! sudo systemctl is-active --quiet sparrow-ydotool.service \
+            || [[ ! -S "$ydotool_socket" ]] \
+            || ! "$BIN_DIR/sparrow-ydotool-key" 0:1 0:0 >/dev/null 2>&1; then
+            echo "Keyboard backend failed its input test." >&2
+            sudo systemctl status sparrow-ydotool.service --no-pager >&2 || true
+            exit 1
+        fi
+    fi
+elif ((INSTALL_PACKAGES)); then
+    echo "ydotool was not installed; cannot configure Sparrow's keyboard backend." >&2
+    exit 1
+else
+    echo "Warning: ydotool is missing, so the on-screen keyboard cannot type." >&2
+    echo "Rerun with --packages or --full to install its backend." >&2
+fi
+
 if ((INSTALL_APPS)); then
     if command -v xdg-mime >/dev/null; then
         while IFS=$'\t' read -r mime desktop; do
@@ -295,35 +335,6 @@ if ((DRY_RUN == 0)); then
     done
 
     systemctl --user daemon-reload 2>/dev/null || true
-    if command -v ydotool >/dev/null 2>&1; then
-        # Upstream documents that ydotoold normally needs root access to
-        # /dev/uinput. A user service happens to work on some machines through
-        # group/ACL state, but that state is session-dependent and was the
-        # reason the same keyboard worked on the desktop and failed on a
-        # laptop. Run one root-owned daemon with a 0600 socket owned by this
-        # desktop user: reliable device access without exposing input injection
-        # to other users.
-        uid=$(id -u "$CURRENT_USER")
-        gid=$(id -g "$CURRENT_USER")
-        service_tmp=$(mktemp)
-        sed -e "s/__UID__/$uid/g" -e "s/__GID__/$gid/g" \
-            "$ROOT/system/sparrow-ydotool.service.in" > "$service_tmp"
-        sudo install -Dm644 "$service_tmp" /etc/systemd/system/sparrow-ydotool.service
-        rm -f "$service_tmp"
-        systemctl --user disable --now ydotool.service >/dev/null 2>&1 || true
-        ydotool_socket="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/.ydotool_socket"
-        rm -f "$ydotool_socket"
-        sudo systemctl daemon-reload
-        sudo systemctl enable --now sparrow-ydotool.service
-        sleep 0.8
-        if ! sudo systemctl is-active --quiet sparrow-ydotool.service \
-            || [[ ! -S "$ydotool_socket" ]] \
-            || ! "$BIN_DIR/sparrow-ydotool-key" 0:1 0:0 >/dev/null 2>&1; then
-            echo "Keyboard backend failed its input test." >&2
-            sudo systemctl status sparrow-ydotool.service --no-pager >&2 || true
-            exit 1
-        fi
-    fi
     if command -v hyprctl >/dev/null 2>&1 && hyprctl monitors >/dev/null 2>&1; then
         hyprctl reload >/dev/null 2>&1 || true
         "$BIN_DIR/sparrow-shell" restart all >/dev/null 2>&1 || true

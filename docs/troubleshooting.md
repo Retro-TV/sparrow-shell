@@ -4,6 +4,7 @@
 
 ```sh
 sparrow status
+sparrow doctor
 sparrow restart all
 sparrow log pill
 ```

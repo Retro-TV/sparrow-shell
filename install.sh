@@ -10,6 +10,7 @@ SET_SYSTEM_KEYMAP=0
 WALLPAPER=""
 INTERACTIVE=0
 ARG_COUNT=$#
+OPTIONAL_FAILURES=0
 
 usage() {
     cat <<'EOF'
@@ -103,6 +104,68 @@ run() {
     ((DRY_RUN)) || "$@"
 }
 
+run_optional() {
+    printf '+ '; printf '%q ' "$@"; printf '\n'
+    ((DRY_RUN)) && return 0
+    if ! "$@"; then
+        echo "Optional integration failed: $*" >&2
+        OPTIONAL_FAILURES=$((OPTIONAL_FAILURES + 1))
+    fi
+    return 0
+}
+
+install_keyboard_backend() {
+    # The tablet keyboard is core infrastructure, not an optional app. Install
+    # its one package independently so an unrelated package/AUR failure cannot
+    # leave the visible keyboard without an input daemon.
+    if ! command -v ydotool >/dev/null 2>&1; then
+        if ((INSTALL_PACKAGES)); then
+            run sudo pacman -S --needed --noconfirm ydotool
+        else
+            echo "ydotool is missing; cannot configure Sparrow's keyboard backend." >&2
+            echo "Rerun with --packages or --full." >&2
+            return 1
+        fi
+    fi
+
+    if ((DRY_RUN == 0)) && ! command -v ydotool >/dev/null 2>&1; then
+        echo "ydotool installation completed without providing its executable." >&2
+        return 1
+    fi
+
+    uid=$(id -u "$CURRENT_USER")
+    gid=$(id -g "$CURRENT_USER")
+    service_tmp=$(mktemp)
+    sed -e "s/__UID__/$uid/g" -e "s/__GID__/$gid/g" \
+        "$ROOT/system/sparrow-ydotool.service.in" > "$service_tmp"
+    run sudo install -Dm644 "$service_tmp" /etc/systemd/system/sparrow-ydotool.service
+    rm -f "$service_tmp"
+
+    if ((DRY_RUN)); then
+        echo "Would enable Sparrow's private keyboard daemon and verify its socket."
+        return 0
+    fi
+
+    systemctl --user disable --now ydotool.service >/dev/null 2>&1 || true
+    ydotool_socket="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/.ydotool_socket"
+    rm -f "$ydotool_socket"
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now sparrow-ydotool.service
+    for _ in {1..20}; do
+        sudo systemctl is-active --quiet sparrow-ydotool.service \
+            && [[ -S "$ydotool_socket" ]] && break
+        sleep 0.1
+    done
+    if ! sudo systemctl is-active --quiet sparrow-ydotool.service \
+        || [[ ! -S "$ydotool_socket" ]] \
+        || ! "$BIN_DIR/sparrow-ydotool-key" 0:1 0:0 >/dev/null 2>&1; then
+        echo "Keyboard backend failed its input test." >&2
+        sudo systemctl status sparrow-ydotool.service --no-pager -l >&2 || true
+        return 1
+    fi
+    echo "Keyboard backend: ready"
+}
+
 [[ -d "$ROOT/dotfiles" ]] || { echo "Missing dotfiles payload" >&2; exit 1; }
 if ((INSTALL_PACKAGES)) && ! command -v pacman >/dev/null; then
     echo "Package installation is supported only on Arch Linux and CachyOS." >&2
@@ -158,6 +221,11 @@ else
 fi
 pause_point "Base files and the backup are ready. Continue with package and app setup?"
 
+# Complete and verify the mandatory input path before the broad package and
+# optional application phases. This is deliberately early: a later Spotify,
+# Firefox or AUR problem must not produce a half-installed core desktop.
+install_keyboard_backend
+
 if ((INSTALL_PACKAGES)); then
     package_list=$(mktemp)
     repo_list=$(mktemp)
@@ -209,51 +277,11 @@ if ((SET_SYSTEM_KEYMAP)); then
     fi
 fi
 
-# Bring up tablet input before configuring optional applications.  App setup
-# (notably Spicetify) may legitimately need user attention or fail against a
-# newly installed application; that must never leave the on-screen keyboard
-# copied into Quickshell without its input daemon.
-if command -v ydotool >/dev/null 2>&1; then
-    # Upstream documents that ydotoold normally needs root access to
-    # /dev/uinput. Run one root-owned daemon with a private 0600 socket owned
-    # by this desktop user so input works consistently across machines.
-    uid=$(id -u "$CURRENT_USER")
-    gid=$(id -g "$CURRENT_USER")
-    service_tmp=$(mktemp)
-    sed -e "s/__UID__/$uid/g" -e "s/__GID__/$gid/g" \
-        "$ROOT/system/sparrow-ydotool.service.in" > "$service_tmp"
-    run sudo install -Dm644 "$service_tmp" /etc/systemd/system/sparrow-ydotool.service
-    rm -f "$service_tmp"
-    if ((DRY_RUN)); then
-        echo "Would replace any session-dependent ydotool user daemon with Sparrow's system daemon."
-    else
-        systemctl --user disable --now ydotool.service >/dev/null 2>&1 || true
-        ydotool_socket="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/.ydotool_socket"
-        rm -f "$ydotool_socket"
-        sudo systemctl daemon-reload
-        sudo systemctl enable --now sparrow-ydotool.service
-        sleep 0.8
-        if ! sudo systemctl is-active --quiet sparrow-ydotool.service \
-            || [[ ! -S "$ydotool_socket" ]] \
-            || ! "$BIN_DIR/sparrow-ydotool-key" 0:1 0:0 >/dev/null 2>&1; then
-            echo "Keyboard backend failed its input test." >&2
-            sudo systemctl status sparrow-ydotool.service --no-pager >&2 || true
-            exit 1
-        fi
-    fi
-elif ((INSTALL_PACKAGES)); then
-    echo "ydotool was not installed; cannot configure Sparrow's keyboard backend." >&2
-    exit 1
-else
-    echo "Warning: ydotool is missing, so the on-screen keyboard cannot type." >&2
-    echo "Rerun with --packages or --full to install its backend." >&2
-fi
-
 if ((INSTALL_APPS)); then
     if command -v xdg-mime >/dev/null; then
         while IFS=$'\t' read -r mime desktop; do
             [[ -n "$mime" && -n "$desktop" ]] || continue
-            run xdg-mime default "$desktop" "$mime"
+            run_optional xdg-mime default "$desktop" "$mime"
         done < "$ROOT/system/default-apps.tsv"
     fi
     if command -v spicetify >/dev/null; then
@@ -261,28 +289,28 @@ if ((INSTALL_APPS)); then
         # missing. Create the target first, then set the path explicitly.
         run mkdir -p "$HOME_DIR/.config/spotify"
         run touch "$HOME_DIR/.config/spotify/prefs"
-        run spicetify config prefs_path "$HOME_DIR/.config/spotify/prefs"
+        run_optional spicetify config prefs_path "$HOME_DIR/.config/spotify/prefs"
         pause_point "Close Spotify completely, then continue with the Spicetify backup/apply step."
         if [[ -d /opt/spotify/Apps && ! -w /opt/spotify/Apps ]] && command -v setfacl >/dev/null; then
             if ((DRY_RUN)); then
                 echo "Would grant the current user write access to /opt/spotify for Spicetify."
             else
-                sudo setfacl -R -m "u:${CURRENT_USER}:rwx" /opt/spotify
-                sudo setfacl -R -d -m "u:${CURRENT_USER}:rwx" /opt/spotify
+                run_optional sudo setfacl -R -m "u:${CURRENT_USER}:rwx" /opt/spotify
+                run_optional sudo setfacl -R -d -m "u:${CURRENT_USER}:rwx" /opt/spotify
             fi
         fi
-        run spicetify backup apply
-        run spicetify config custom_apps marketplace
-        run spicetify apply
+        run_optional spicetify backup apply
+        run_optional spicetify config custom_apps marketplace
+        run_optional spicetify apply
     fi
     if command -v pipx >/dev/null; then
         if ! command -v pywalfox >/dev/null; then
-            run pipx install pywalfox
+            run_optional pipx install pywalfox
         fi
         pywalfox_bin=$(command -v pywalfox || true)
         [[ -n "$pywalfox_bin" ]] || pywalfox_bin="$HOME_DIR/.local/bin/pywalfox"
         if [[ -x "$pywalfox_bin" ]] || ((DRY_RUN)); then
-            run "$pywalfox_bin" install
+            run_optional "$pywalfox_bin" install
             pause_point "Install and enable the Pywalfox Firefox extension, then use Fetch colors once."
             echo "Firefox step: install and enable the Pywalfox extension in Firefox, then use its Fetch colors action once."
         fi
@@ -342,7 +370,12 @@ if ((DRY_RUN == 0)); then
     version_state="$HOME_DIR/.local/state/sparrow-shell/version"
     mkdir -p "$(dirname "$version_state")"
     git -C "$ROOT" rev-parse HEAD > "$version_state" 2>/dev/null || printf 'unknown\n' > "$version_state"
+    "$BIN_DIR/sparrow" doctor
     echo "Installed. Backup: $BACKUP"
     echo "Commands: sparrow, sparrow-shell, sparrow-update"
     echo "Keyboard: Super+K, 'sparrow keyboard', or tap the keyboard icon in the expanded pill"
+    if ((OPTIONAL_FAILURES > 0)); then
+        echo "Core installation is healthy, but $OPTIONAL_FAILURES optional app step(s) need attention." >&2
+        exit 3
+    fi
 fi

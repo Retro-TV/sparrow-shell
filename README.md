@@ -97,6 +97,7 @@ reference. It is deliberately **not** installed on other machines; the curated
 
 ```sh
 sparrow status
+sparrow doctor
 sparrow restart pill
 sparrow log pill
 sparrow keyboard
@@ -110,6 +111,10 @@ immediately in Fish, Bash, Zsh and a TTY. `sparrow-update` only accepts the offi
 checkout, pulls with fast-forward only, reapplies the rice, and never commits or
 pushes. A full system upgrade is intentionally opt-in with
 `sparrow-update --upgrade-system`.
+
+Every install and update ends with `sparrow doctor`. Success is reported only
+after the required Quickshell files, generated palettes, and complete tablet
+keyboard input path are present and responding.
 
 The maintainer-only publisher remains a separate local command named
 `rice-update`. Its source and GitHub credentials are not distributed here.

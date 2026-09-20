@@ -14,6 +14,7 @@
 #   sparrow-shell log     [pill|lock] [..]  follow the Quickshell log
 #   sparrow-shell update                    pull and apply Sparrow Shell
 #   sparrow-shell status                    show surface state
+#   sparrow-shell doctor                    verify the installed core
 #   sparrow-shell keyboard                  toggle the on-screen keyboard
 
 SCRIPTS="${XDG_CONFIG_HOME:-$HOME/.config}/hypr/scripts"
@@ -62,6 +63,7 @@ usage() {
     urow log     "[pill·lock]"     "follow the quickshell log"      "(pill)"
     urow update  ""                "check, then apply an update"     ""
     urow status  ""                "what's running and the version"  ""
+    urow doctor  ""                "verify files, palette and input" ""
     urow keyboard ""               "toggle the on-screen keyboard"   "(Super+K)"
     gap
 }
@@ -185,6 +187,45 @@ cmd_status() {
     gap
 }
 
+cmd_doctor() {
+    sec "sparrow shell · health"
+    gap
+    failed=0
+
+    doctor_check() {
+        label=$1
+        shift
+        if "$@" >/dev/null 2>&1; then
+            row "${flame}●${rst} ${cream}${label}${rst}   ${cream}ready${rst}"
+        else
+            row "${faint}○${rst} ${dim}${label}${rst}   ${verm}missing or broken${rst}"
+            failed=1
+        fi
+    }
+
+    cfg="${XDG_CONFIG_HOME:-$HOME/.config}"
+    cache="${XDG_CACHE_HOME:-$HOME/.cache}"
+    socket="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/.ydotool_socket"
+    doctor_check "pill config" test -s "$cfg/quickshell/pill/shell.qml"
+    doctor_check "keyboard UI" test -s "$cfg/quickshell/pill/OnScreenKeyboard.qml"
+    doctor_check "keyboard client" test -x "$HOME/.local/bin/sparrow-ydotool-key"
+    doctor_check "keyboard unit" test -s /etc/systemd/system/sparrow-ydotool.service
+    doctor_check "keyboard daemon" systemctl is-active --quiet sparrow-ydotool.service
+    doctor_check "keyboard socket" test -S "$socket"
+    doctor_check "keyboard connection" "$HOME/.local/bin/sparrow-ydotool-key" 0:1 0:0
+    doctor_check "dynamic palette" test -s "$cache/ricelin/colors.json"
+    doctor_check "Firefox palette" test -s "$cache/wal/colors.json"
+    doctor_check "terminal palette" test -s "$cache/ricelin/kitty-colors.conf"
+    gap
+    if [ "$failed" -eq 0 ]; then
+        row "${flame}●${rst} ${bright}core installation is complete${rst}"
+    else
+        row "${verm}●${rst} ${verm}core installation is incomplete${rst}"
+        return 1
+    fi
+    gap
+}
+
 cmd_keyboard() {
     socket="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/.ydotool_socket"
     [ -S "$socket" ] || die "keyboard input backend is unavailable; rerun the Sparrow installer"
@@ -207,6 +248,7 @@ case "$cmd" in
     log) cmd_log "$@" ;;
     update) cmd_update ;;
     status) cmd_status ;;
+    doctor) cmd_doctor ;;
     keyboard | kb) cmd_keyboard ;;
     "" | -h | --help | help) usage ;;
     *) die "unknown command '$cmd' (try: sparrow help)" ;;

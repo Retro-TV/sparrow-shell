@@ -209,7 +209,10 @@ run sudo install -Dm755 "$ROOT/dotfiles/.local/bin/sparrow-ydotool-key" "$SYSTEM
 # Sparrow's default shell is Fish. A universal Fish path updates running Fish
 # sessions as well as future ones; .profile covers POSIX login shells.
 if command -v fish >/dev/null 2>&1; then
-    run fish -c "fish_add_path -U '$BIN_DIR'"
+    # fish_add_path intentionally returns non-zero when the directory is
+    # already registered. That is a healthy idempotent update, not an install
+    # failure, so force the small Fish snippet to finish successfully.
+    run fish -c "fish_add_path -U '$BIN_DIR'; true"
 fi
 if ((DRY_RUN)); then
     echo "Would ensure $BIN_DIR is exported from $HOME_DIR/.profile."
@@ -366,6 +369,19 @@ if ((DRY_RUN == 0)); then
     if command -v hyprctl >/dev/null 2>&1 && hyprctl monitors >/dev/null 2>&1; then
         hyprctl reload >/dev/null 2>&1 || true
         "$BIN_DIR/sparrow-shell" restart all >/dev/null 2>&1 || true
+    fi
+    # Vesktop watches quickCss.css live after startup, but an already-running
+    # process does not adopt a newly installed useQuickCss setting from the
+    # externally replaced settings.json. Relaunch it once during an update so
+    # the watcher and generated wallpaper CSS are both active.
+    if command -v vesktop >/dev/null 2>&1 && pgrep -x vesktop >/dev/null 2>&1; then
+        pkill -TERM -x vesktop >/dev/null 2>&1 || true
+        for _ in {1..30}; do
+            pgrep -x vesktop >/dev/null 2>&1 || break
+            sleep 0.1
+        done
+        setsid -f vesktop >/dev/null 2>&1
+        echo "Vesktop: relaunched with dynamic QuickCSS"
     fi
     version_state="$HOME_DIR/.local/state/sparrow-shell/version"
     mkdir -p "$(dirname "$version_state")"

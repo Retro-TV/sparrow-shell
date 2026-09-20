@@ -25,7 +25,10 @@ for compatibility with the Ricelin-based Quickshell modules.
 - **Kitty/Ghostty:** loads generated terminal color fragments, including the
   extended ANSI slots used by the Starship rounded prompt.
 - **Firefox:** reads the exported Pywal palette through Pywalfox.
-- **Vesktop:** receives generated QuickCSS while staying opaque for compositor stability.
+- **Vesktop:** receives generated QuickCSS while staying opaque for compositor
+  stability. Its built-in QuickCSS watcher applies later wallpaper changes
+  live; the installer relaunches an existing process once so newly installed
+  settings are loaded.
 - **Fastfetch:** regenerates its accent and lantern colors.
 - **Spotify:** remains on the selected Marketplace/Spicetify theme; it is not
   force-refreshed on every wallpaper change.

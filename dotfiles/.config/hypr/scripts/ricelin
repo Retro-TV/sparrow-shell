@@ -206,6 +206,8 @@ cmd_doctor() {
     cfg="${XDG_CONFIG_HOME:-$HOME/.config}"
     cache="${XDG_CACHE_HOME:-$HOME/.cache}"
     socket="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/.ydotool_socket"
+    vesktop_settings="$cfg/vesktop/settings/settings.json"
+    vesktop_css="$cfg/vesktop/settings/quickCss.css"
     doctor_check "pill config" test -s "$cfg/quickshell/pill/shell.qml"
     doctor_check "keyboard UI" test -s "$cfg/quickshell/pill/OnScreenKeyboard.qml"
     doctor_check "keyboard client" test -x "$HOME/.local/bin/sparrow-ydotool-key"
@@ -216,6 +218,10 @@ cmd_doctor() {
     doctor_check "dynamic palette" test -s "$cache/ricelin/colors.json"
     doctor_check "Firefox palette" test -s "$cache/wal/colors.json"
     doctor_check "terminal palette" test -s "$cache/ricelin/kitty-colors.conf"
+    doctor_check "Vesktop QuickCSS" test -s "$vesktop_css"
+    if command -v jq >/dev/null 2>&1; then
+        doctor_check "Vesktop enabled" jq -e '.useQuickCss == true' "$vesktop_settings"
+    fi
     gap
     if [ "$failed" -eq 0 ]; then
         row "${flame}●${rst} ${bright}core installation is complete${rst}"

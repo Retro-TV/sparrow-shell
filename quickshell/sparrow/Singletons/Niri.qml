@@ -21,26 +21,77 @@ Singleton {
     property var actionQueue: []
     property string activeAction: ""
 
+    // Managed-config transactions are serialized in this backend before they
+    // reach the shared helper (which also locks across non-QML callers).
+    property var configTransactionQueue: []
+    property var activeConfigTransaction: null
+    property int configTransactionSerial: 0
+
+    signal managedFragmentWriteFinished(int requestId, string status, string message)
+
     // Derived focus state.
     property int focusedWorkspaceId: -1
     property int focusedWindowId: -1
     property string focusedOutput: ""
-    property bool generatedConfigValidationPending: false
-
-    readonly property string configPath: (Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")) + "/niri/config.kdl"
-    readonly property string generatedColorsPath: (Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")) + "/niri/sparrow/generated-colors.kdl"
+    readonly property string configPath: Quickshell.env("NIRI_CONFIG") || ((Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")) + "/niri/config.kdl")
+    readonly property string transactionHelperPath: Quickshell.env("HOME") + "/Projects/sparrow-shell/quickshell/sparrow/scripts/niri-config-transaction.py"
 
     function reloadConfig() {
         return enqueueAction(["niri", "msg", "action", "load-config-file"], "reload Niri config after Sparrow palette update");
     }
 
-    function validateGeneratedConfig() {
-        if (configValidation.running) {
-            generatedConfigValidationPending = true;
-            return;
+    /**
+     * Submit KDL for an explicitly Sparrow-managed fragment. The helper owns
+     * staging, validation, backups, atomic replacement, reload, and rollback.
+     * Callers receive the final status through managedFragmentWriteFinished.
+     * IDs, never filesystem paths, are accepted at this boundary.
+     */
+    function writeManagedFragment(fragmentId, content) {
+        var requestId = ++configTransactionSerial;
+        if (fragmentId !== "generated-colors" || typeof content !== "string") {
+            Qt.callLater(function() {
+                root.managedFragmentWriteFinished(requestId, "invalid_request",
+                    "unsupported managed fragment or non-text content");
+            });
+            return requestId;
         }
-        configValidation.command = ["niri", "validate", "-c", configPath];
-        configValidation.running = true;
+
+        var next = configTransactionQueue.slice();
+        next.push({ requestId: requestId, fragmentId: fragmentId, content: content });
+        configTransactionQueue = next;
+        startNextConfigTransaction();
+        return requestId;
+    }
+
+    function startNextConfigTransaction() {
+        if (transactionProcess.running || configTransactionQueue.length === 0)
+            return;
+
+        var next = configTransactionQueue[0];
+        configTransactionQueue = configTransactionQueue.slice(1);
+        activeConfigTransaction = next;
+        transactionProcess.running = true;
+    }
+
+    function finishConfigTransaction(exitCode) {
+        var request = activeConfigTransaction;
+        var result = null;
+        try {
+            result = JSON.parse(transactionOutput.text.trim());
+        } catch (e) {
+            result = null;
+        }
+
+        var status = result && result.status ? result.status : "helper_failed";
+        var message = result && result.message ? result.message
+            : (transactionError.text.trim() || "Niri config transaction helper exited with code " + exitCode);
+        if (exitCode !== 0 && status === "success")
+            status = "helper_failed";
+
+        if (request)
+            managedFragmentWriteFinished(request.requestId, status, message);
+        activeConfigTransaction = null;
+        Qt.callLater(root.startNextConfigTransaction);
     }
 
     function workspaceById(id) {
@@ -396,31 +447,23 @@ Singleton {
         }
     }
 
-    FileView {
-        id: generatedColorsFile
-        path: root.generatedColorsPath
-        blockLoading: true
-        watchChanges: true
-        printErrors: false
-        onFileChanged: {
-            reload();
-            root.validateGeneratedConfig();
-        }
-    }
-
     Process {
-        id: configValidation
-        onExited: (exitCode, exitStatus) => {
-            if (exitCode === 0)
-                root.reloadConfig();
-            else
-                console.warn("Sparrow Niri: generated wallpaper colors failed config validation; Niri was not reloaded");
+        id: transactionProcess
+        command: ["python3", root.transactionHelperPath]
+        stdinEnabled: true
+        stdout: StdioCollector { id: transactionOutput }
+        stderr: StdioCollector { id: transactionError }
 
-            if (root.generatedConfigValidationPending) {
-                root.generatedConfigValidationPending = false;
-                Qt.callLater(root.validateGeneratedConfig);
+        onStarted: {
+            if (root.activeConfigTransaction) {
+                transactionProcess.write(JSON.stringify({
+                    fragment: root.activeConfigTransaction.fragmentId,
+                    content: root.activeConfigTransaction.content
+                }) + "\n");
             }
         }
+
+        onExited: (exitCode, exitStatus) => root.finishConfigTransaction(exitCode)
     }
 
     Process {

@@ -12,7 +12,6 @@ from PIL import Image, ImageStat
 
 HOME = Path.home()
 CACHE = Path(os.environ.get("XDG_CACHE_HOME", HOME / ".cache")) / "sparrow-shell"
-NIRI = Path(os.environ.get("XDG_CONFIG_HOME", HOME / ".config")) / "niri/sparrow/generated-colors.kdl"
 def tint(h, s, l):
     r, g, b = colorsys.hls_to_rgb(h % 1, max(0, min(1, l)), max(0, min(1, s)))
     return "#%02x%02x%02x" % (round(r * 255), round(g * 255), round(b * 255))
@@ -130,10 +129,24 @@ def main():
            f'        active-color "{surfaces["primary"]}"\n'
            f'        inactive-color "{surfaces["outline_variant"]}"\n'
            "    }\n}\n")
-    # Both outputs are staged before replacement; failed extraction/Matugen has
-    # already returned without disturbing the last valid palette.
+    # The helper stages the whole Niri include tree and validates it before it
+    # can replace the active generated fragment. Keep the JSON and Niri outputs
+    # in step: on a failed Niri transaction, preserve the previous palette too.
+    helper = Path(__file__).with_name("niri-config-transaction.py")
+    request = json.dumps({"fragment": "generated-colors", "content": kdl}, ensure_ascii=False) + "\n"
+    result = subprocess.run(
+        [sys.executable, str(helper)], input=request, text=True,
+        capture_output=True, check=False,
+    )
+    try:
+        response = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        response = {}
+    if result.returncode != 0 or response.get("status") != "success":
+        detail = response.get("message") or result.stderr.strip() or "Niri config transaction failed"
+        raise RuntimeError(f"Niri colors were not applied: {detail}")
+
     atomic_write(CACHE / "palette.json", palette)
-    atomic_write(NIRI, kdl)
 
 
 if __name__ == "__main__":

@@ -34,10 +34,26 @@ ShellRoot {
     function refresh() {
     }
 
+    // Niri output names and Qt Screen names are separate APIs. Route only
+    // when both report the same output; use a startup-safe screen fallback.
+    function focusedScreenName() {
+        var outputName = Niri.focusedOutput;
+
+        if (outputName && Niri.outputByName(outputName)) {
+            for (var i = 0; i < Quickshell.screens.length; i++) {
+                if (Quickshell.screens[i].name === outputName)
+                    return Quickshell.screens[i].name;
+            }
+        }
+
+        return Quickshell.screens.length > 0 ? Quickshell.screens[0].name : "";
+    }
+
     Component.onCompleted: {
         refresh();
         Devices.restore();
-        void GameMode.active;
+	void GameMode.active;
+	void Niri.focusedOutput;
     }
 
     /**
@@ -122,7 +138,7 @@ ShellRoot {
      */
     function toggleSurface(mon, surface) {
         if (!mon || mon.length === 0)
-            mon = Quickshell.screens.length > 0 ? Quickshell.screens[0].name : "";
+            mon = root.focusedScreenName();
         if (root.openMon === mon && root.openSurface === surface) {
             root.close();
             return;

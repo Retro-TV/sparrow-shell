@@ -176,6 +176,72 @@ Singleton {
         );
     }
 
+    function normalizedAppId(value) {
+        var appId = String(value || "").trim().toLowerCase();
+        var slash = appId.lastIndexOf("/");
+        if (slash >= 0)
+            appId = appId.substring(slash + 1);
+        if (appId.endsWith(".desktop"))
+            appId = appId.substring(0, appId.length - 8);
+        return appId;
+    }
+
+    function bestApplicationWindow(matches) {
+        if (matches.length === 0)
+            return null;
+
+        matches.sort(function(a, b) {
+            if (!!a.is_focused !== !!b.is_focused)
+                return a.is_focused ? -1 : 1;
+
+            var aCurrent = a.workspace_id === root.focusedWorkspaceId;
+            var bCurrent = b.workspace_id === root.focusedWorkspaceId;
+            if (aCurrent !== bCurrent)
+                return aCurrent ? -1 : 1;
+
+            var aTime = a.focus_timestamp || {};
+            var bTime = b.focus_timestamp || {};
+            var aSecs = Number(aTime.secs || 0);
+            var bSecs = Number(bTime.secs || 0);
+            if (aSecs !== bSecs)
+                return bSecs - aSecs;
+            var aNanos = Number(aTime.nanos || 0);
+            var bNanos = Number(bTime.nanos || 0);
+            if (aNanos !== bNanos)
+                return bNanos - aNanos;
+            return Number(a.id) - Number(b.id);
+        });
+        return matches[0];
+    }
+
+    function findWindowForApplication(desktopEntry, appName) {
+        var preferred = normalizedAppId(desktopEntry);
+        var fallback = normalizedAppId(appName);
+
+        function exactMatches(token) {
+            if (!token)
+                return [];
+            return windows.filter(function(win) {
+                return normalizedAppId(win.app_id) === token;
+            });
+        }
+
+        var matches = exactMatches(preferred);
+        if (matches.length > 0)
+            return bestApplicationWindow(matches);
+
+        if (fallback && fallback !== preferred)
+            return bestApplicationWindow(exactMatches(fallback));
+        return null;
+    }
+
+    function focusApplicationWindow(desktopEntry, appName) {
+        var match = findWindowForApplication(desktopEntry, appName);
+        if (!match)
+            return false;
+        return focusWindow(match.id);
+    }
+
     function workspacesForOutput(output) {
         return workspaces
             .filter(function(ws) {

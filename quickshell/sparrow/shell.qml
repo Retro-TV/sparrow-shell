@@ -34,16 +34,17 @@ ShellRoot {
     function refresh() {
     }
 
-    // Niri output names and Qt Screen names are separate APIs. Route only
-    // when both report the same output; use a startup-safe screen fallback.
+    // Niri output names and Qt Screen names are separate APIs. Never route a
+    // known output to a different screen if the names cannot be matched.
     function focusedScreenName() {
         var outputName = Niri.focusedOutput;
 
-        if (outputName && Niri.outputByName(outputName)) {
+        if (outputName) {
             for (var i = 0; i < Quickshell.screens.length; i++) {
                 if (Quickshell.screens[i].name === outputName)
                     return Quickshell.screens[i].name;
             }
+            return "";
         }
 
         return Quickshell.screens.length > 0 ? Quickshell.screens[0].name : "";
@@ -79,12 +80,6 @@ ShellRoot {
             + "Ricelin 0 '' 'Ricelin updated' \"$b\" '[]' '{}' 5000 >/dev/null 2>&1"]
     }
 
-    Binding {
-        target: Notifs
-        property: "dnd"
-        value: Flags.dnd
-    }
-
     PanelWindow {
         id: inhibitWin
         visible: Flags.keepAwake
@@ -112,29 +107,8 @@ ShellRoot {
     }
 
     /**
-     * Only these raw events can change what the pill renders (per-monitor
-     * active workspace, minimized toplevels, monitor hotplug). Everything
-     * else (window drags, resizes, title spam) must not trigger the triple
-     * model refresh, which costs three Hyprland IPC round-trips.
-     */
-    readonly property var refreshEvents: ({
-        workspace: true, workspacev2: true,
-        createworkspace: true, createworkspacev2: true,
-        destroyworkspace: true, destroyworkspacev2: true,
-        moveworkspace: true, moveworkspacev2: true,
-        renameworkspace: true, activespecial: true,
-        focusedmon: true, focusedmonv2: true,
-        openwindow: true, closewindow: true,
-        movewindow: true, movewindowv2: true,
-        fullscreen: true,
-        monitoradded: true, monitoraddedv2: true, monitorremoved: true
-    })
-
-    
-    /**
-     * An empty monitor argument resolves to the focused monitor here, so the
-     * keybind scripts skip their hyprctl+jq round trip and a surface open costs
-     * one IPC call instead of three process spawns.
+     * An empty monitor argument resolves to the focused Niri output here, so
+     * keybind scripts need only their Sparrow IPC call to open a surface.
      */
     function toggleSurface(mon, surface) {
         if (!mon || mon.length === 0)
@@ -206,23 +180,6 @@ ShellRoot {
         /** Opens any surface by name, settings sub-pages included; dev and scripting door. */
         function page(mon: string, name: string): void { root.toggleSurface(mon, name); }
 
-        /**
-         * The two halves of the SUPER+M minimize toggle, driven by the
-         * minimize-toggle script which has already read the focused window. A
-         * desktop window drops into the minimized stash; a window already stashed
-         * comes back to the workspace it is handed, so the same key hides and
-         * restores. Both target the window by address so they act on the one the
-         * user pressed on, not whatever the compositor calls active afterwards.
-         */
-        function minimizeWindow(addr: string): void {
-            Hyprland.dispatch('hl.dsp.window.move({ workspace = "special:minimized", follow = false, window = "address:' + addr + '" })');
-        }
-        function restoreWindow(arg: string): void {
-            var p = arg.split("|");
-            if (p.length < 2 || p[0].length === 0)
-                return;
-            Hyprland.dispatch('hl.dsp.window.move({ workspace = ' + p[1] + ', window = "address:' + p[0] + '" })');
-        }
     }
 
     Variants {

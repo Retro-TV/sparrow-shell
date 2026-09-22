@@ -110,17 +110,11 @@ Singleton {
         root.history = root.history.filter(function(h) { return !gone[h.id]; });
     }
 
-    /**
-     * Focus the app's Hyprland window (workspace switch included) by matching the
-     * notification's desktopEntry/appName against the live window classes.
-     */
+    /** Focus an exact app-id match through Sparrow's centralized Niri backend. */
     function raiseWindow(n) {
-        if (!n) return;
-        var token = String(n.desktopEntry && n.desktopEntry.length ? n.desktopEntry : (n.appName || "")).toLowerCase();
-        if (token.length === 0) return;
-        Quickshell.execDetached(["sh", "-c",
-            "addr=$(hyprctl clients -j | jq -r --arg q \"$1\" 'first(.[] | select(((.class | if . then ascii_downcase else \"\" end) | contains($q)) or ((.initialClass | if . then ascii_downcase else \"\" end) | contains($q))) | .address)'); [ -n \"$addr\" ] && hyprctl dispatch \"hl.dsp.focus({ window = \\\"address:$addr\\\" })\"",
-            "sh", token]);
+        if (!n)
+            return false;
+        return Niri.focusApplicationWindow(n.desktopEntry, n.appName);
     }
 
     /**

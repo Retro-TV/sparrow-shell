@@ -1,6 +1,6 @@
 import QtQuick
+import Quickshell
 import Quickshell.Widgets
-import Quickshell.Hyprland
 import Quickshell.Services.Pipewire
 import "Singletons"
 
@@ -47,6 +47,9 @@ Item {
     readonly property var sink: Pipewire.defaultAudioSink
     readonly property bool muted: sink && sink.audio ? sink.audio.muted : false
     readonly property real volume: sink && sink.audio ? Math.max(0, Math.min(1, sink.audio.volume)) : 0
+    readonly property var micSource: Pipewire.defaultAudioSource
+    readonly property bool micMuted: micSource && micSource.audio ? micSource.audio.muted : false
+    readonly property real micVolume: micSource && micSource.audio ? Math.max(0, Math.min(1, micSource.audio.volume)) : 0
 
     readonly property real desiredW: kind === "workspace" ? Math.max(120 * s, wsIndicator.implicitWidth + 40 * s)
         : (kind === "track" ? 344 * s : (kind === "record" ? 256 * s : 248 * s))
@@ -61,11 +64,10 @@ Item {
      * the active one marked, so the OSD would only be a redundant morph.
      */
     readonly property string activeWsName: {
-        var mons = Hyprland.monitors.values;
-        for (var i = 0; i < mons.length; i++)
-            if (mons[i].name === screenName)
-                return mons[i].activeWorkspace ? mons[i].activeWorkspace.name : "";
-        return "";
+        var workspace = Niri.activeWorkspaceForOutput(screenName);
+        if (!workspace)
+            return "";
+        return workspace.name || String(workspace.idx);
     }
     onActiveWsNameChanged: if (activeWsName.length > 0 && !expanded) flash("workspace");
 
@@ -98,7 +100,9 @@ Item {
      * Workspace flashes skip it: those are already keyed to this screen's own
      * active workspace.
      */
-    readonly property bool onFocusedMonitor: !Hyprland.focusedMonitor || Hyprland.focusedMonitor.name === screenName
+    readonly property bool onFocusedMonitor: Niri.focusedOutput
+        ? Niri.focusedOutput === screenName
+        : (Quickshell.screens.length === 0 || Quickshell.screens[0].name === screenName)
 
     function flash(which) {
         if (!armed || suppressed)
@@ -164,13 +168,19 @@ Item {
     }
 
     PwObjectTracker {
-        objects: [root.sink].filter(Boolean)
+        objects: [root.sink, root.micSource].filter(Boolean)
     }
 
     Connections {
         target: root.sink && root.sink.audio ? root.sink.audio : null
         function onVolumesChanged() { root.flash("volume"); }
         function onMutedChanged() { root.flash("volume"); }
+    }
+
+    Connections {
+        target: root.micSource && root.micSource.audio ? root.micSource.audio : null
+        function onVolumesChanged() { root.flash("microphone"); }
+        function onMutedChanged() { root.flash("microphone"); }
     }
 
     Connections {
@@ -255,6 +265,59 @@ Item {
                 width: parent.width * root.volume
                 radius: parent.radius
                 color: root.muted ? Theme.vermDim : Theme.vermLit
+                Behavior on width { NumberAnimation { duration: Motion.fast } }
+                Behavior on color { ColorAnimation { duration: Motion.fast } }
+            }
+        }
+    }
+
+    Item {
+        id: micRow
+        anchors.fill: parent
+        opacity: root.kind === "microphone" ? 1 : 0
+        visible: opacity > 0.01
+        Behavior on opacity { NumberAnimation { duration: 150 } }
+
+        GlyphIcon {
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            width: 17 * root.s
+            height: 17 * root.s
+            name: root.micMuted ? "mic-off" : "mic"
+            color: root.micMuted ? Theme.dim : Theme.iconDim
+            stroke: 1.7
+        }
+
+        Text {
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            width: 32 * root.s
+            horizontalAlignment: Text.AlignRight
+            text: Math.round(root.micVolume * 100) + "%"
+            color: root.micMuted ? Theme.dim : Theme.cream
+            font.family: Theme.font
+            font.pixelSize: 11 * root.s
+            font.weight: Font.DemiBold
+            font.features: { "tnum": 1 }
+        }
+
+        Rectangle {
+            anchors.left: parent.left
+            anchors.leftMargin: 29 * root.s
+            anchors.right: parent.right
+            anchors.rightMargin: 44 * root.s
+            anchors.verticalCenter: parent.verticalCenter
+            height: 4 * root.s
+            radius: 2 * root.s
+            color: Theme.threadBg
+
+            Rectangle {
+                anchors.left: parent.left
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                width: parent.width * root.micVolume
+                radius: parent.radius
+                color: root.micMuted ? Theme.vermDim : Theme.vermLit
                 Behavior on width { NumberAnimation { duration: Motion.fast } }
                 Behavior on color { ColorAnimation { duration: Motion.fast } }
             }

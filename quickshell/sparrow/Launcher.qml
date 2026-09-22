@@ -24,6 +24,7 @@ PillSurface {
     property string query: ""
     property int selectedIndex: 0
     property var usage: ({})
+    property bool launching: false
 
     /**
      * Calc mode: when the whole query parses as a real calculation (an
@@ -48,19 +49,20 @@ PillSurface {
     property int editIndex: -1
 
     readonly property string appimageScript: Quickshell.env("HOME") + "/.config/hypr/scripts/app-install.sh"
-    readonly property string guardScript: Quickshell.env("HOME") + "/.config/hypr/scripts/launch-guard.sh"
 
-    /**
-     * entry.execute() is fire and forget, so an app that dies on startup fails
-     * silently. The guard watches the first seconds and toasts exit code plus
-     * stderr with a Copy action when it does.
-     */
     function launch(entry) {
-        if (!entry.command || entry.command.length === 0) {
-            entry.execute();
-            return;
+        if (!entry || !entry.id) {
+            console.warn("Sparrow launcher: selected desktop entry has no ID");
+            return false;
         }
-        Quickshell.execDetached(["bash", root.guardScript, entry.name, entry.icon || "", entry.workingDirectory || ""].concat(entry.command));
+
+        if (launchProcess.running)
+            return false;
+
+        root.launching = true;
+        launchProcess.command = ["gtk-launch", entry.id];
+        launchProcess.running = true;
+        return true;
     }
 
     function appimageSlug(entry) {
@@ -128,6 +130,9 @@ PillSurface {
     }
 
     function activate() {
+        if (root.launching)
+            return;
+
         if (root.calcActive) {
             root.copyResult();
             return;
@@ -140,9 +145,23 @@ PillSurface {
                 root.usage[entry.id] = (root.usage[entry.id] || 0) + 1;
                 usageStore.setText(JSON.stringify(root.usage));
             }
-            root.launch(entry);
+            if (!root.launch(entry))
+                return;
         }
-        root.requestClose();
+    }
+
+    Process {
+        id: launchProcess
+
+        onExited: (exitCode, exitStatus) => {
+            root.launching = false;
+
+            if (exitCode === 0)
+                root.requestClose();
+            else
+                console.warn("Sparrow launcher: gtk-launch failed for selected desktop entry; exit code",
+                             exitCode, "status", exitStatus);
+        }
     }
 
     onActiveChanged: {
@@ -188,6 +207,10 @@ PillSurface {
         onTextChanged: {
             root.query = text;
             root.selectedIndex = 0;
+            Qt.callLater(function() {
+                if (root.results.length > 0)
+                    list.positionViewAtIndex(0, ListView.Beginning);
+            });
         }
         onMoved: (d) => root.move(d)
         onAccepted: root.activate()

@@ -25,6 +25,23 @@ Singleton {
     property int focusedWorkspaceId: -1
     property int focusedWindowId: -1
     property string focusedOutput: ""
+    property bool generatedConfigValidationPending: false
+
+    readonly property string configPath: (Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")) + "/niri/config.kdl"
+    readonly property string generatedColorsPath: (Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")) + "/niri/sparrow/generated-colors.kdl"
+
+    function reloadConfig() {
+        return enqueueAction(["niri", "msg", "action", "load-config-file"], "reload Niri config after Sparrow palette update");
+    }
+
+    function validateGeneratedConfig() {
+        if (configValidation.running) {
+            generatedConfigValidationPending = true;
+            return;
+        }
+        configValidation.command = ["niri", "validate", "-c", configPath];
+        configValidation.running = true;
+    }
 
     function workspaceById(id) {
         for (var i = 0; i < workspaces.length; i++)
@@ -376,6 +393,33 @@ Singleton {
 
             if (root.outputRefreshPending)
                 Qt.callLater(root.refreshOutputs);
+        }
+    }
+
+    FileView {
+        id: generatedColorsFile
+        path: root.generatedColorsPath
+        blockLoading: true
+        watchChanges: true
+        printErrors: false
+        onFileChanged: {
+            reload();
+            root.validateGeneratedConfig();
+        }
+    }
+
+    Process {
+        id: configValidation
+        onExited: (exitCode, exitStatus) => {
+            if (exitCode === 0)
+                root.reloadConfig();
+            else
+                console.warn("Sparrow Niri: generated wallpaper colors failed config validation; Niri was not reloaded");
+
+            if (root.generatedConfigValidationPending) {
+                root.generatedConfigValidationPending = false;
+                Qt.callLater(root.validateGeneratedConfig);
+            }
         }
     }
 

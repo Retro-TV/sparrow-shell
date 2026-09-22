@@ -4,8 +4,8 @@ import Quickshell
 import Quickshell.Io
 
 /**
- * Live wallpaper-derived palette. matugen writes a small colour JSON on every
- * wallpaper change (via wallcolors.py) and this singleton watches it, so the
+ * Live wallpaper-derived palette. Sparrow's wallcolors.py atomically writes a
+ * Ricelin-compatible palette JSON on each wallpaper change; this singleton watches it, so the
  * tokens update the moment the wallpaper does. Theme reads these only while the
  * dynamic-palette flag is on; otherwise the curated washi hex wins. Defaults are
  * a warm fallback so a missing file still yields a usable scheme. Surfaces and
@@ -34,7 +34,7 @@ Singleton {
 
     FileView {
         id: file
-        path: (Quickshell.env("XDG_CACHE_HOME") || (Quickshell.env("HOME") + "/.cache")) + "/ricelin/colors.json"
+        path: (Quickshell.env("XDG_CACHE_HOME") || (Quickshell.env("HOME") + "/.cache")) + "/sparrow-shell/palette.json"
         blockLoading: true
         watchChanges: true
         printErrors: false

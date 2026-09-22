@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls
+import Quickshell
 import Quickshell.Io
 import "Singletons"
 
@@ -14,7 +15,7 @@ import "Singletons"
  *
  * Manual palette mode reveals a rainbow hue strip and a dark/light choice; moving
  * either rebuilds the rice colour set from that hue through wallcolors.py --hue
- * and reloads Hyprland and the terminal, debounced so a drag does not spawn a
+ * and refreshes the shared Sparrow palette, debounced so a drag does not spawn a
  * build per pixel.
  */
 SettingsSurface {
@@ -58,15 +59,18 @@ SettingsSurface {
 
     Process {
         id: paletteProc
-        command: ["sh", "-c",
-            "python3 \"$HOME/.config/hypr/scripts/wallcolors.py\" --hue \"$1\" \"$2\" \"$3\" && hyprctl reload >/dev/null 2>&1; busctl --user call com.mitchellh.ghostty /com/mitchellh/ghostty org.gtk.Actions Activate \"sava{sv}\" reload-config 0 0 >/dev/null 2>&1 || true",
-            "sh", root.hueArg, root.modeArg, root.satArg]
+        command: ["bash", Quickshell.env("HOME") + "/Projects/sparrow-shell/quickshell/sparrow/scripts/wallpaper.sh", "manual", root.hueArg, root.modeArg, root.satArg]
+        stderr: StdioCollector {
+            onStreamFinished: if (this.text.trim().length > 0) console.warn(this.text.trim())
+        }
     }
 
     Process {
         id: dynamicProc
-        command: ["sh", "-c",
-            "f=\"${XDG_STATE_HOME:-$HOME/.local/state}/ricelin-wallpaper\"; pic=$(cat \"$f\" 2>/dev/null); case \"$pic\" in *.[Mm][Pp]4|*.[Ww][Ee][Bb][Mm]|*.[Mm][Kk][Vv]|*.[Mm][Oo][Vv]) pic=\"${XDG_STATE_HOME:-$HOME/.local/state}/ricelin-wallpaper-still.png\";; esac; [ -f \"$pic\" ] && python3 \"$HOME/.config/hypr/scripts/wallcolors.py\" \"$pic\" >/dev/null 2>&1; hyprctl reload >/dev/null 2>&1; busctl --user call com.mitchellh.ghostty /com/mitchellh/ghostty org.gtk.Actions Activate \"sava{sv}\" reload-config 0 0 >/dev/null 2>&1 || true"]
+        command: ["bash", Quickshell.env("HOME") + "/Projects/sparrow-shell/quickshell/sparrow/scripts/wallpaper.sh", "recolor"]
+        stderr: StdioCollector {
+            onStreamFinished: if (this.text.trim().length > 0) console.warn(this.text.trim())
+        }
     }
 
     Connections {

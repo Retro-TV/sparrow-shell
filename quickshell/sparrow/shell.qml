@@ -195,6 +195,7 @@ ShellRoot {
         function system(mon: string): void { root.toggleSurface(mon, "sysmon"); }
         function clipboard(mon: string): void { root.toggleSurface(mon, "clipboard"); }
         function wallpaper(mon: string): void { root.toggleSurface(mon, "wallpaper"); }
+        function nextWallpaper(): void { Walls.next(); }
         function media(mon: string): void {
             if (Players.list.length > 0)
                 root.toggleSurface(mon, "media");

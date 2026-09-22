@@ -40,6 +40,14 @@ Singleton {
         return enqueueAction(["niri", "msg", "action", "load-config-file"], "reload Niri config after Sparrow palette update");
     }
 
+    function powerOffOutputs() {
+        return enqueueAction(["niri", "msg", "action", "power-off-monitors"], "power off Niri outputs");
+    }
+
+    function powerOnOutputs() {
+        return enqueueAction(["niri", "msg", "action", "power-on-monitors"], "power on Niri outputs");
+    }
+
     /**
      * Submit KDL for an explicitly Sparrow-managed fragment. The helper owns
      * staging, validation, backups, atomic replacement, reload, and rollback.

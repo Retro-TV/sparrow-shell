@@ -2,7 +2,6 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import Quickshell
-import Quickshell.Hyprland
 import Quickshell.Widgets
 import "Singletons"
 
@@ -48,9 +47,9 @@ PillSurface {
     amePoint: Qt.point(heatX, heatY)
 
     readonly property var actions: [
-        { key: "lock",     glyph: "lock",     label: "Lock",     confirm: false, dispatch: "",             argv: [Quickshell.env("HOME") + "/.config/hypr/scripts/lock.sh"] },
-        { key: "logout",   glyph: "logout",   label: "Logout",   confirm: true,  dispatch: "hl.dsp.exit()", argv: [] },
-        { key: "suspend",  glyph: "suspend",  label: "Sleep",    confirm: false, dispatch: "",             argv: ["systemctl", "suspend"] },
+        { key: "lock",     glyph: "lock",     label: "Lock",     confirm: false, argv: [Quickshell.env("HOME") + "/Projects/sparrow-shell/quickshell/sparrow/scripts/sparrow-lock", "lock"] },
+        { key: "logout",   glyph: "logout",   label: "Logout",   confirm: true,  argv: ["niri", "msg", "action", "quit"] },
+        { key: "suspend",  glyph: "suspend",  label: "Sleep",    confirm: false, argv: [Quickshell.env("HOME") + "/Projects/sparrow-shell/quickshell/sparrow/scripts/sparrow-lock", "suspend"] },
         { key: "reboot",   glyph: "reboot",   label: "Restart",  confirm: true,  dispatch: "",             argv: ["systemctl", "reboot"] },
         { key: "shutdown", glyph: "shutdown", label: "Shutdown", confirm: true,  dispatch: "",             argv: ["systemctl", "poweroff"] }
     ]
@@ -58,10 +57,7 @@ PillSurface {
     readonly property int splitAfter: 2
 
     function run(a) {
-        if (a.dispatch && a.dispatch.length)
-            Hyprland.dispatch(a.dispatch);
-        else
-            Quickshell.execDetached(a.argv);
+        Quickshell.execDetached(a.argv);
         root.requestClose();
     }
 

@@ -55,6 +55,28 @@ ShellRoot {
         Devices.restore();
 	void GameMode.active;
 	void Niri.focusedOutput;
+        sessionEnvironment.running = true;
+    }
+
+    Process {
+        id: sessionEnvironment
+        command: ["systemctl", "--user", "import-environment", "WAYLAND_DISPLAY", "NIRI_SOCKET"]
+        onExited: (exitCode, exitStatus) => {
+            if (exitCode !== 0) {
+                console.error("Sparrow: could not import Wayland/Niri environment into the user service manager");
+                return;
+            }
+            idleServiceStart.running = true;
+        }
+    }
+
+    Process {
+        id: idleServiceStart
+        command: ["systemctl", "--user", "start", "sparrow-idle.service"]
+        onExited: (exitCode, exitStatus) => {
+            if (exitCode !== 0)
+                console.error("Sparrow: failed to start the dedicated idle monitor service", exitCode);
+        }
     }
 
     /**
@@ -92,18 +114,6 @@ ShellRoot {
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
         anchors { top: true; left: true }
         IdleInhibitor { window: inhibitWin; enabled: Flags.keepAwake }
-    }
-
-    /**
-     * The Wayland IdleInhibitor above only pauses the compositor's own idle
-     * (DPMS); hypridle runs its own timer and never sees it, so the lock still
-     * fired with keep-awake on. A logind idle inhibitor is the wire hypridle
-     * does respect, so hold one for as long as the flag is set.
-     */
-    Process {
-        running: Flags.keepAwake
-        command: ["systemd-inhibit", "--what=idle:sleep", "--who=Ricelin",
-                  "--why=keep awake", "--mode=block", "sleep", "infinity"]
     }
 
     /**

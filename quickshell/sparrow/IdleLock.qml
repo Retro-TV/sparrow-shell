@@ -6,23 +6,17 @@ import Quickshell.Io
 import "Singletons"
 
 /**
- * 錠 IDLE / LOCK sub-surface: the three idle timeouts that drive hypridle, each
- * held in minutes (0 = off). Auto-lock runs the lock script, screen-off blanks
- * the display through DPMS, and suspend sleeps the machine. Any pick regenerates
- * the whole hypridle.conf from the current values and restarts hypridle, so the
- * change lands without a hand edit. Keep-awake in the mixer already inhibits the
- * Wayland idle notification, which pauses every listener while it is on, so this
- * surface never touches that wiring. Reached from the settings index and morphs
- * back to it on an empty click or the back chevron.
+ * 錠 IDLE / LOCK sub-surface: timeout values are watched by Sparrow's separate
+ * Quickshell IdleMonitor service. The service reads the shared flags directly;
+ * settings changes therefore apply live without generating a daemon config or
+ * restarting the pill. Reached from settings and morphs back on an empty click
+ * or the back chevron.
  */
 SettingsSurface {
     id: root
 
     backSurface: "settings"
     implicitHeight: content.implicitHeight
-
-    readonly property string confPath: Quickshell.env("HOME") + "/.config/hypr/hypridle.conf"
-    readonly property string lockScript: Quickshell.env("HOME") + "/.config/hypr/scripts/lock.sh"
 
     readonly property var lockOptions: [
         { label: "Off", value: 0 }, { label: "1 min", value: 1 }, { label: "3 min", value: 3 },
@@ -38,62 +32,10 @@ SettingsSurface {
     ]
 
     rows: [
-        { item: lockRow, kind: "seg", vals: root.lockOptions.map(function (o) { return o.value; }), get: function () { return Flags.idleLockMin; }, set: function (v) { Flags.idleLockMin = v; root.apply(); } },
-        { item: screenRow, kind: "seg", vals: root.screenOptions.map(function (o) { return o.value; }), get: function () { return Flags.idleScreenOffMin; }, set: function (v) { Flags.idleScreenOffMin = v; root.apply(); } },
-        { item: suspendRow, kind: "seg", vals: root.suspendOptions.map(function (o) { return o.value; }), get: function () { return Flags.idleSuspendMin; }, set: function (v) { Flags.idleSuspendMin = v; root.apply(); } }
+        { item: lockRow, kind: "seg", vals: root.lockOptions.map(function (o) { return o.value; }), get: function () { return Flags.idleLockMin; }, set: function (v) { Flags.idleLockMin = v; } },
+        { item: screenRow, kind: "seg", vals: root.screenOptions.map(function (o) { return o.value; }), get: function () { return Flags.idleScreenOffMin; }, set: function (v) { Flags.idleScreenOffMin = v; } },
+        { item: suspendRow, kind: "seg", vals: root.suspendOptions.map(function (o) { return o.value; }), get: function () { return Flags.idleSuspendMin; }, set: function (v) { Flags.idleSuspendMin = v; } }
     ]
-
-    /**
-     * Builds the full hypridle.conf from the three flag values. The general block
-     * is always present; a listener block is appended only for each non-zero
-     * timeout, in the order lock, screen-off, suspend. Minutes are written out as
-     * seconds.
-     */
-    function buildConf() {
-        var out = "general {\n"
-            + "    lock_cmd = " + root.lockScript + "\n"
-            + "    before_sleep_cmd = loginctl lock-session\n"
-            + "    after_sleep_cmd = hyprctl dispatch dpms on\n"
-            + "}\n";
-
-        if (Flags.idleLockMin > 0)
-            out += "\nlistener {\n"
-                + "    timeout = " + (Flags.idleLockMin * 60) + "\n"
-                + "    on-timeout = " + root.lockScript + "\n"
-                + "}\n";
-
-        if (Flags.idleScreenOffMin > 0)
-            out += "\nlistener {\n"
-                + "    timeout = " + (Flags.idleScreenOffMin * 60) + "\n"
-                + "    on-timeout = hyprctl dispatch dpms off\n"
-                + "    on-resume = hyprctl dispatch dpms on\n"
-                + "}\n";
-
-        if (Flags.idleSuspendMin > 0)
-            out += "\nlistener {\n"
-                + "    timeout = " + (Flags.idleSuspendMin * 60) + "\n"
-                + "    on-timeout = systemctl suspend\n"
-                + "}\n";
-
-        return out;
-    }
-
-    function apply() {
-        confWriter.setText(buildConf());
-        restartProc.running = true;
-    }
-
-    FileView {
-        id: confWriter
-        path: root.confPath
-        atomicWrites: true
-        printErrors: false
-    }
-
-    Process {
-        id: restartProc
-        command: ["systemctl", "--user", "restart", "hypridle"]
-    }
 
     /**
      * One idle row: name and caption on their own full-width line with the
@@ -194,7 +136,7 @@ SettingsSurface {
                 flushLeft: true
                 options: root.lockOptions
                 value: Flags.idleLockMin
-                onPicked: (v) => { Flags.idleLockMin = v; root.apply(); }
+                onPicked: (v) => { Flags.idleLockMin = v; }
             }
         }
 
@@ -208,7 +150,7 @@ SettingsSurface {
                 flushLeft: true
                 options: root.screenOptions
                 value: Flags.idleScreenOffMin
-                onPicked: (v) => { Flags.idleScreenOffMin = v; root.apply(); }
+                onPicked: (v) => { Flags.idleScreenOffMin = v; }
             }
         }
 
@@ -223,7 +165,7 @@ SettingsSurface {
                 flushLeft: true
                 options: root.suspendOptions
                 value: Flags.idleSuspendMin
-                onPicked: (v) => { Flags.idleSuspendMin = v; root.apply(); }
+                onPicked: (v) => { Flags.idleSuspendMin = v; }
             }
         }
 

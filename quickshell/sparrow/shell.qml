@@ -5,7 +5,6 @@ import QtQuick.Effects
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
-import Quickshell.Hyprland
 import "Singletons"
 
 /**
@@ -33,9 +32,6 @@ ShellRoot {
     property string peekMon: ""
 
     function refresh() {
-        Hyprland.refreshMonitors();
-        Hyprland.refreshWorkspaces();
-        Hyprland.refreshToplevels();
     }
 
     Component.onCompleted: {
@@ -118,14 +114,7 @@ ShellRoot {
         monitoradded: true, monitoraddedv2: true, monitorremoved: true
     })
 
-    Connections {
-        target: Hyprland
-        function onRawEvent(event) {
-            if (root.refreshEvents[event.name])
-                root.refresh();
-        }
-    }
-
+    
     /**
      * An empty monitor argument resolves to the focused monitor here, so the
      * keybind scripts skip their hyprctl+jq round trip and a surface open costs
@@ -133,7 +122,7 @@ ShellRoot {
      */
     function toggleSurface(mon, surface) {
         if (!mon || mon.length === 0)
-            mon = Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "";
+            mon = Quickshell.screens.length > 0 ? Quickshell.screens[0].name : "";
         if (root.openMon === mon && root.openSurface === surface) {
             root.close();
             return;
@@ -266,17 +255,7 @@ ShellRoot {
              * click-through so fullscreen content owns the screen, until a
              * surface or a peek summons it back over the content.
              */
-            readonly property bool monFullscreen: {
-                var mons = Hyprland.monitors.values;
-                for (var i = 0; i < mons.length; i++) {
-                    if (mons[i].name === modelData.name) {
-                        var ws = mons[i].activeWorkspace;
-                        var o = ws ? ws.lastIpcObject : null;
-                        return o ? !!o.hasfullscreen : false;
-                    }
-                }
-                return false;
-            }
+            readonly property bool monFullscreen: false
             readonly property bool summoned: modal || root.peekMon === modelData.name
             readonly property bool pillHidden: monFullscreen && !summoned
 

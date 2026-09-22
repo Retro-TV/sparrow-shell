@@ -7,7 +7,6 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Networking
 import Quickshell.Bluetooth
-import Quickshell.Hyprland
 import "Singletons"
 
 /**
@@ -119,28 +118,7 @@ Item {
      * in place of the clock so it is obvious you are looking at the minimized stash
      * or the private space rather than your real desktop. Empty in the normal case.
      */
-    readonly property string specialView: {
-        var ms = Hyprland.monitors.values;
-        for (var i = 0; i < ms.length; i++) {
-            if (ms[i] && ms[i].name === pill.screenName) {
-                var o = ms[i].lastIpcObject;
-                var sw = (o && o.specialWorkspace) ? o.specialWorkspace.name : "";
-                if (sw && sw.indexOf("special:") === 0) {
-                    var id = sw.slice("special:".length);
-                    var sl = Spaces.list;
-                    for (var j = 0; j < sl.length; j++)
-                        if (sl[j] && sl[j].id === id)
-                            return sl[j].name;
-                    if (id === "minimized") return "Minimized";
-                    if (id === "private") return "Private";
-                    if (id === "stash") return "Stash";
-                    return id.charAt(0).toUpperCase() + id.slice(1);
-                }
-                return "";
-            }
-        }
-        return "";
-    }
+    readonly property string specialView: ""
     readonly property bool toastActive: Notifs.popups.length > 0
     readonly property bool osdActive: osd.flashing
 

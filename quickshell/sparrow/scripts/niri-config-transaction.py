@@ -17,23 +17,29 @@ import json
 import os
 from pathlib import Path
 import re
+import secrets
 import shutil
 import stat
 import subprocess
 import sys
 import tempfile
+import time
 from datetime import datetime, timezone
 from typing import Callable, Optional
 
 
 MANAGED_FRAGMENTS = {
     "generated-colors": Path("sparrow/generated-colors.kdl"),
+    "display-outputs": Path("sparrow/display-outputs.kdl"),
+    "display-binds": Path("sparrow/display-binds.kdl"),
 }
 BACKUP_PREFIX = "niri-transaction-"
 BACKUP_LIMIT = 20
 MAX_CONTENT_BYTES = 1024 * 1024
-INCLUDE_RE = re.compile(r'^\s*include\s+(?P<path>r#+".*?"#+|"(?:\\.|[^"\\])*")\s*(?://.*)?$')
+DISPLAY_CONFIRM_SECONDS = 15
+INCLUDE_RE = re.compile(r'^\s*include\s+(?:optional=true\s+)?(?P<path>r#+".*?"#+|"(?:\\.|[^"\\])*")\s*(?://.*)?$')
 COLOR_LINE_RE = re.compile(r'        (?:active|inactive)-color "[^"\\\r\n]*"\Z')
+KDL_STRING_RE = r'"(?:\\.|[^"\\])*"'
 
 
 def _niri_config_path(env: dict[str, str]) -> Path:
@@ -176,18 +182,24 @@ class ConfigTransaction:
         config_path: Path,
         state_root: Path,
         command_runner: Optional[Callable[..., subprocess.CompletedProcess[str]]] = None,
+        rollback_scheduler: Optional[Callable[[str], None]] = None,
     ) -> None:
         self.config_path = config_path
         self.config_root = config_path.parent
         self.state_root = state_root
         self.command_runner = command_runner or subprocess.run
+        self.rollback_scheduler = rollback_scheduler
 
     def _run(self, args: list[str], timeout: int) -> subprocess.CompletedProcess[str]:
         return self.command_runner(args, text=True, capture_output=True, timeout=timeout, check=False)
 
     @staticmethod
     def _safe_fragment_payload(fragment_id: str, content: str) -> bool:
-        """Allow only the known generated-color subtree, never arbitrary Niri config."""
+        """Constrain each generated fragment to its documented Niri subset."""
+        if fragment_id == "display-outputs":
+            return _safe_display_outputs(content)
+        if fragment_id == "display-binds":
+            return _safe_display_binds(content)
         if fragment_id != "generated-colors":
             return False
         allowed = {
@@ -220,6 +232,20 @@ class ConfigTransaction:
             and counts["inactive"] == 1
             and counts["    }"] <= 1
             and counts["}"] <= 1
+        )
+
+    def _schedule_rollback(self, token: str) -> None:
+        """Start a detached failsafe so a lost Quickshell cannot strand a bad mode."""
+        if self.rollback_scheduler is not None:
+            self.rollback_scheduler(token)
+            return
+        subprocess.Popen(
+            [sys.executable, str(Path(__file__).resolve()), "--rollback-after", token],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+            close_fds=True,
         )
 
     def _validate_candidate(self, fragment_rel: Path, candidate: bytes) -> tuple[Optional[Path], Optional[str], Optional[str]]:
@@ -332,7 +358,7 @@ class ConfigTransaction:
         except Exception as exc:
             return False, f"cannot recover interrupted transaction: {exc}"
 
-    def transact(self, fragment_id: str, content: str) -> dict[str, object]:
+    def transact(self, fragment_id: str, content: str, confirm: bool = False) -> dict[str, object]:
         if fragment_id not in MANAGED_FRAGMENTS:
             return {"status": "invalid_fragment", "message": "fragment is not Sparrow-managed"}
         if not isinstance(content, str) or "\x00" in content:
@@ -341,7 +367,7 @@ class ConfigTransaction:
         if len(encoded) > MAX_CONTENT_BYTES:
             return {"status": "invalid_request", "message": "fragment exceeds the 1 MiB safety limit"}
         if not self._safe_fragment_payload(fragment_id, content):
-            return {"status": "invalid_content", "message": "generated-colors accepts only the Sparrow border color fragment"}
+            return {"status": "invalid_content", "message": f"{fragment_id} content is outside Sparrow's restricted generated syntax"}
 
         fragment_rel = MANAGED_FRAGMENTS[fragment_id]
         target = self.config_root / fragment_rel
@@ -360,6 +386,13 @@ class ConfigTransaction:
             try:
                 journal_path = lock_root / "pending-transaction.json"
                 if journal_path.exists():
+                    try:
+                        pending = json.loads(journal_path.read_text(encoding="utf-8"))
+                    except (OSError, json.JSONDecodeError):
+                        pending = {}
+                    if pending.get("phase") == "confirmation_pending":
+                        if float(pending.get("expiresAt", 0)) > time.time():
+                            return {"status": "confirmation_pending", "message": "another display change is awaiting confirmation", "changed": False}
                     recovered, recovery_message = self._restore_from_journal(journal_path, backup_root)
                     if not recovered:
                         return {"status": "recovery_failed", "message": recovery_message, "changed": False}
@@ -435,6 +468,52 @@ class ConfigTransaction:
                         "changed": False,
                     }
 
+                if confirm:
+                    token = secrets.token_urlsafe(24)
+                    journal = {
+                        "schemaVersion": 1,
+                        "fragmentId": fragment_id,
+                        "backupDirectory": backup_dir.name,
+                        "phase": "confirmation_pending",
+                        "token": token,
+                        "expiresAt": time.time() + DISPLAY_CONFIRM_SECONDS,
+                    }
+                    try:
+                        _atomic_replace(journal_path, (json.dumps(journal) + "\n").encode("utf-8"), 0o600)
+                        self._schedule_rollback(token)
+                    except Exception as exc:
+                        try:
+                            if old_content is None:
+                                target.unlink(missing_ok=True)
+                                dir_fd = os.open(target.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+                                try:
+                                    os.fsync(dir_fd)
+                                finally:
+                                    os.close(dir_fd)
+                            else:
+                                _atomic_replace(target, old_content, mode)
+                            rollback = self._run(["niri", "msg", "action", "load-config-file"], timeout=15)
+                            rollback_ok = rollback.returncode == 0
+                            if rollback_ok:
+                                journal_path.unlink(missing_ok=True)
+                        except Exception:
+                            rollback_ok = False
+                        return {
+                            "status": "watchdog_failed",
+                            "message": f"could not arm display rollback timer: {exc}",
+                            "rollbackSucceeded": rollback_ok,
+                            "backupPath": str(backup_dir),
+                            "changed": False,
+                        }
+                    return {
+                        "status": "confirmation_pending",
+                        "message": "validated and reloaded; keep or revert before the display safety timer expires",
+                        "confirmationToken": token,
+                        "timeoutSeconds": DISPLAY_CONFIRM_SECONDS,
+                        "backupPath": str(backup_dir),
+                        "changed": True,
+                    }
+
                 try:
                     journal_path.unlink(missing_ok=True)
                     _prune_backups(backup_root)
@@ -456,20 +535,181 @@ class ConfigTransaction:
                 shutil.rmtree(stage, ignore_errors=True)
             os.close(lock_fd)
 
+    def resolve_confirmation(self, token: str, rollback: bool) -> dict[str, object]:
+        lock_root = self.state_root / "niri-config-transactions"
+        backup_root = self.state_root / "backups"
+        try:
+            lock_root.mkdir(parents=True, mode=0o700, exist_ok=True)
+            lock_fd = os.open(lock_root / "transaction.lock", os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        except OSError as exc:
+            return {"status": "staging_failed", "message": str(exc)}
+        try:
+            fcntl.flock(lock_fd, fcntl.LOCK_EX)
+            journal_path = lock_root / "pending-transaction.json"
+            try:
+                journal = json.loads(journal_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                if rollback:
+                    return {"status": "already_resolved", "message": "display preview was already resolved"}
+                return {"status": "no_pending_confirmation", "message": str(exc)}
+            if journal.get("phase") != "confirmation_pending" or not secrets.compare_digest(str(journal.get("token", "")), str(token)):
+                return {"status": "invalid_confirmation", "message": "confirmation token does not match the pending display change"}
+            if not rollback and float(journal.get("expiresAt", 0)) <= time.time():
+                restored, message = self._restore_from_journal(journal_path, backup_root)
+                return {"status": "rolled_back" if restored else "rollback_failed", "message": message, "rollbackSucceeded": restored}
+            if rollback:
+                restored, message = self._restore_from_journal(journal_path, backup_root)
+                return {"status": "rolled_back" if restored else "rollback_failed", "message": message, "rollbackSucceeded": restored}
+            journal_path.unlink(missing_ok=True)
+            _prune_backups(backup_root)
+            return {"status": "confirmed", "message": "display configuration kept"}
+        finally:
+            os.close(lock_fd)
+
+    def rollback_after_delay(self, token: str) -> dict[str, object]:
+        lock_root = self.state_root / "niri-config-transactions"
+        journal_path = lock_root / "pending-transaction.json"
+        try:
+            journal = json.loads(journal_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {"status": "already_resolved", "message": "display preview was already resolved"}
+        deadline = float(journal.get("expiresAt", 0))
+        if deadline > time.time():
+            time.sleep(deadline - time.time())
+        return self.resolve_confirmation(token, rollback=True)
+
+
+def _safe_display_outputs(content: str) -> bool:
+    lines = content.splitlines()
+    if not lines or lines[0] != "// Generated by Sparrow Display settings; do not edit.":
+        return False
+    string = KDL_STRING_RE
+    open_re = re.compile(r"output (" + string + r") \{")
+    mode_re = re.compile(r"    mode (" + string + r")")
+    transform_re = re.compile(r"    transform (" + string + r")")
+    scale_re = re.compile(r"    scale (0\.[1-9][0-9]*|[1-9](?:\.[0-9]+)?|10(?:\.0+)?)")
+    position_re = re.compile(r"    position x=-?[0-9]+ y=-?[0-9]+")
+    allowed_transforms = {"normal", "90", "180", "270", "flipped", "flipped-90", "flipped-180", "flipped-270"}
+    focus_at_startup_count = 0
+    index = 1
+    while index < len(lines):
+        if lines[index] == "":
+            index += 1
+            continue
+        match = open_re.fullmatch(lines[index])
+        if not match:
+            return False
+        try:
+            identity = json.loads(match.group(1))
+        except json.JSONDecodeError:
+            return False
+        if not isinstance(identity, str) or not identity or any(ord(ch) < 32 for ch in identity):
+            return False
+        index += 1
+        body = []
+        while index < len(lines) and lines[index] != "}":
+            body.append(lines[index])
+            index += 1
+        if index >= len(lines):
+            return False
+        index += 1
+        if body and body[0] == "    off":
+            body = body[1:]
+        has_focus_at_startup = len(body) == 5 and body[3] == "    focus-at-startup"
+        position_index = 4 if has_focus_at_startup else 3
+        if len(body) not in (4, 5) or (len(body) == 5 and not has_focus_at_startup) or not mode_re.fullmatch(body[0]) or not scale_re.fullmatch(body[1]) or not transform_re.fullmatch(body[2]) or not position_re.fullmatch(body[position_index]):
+            return False
+        if has_focus_at_startup:
+            focus_at_startup_count += 1
+            if focus_at_startup_count > 1:
+                return False
+        try:
+            mode = json.loads(mode_re.fullmatch(body[0]).group(1))
+            transform = json.loads(transform_re.fullmatch(body[2]).group(1))
+        except (AttributeError, json.JSONDecodeError):
+            return False
+        if not re.fullmatch(r"[1-9][0-9]*x[1-9][0-9]*@[0-9]+\.[0-9]{3}", mode) or transform not in allowed_transforms:
+            return False
+    return True
+
+
+def _safe_display_binds(content: str) -> bool:
+    lines = content.splitlines()
+    if len(lines) < 3 or lines[0] != "// Generated by Sparrow from the current Niri output arrangement." or lines[1] != "binds {" or lines[-1] != "}":
+        return False
+    string = KDL_STRING_RE
+    metadata_re = re.compile(r"    // sparrow-monitor-number (" + string + r") ([1-9][0-9]*)")
+    focus_re = re.compile(r"    Super\+F([1-9][0-9]*) hotkey-overlay-title=(" + string + r") \{ focus-monitor (" + string + r"); \}")
+    move_re = re.compile(r"    Super\+Shift\+F([1-9][0-9]*) hotkey-overlay-title=(" + string + r") \{ move-window-to-monitor (" + string + r"); \}")
+    identities: set[str] = set()
+    assigned_numbers: set[int] = set()
+    index = 2
+    while index < len(lines) - 1 and lines[index].startswith("    // sparrow-monitor-number "):
+        match = metadata_re.fullmatch(lines[index])
+        if not match:
+            return False
+        try:
+            identity = json.loads(match.group(1))
+        except json.JSONDecodeError:
+            return False
+        number = int(match.group(2))
+        if not isinstance(identity, str) or not identity or any(ord(ch) < 32 for ch in identity):
+            return False
+        if identity in identities or number in assigned_numbers:
+            return False
+        identities.add(identity)
+        assigned_numbers.add(number)
+        index += 1
+
+    bind_lines = lines[index:-1]
+    if len(bind_lines) % 2:
+        return False
+    bound_numbers: set[int] = set()
+    for offset in range(0, len(bind_lines), 2):
+        focus = focus_re.fullmatch(bind_lines[offset])
+        move = move_re.fullmatch(bind_lines[offset + 1])
+        if not focus or not move or focus.group(1) != move.group(1) or focus.group(3) != move.group(3):
+            return False
+        try:
+            focus_title, focus_output = json.loads(focus.group(2)), json.loads(focus.group(3))
+            move_title, move_output = json.loads(move.group(2)), json.loads(move.group(3))
+        except json.JSONDecodeError:
+            return False
+        number = int(focus.group(1))
+        if number in bound_numbers:
+            return False
+        bound_numbers.add(number)
+        if any(not isinstance(value, str) or not value or any(ord(ch) < 32 for ch in value)
+               for value in (focus_title, focus_output, move_title, move_output)):
+            return False
+    return True
+
 
 def main() -> int:
     try:
+        if len(sys.argv) == 3 and sys.argv[1] == "--rollback-after":
+            token = sys.argv[2]
+            env = dict(os.environ)
+            transaction = ConfigTransaction(_niri_config_path(env), _state_root(env))
+            transaction.rollback_after_delay(token)
+            return 0
         line = sys.stdin.readline(MAX_CONTENT_BYTES * 2 + 4096)
         if not line:
             raise ValueError("expected one JSON request on stdin")
         request = json.loads(line)
-        if not isinstance(request, dict) or set(request) != {"fragment", "content"}:
-            raise ValueError("request must contain exactly fragment and content")
         env = dict(os.environ)
         transaction = ConfigTransaction(_niri_config_path(env), _state_root(env))
-        result = transaction.transact(request["fragment"], request["content"])
+        if isinstance(request, dict) and set(request) in ({"fragment", "content"}, {"fragment", "content", "confirm"}):
+            confirm = request.get("confirm", False)
+            if not isinstance(confirm, bool):
+                raise ValueError("confirm must be a boolean")
+            result = transaction.transact(request["fragment"], request["content"], confirm)
+        elif isinstance(request, dict) and set(request) == {"operation", "token"} and request["operation"] in {"confirm", "rollback"}:
+            result = transaction.resolve_confirmation(request["token"], request["operation"] == "rollback")
+        else:
+            raise ValueError("invalid transaction request")
         print(json.dumps(result, ensure_ascii=False))
-        return 0 if result["status"] == "success" else 1
+        return 0 if result["status"] in {"success", "confirmed", "rolled_back"} else 1
     except (ValueError, json.JSONDecodeError, OSError) as exc:
         print(json.dumps({"status": "invalid_request", "message": str(exc)}, ensure_ascii=False))
         return 1

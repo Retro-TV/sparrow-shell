@@ -1,160 +1,447 @@
-/**
- * Parses one availableModes entry like "2560x1440@279.96Hz" into its parts. The
- * Hz is rounded to a whole number for UI grouping and the apply mode string,
- * while `raw` keeps the original entry for reference. Returns null when the
- * entry does not match the WxH@HZHz shape.
- */
-function parseMode(raw) {
-    var m = raw.match(/^(\d+)x(\d+)@([\d.]+)Hz$/);
-    if (!m)
-        return null;
-    return {
-        w: parseInt(m[1], 10),
-        h: parseInt(m[2], 10),
-        hz: Math.round(parseFloat(m[3])),
-        raw: raw
-    };
+/* Pure helpers for Niri output discovery, stable display numbering and KDL. */
+
+var VALID_TRANSFORMS = [
+    "normal", "90", "180", "270", "flipped", "flipped-90", "flipped-180", "flipped-270"
+];
+
+function lexical(a, b) {
+    return a < b ? -1 : (a > b ? 1 : 0);
 }
 
-/**
- * Parses the `hyprctl monitors -j` text into the slim shape the Display surface
- * needs: per monitor its name, current width/height/refresh/scale/x/y and the
- * available modes as `{ w, h, hz, raw }`. Refresh is rounded the same way as a
- * mode's Hz so the current mode can be matched against the list. Modes that do
- * not parse are dropped. Returns [] on bad input.
- */
-function parse(jsonText) {
-    var data;
+function normalizeTransform(value) {
+    return String(value || "normal").toLowerCase().replace(/^flipped(90|180|270)$/, "flipped-$1");
+}
+
+function parseNiri(jsonText) {
+    var raw;
     try {
-        data = JSON.parse(jsonText);
+        raw = JSON.parse(jsonText);
     } catch (e) {
         return [];
     }
-    if (!Array.isArray(data))
+    if (!raw || typeof raw !== "object" || Array.isArray(raw))
         return [];
 
-    return data.map(function (mon) {
-        var modes = (mon.availableModes || [])
-            .map(parseMode)
-            .filter(function (m) { return m !== null; });
+    return Object.keys(raw).map(function (name) {
+        var item = raw[name] || {};
+        var logical = item.logical || null;
+        var modes = (item.modes || []).map(function (mode) {
+            return {
+                w: Number(mode.width),
+                h: Number(mode.height),
+                refreshMilliHz: Number(mode.refresh_rate),
+                preferred: mode.is_preferred === true
+            };
+        }).filter(function (mode) {
+            return Number.isFinite(mode.w) && Number.isFinite(mode.h)
+                && Number.isFinite(mode.refreshMilliHz) && mode.w > 0 && mode.h > 0;
+        });
+        var index = Number.isInteger(item.current_mode) ? item.current_mode : -1;
+        var current = index >= 0 && index < modes.length ? modes[index] : null;
+        var make = String(item.make || "").trim();
+        var model = String(item.model || "").trim();
+        var serial = item.serial === null || item.serial === undefined ? "" : String(item.serial).trim();
+        var label = [make, model].filter(function (part) { return part.length > 0; }).join(" ");
+
         return {
-            name: mon.name,
-            width: mon.width,
-            height: mon.height,
-            refresh: Math.round(mon.refreshRate),
-            scale: mon.scale,
-            x: mon.x,
-            y: mon.y,
-            modes: modes
+            name: String(item.name || name),
+            make: make,
+            model: model,
+            serial: serial,
+            label: label || String(item.name || name),
+            identity: make && model && serial ? [make, model, serial].join(" ") : String(item.name || name),
+            physicalSize: item.physical_size || null,
+            modes: modes,
+            currentMode: current,
+            currentModeIndex: index,
+            enabled: current !== null && logical !== null,
+            isCustomMode: item.is_custom_mode === true,
+            vrrSupported: item.vrr_supported === true,
+            vrrEnabled: item.vrr_enabled === true,
+            x: logical ? Number(logical.x) : 0,
+            y: logical ? Number(logical.y) : 0,
+            logicalWidth: logical ? Number(logical.width) : 0,
+            logicalHeight: logical ? Number(logical.height) : 0,
+            scale: logical ? Number(logical.scale) : 1,
+            transform: logical ? normalizeTransform(logical.transform || "Normal") : "normal"
         };
     });
 }
 
-/**
- * Rewrites only the `hl.monitor({...})` block whose `output = "<output>"`,
- * replacing the `mode`, `position` and `scale` field values and leaving every
- * other character of the file byte-identical (other monitors, workspace_rule
- * loops, whitespace, field order). The block is located by its `output` field,
- * then the closest enclosing `hl.monitor({` ... `})` bounds are taken and each
- * of the three fields is substituted in place within those bounds. Returns
- * `{ text, ok, error }`; ok is false (text unchanged) when the block or any of
- * the three fields cannot be found. An output with no block yet (new monitor,
- * port swap renaming DP-1 to DP-3) gets a fresh block appended instead.
- */
-function setMonitor(luaText, output, mode, position, scale) {
-    var outRe = new RegExp('output\\s*=\\s*"' + escapeRe(output) + '"');
-    var outMatch = outRe.exec(luaText);
-    if (!outMatch)
-        return appendMonitor(luaText, output, mode, position, scale);
+/* Number assignments persist in comments inside Sparrow's generated binds file,
+ * keyed by physical display identity rather than a transient connector name. */
+function parseMonitorNumbers(text) {
+    var result = {};
+    var source = String(text || "");
+    var metadata = /^    \/\/ sparrow-monitor-number ("(?:\\.|[^"\\])*") ([1-9][0-9]*)$/gm;
+    var match;
+    while ((match = metadata.exec(source)) !== null) {
+        try {
+            var identity = JSON.parse(match[1]);
+            var number = Number(match[2]);
+            if (identity && Number.isInteger(number) && number > 0)
+                result[identity] = number;
+        } catch (e) {
+            // Ignore malformed metadata; the generated-fragment validator rejects it on write.
+        }
+    }
 
-    var blockStart = luaText.lastIndexOf("hl.monitor({", outMatch.index);
-    if (blockStart === -1)
-        return { text: luaText, ok: false, error: "no hl.monitor block for " + output };
-
-    var blockEnd = luaText.indexOf("})", outMatch.index);
-    if (blockEnd === -1)
-        return { text: luaText, ok: false, error: "unterminated block for " + output };
-
-    var head = luaText.slice(0, blockStart);
-    var block = luaText.slice(blockStart, blockEnd);
-    var tail = luaText.slice(blockEnd);
-
-    var r1 = replaceField(block, "mode", '"' + mode + '"');
-    if (!r1.ok)
-        return { text: luaText, ok: false, error: "mode field not found for " + output };
-    var r2 = replaceField(r1.text, "position", '"' + position + '"');
-    if (!r2.ok)
-        return { text: luaText, ok: false, error: "position field not found for " + output };
-    var r3 = replaceField(r2.text, "scale", String(scale));
-    if (!r3.ok)
-        return { text: luaText, ok: false, error: "scale field not found for " + output };
-
-    return { text: head + r3.text + tail, ok: true, error: "" };
+    // Migrate the previous generated format, whose key-to-connector binding was
+    // the only saved indication of a display's number.
+    if (Object.keys(result).length === 0) {
+        var legacy = /^    Super\+F([1-9][0-9]*) hotkey-overlay-title=("(?:\\.|[^"\\])*") \{ focus-monitor ("(?:\\.|[^"\\])*"); \}$/gm;
+        while ((match = legacy.exec(source)) !== null) {
+            try {
+                var connector = JSON.parse(match[3]);
+                var legacyNumber = Number(match[1]);
+                if (connector && !Object.prototype.hasOwnProperty.call(result, connector))
+                    result[connector] = legacyNumber;
+            } catch (e) {
+                // Ignore malformed legacy bindings.
+            }
+        }
+    }
+    return result;
 }
 
-/**
- * Replaces the value of a single `name = <value>` field within a hl.monitor
- * block, preserving the field name, the `=` spacing and any trailing comma. The
- * value run is a complete double-quoted string when the value is quoted (so a
- * comma inside the quotes is not mistaken for the field end), otherwise the run
- * up to the next comma or the block's closing brace. Returns `{ text, ok }`.
- */
-function replaceField(block, name, value) {
-    var re = new RegExp("(" + name + "\\s*=\\s*)(\"[^\"]*\"|[^,}\\n]*)");
-    if (!re.test(block))
-        return { text: block, ok: false };
-    return { text: block.replace(re, "$1" + value), ok: true };
+function monitorNumberAssignments(outputs, previousText) {
+    var parsed = parseMonitorNumbers(previousText);
+    var result = Object.assign({}, parsed);
+    (outputs || []).forEach(function (output) {
+        var identity = String(output.identity || output.name);
+        if (output.name !== identity && Object.prototype.hasOwnProperty.call(result, output.name)) {
+            // If a previous generated file stored both connector and physical
+            // identity keys, the actual F-key assignment is authoritative.
+            result[identity] = result[output.name];
+            delete result[output.name];
+        }
+    });
+    var used = {};
+    Object.keys(result).sort(lexical).forEach(function (identity) {
+        var number = result[identity];
+        if (!Number.isInteger(number) || number < 1 || used[number])
+            delete result[identity];
+        else
+            used[number] = true;
+    });
+
+    var legacyByConnector = {};
+    Object.keys(parsed).forEach(function (key) { legacyByConnector[key] = parsed[key]; });
+    var connected = (outputs || []).filter(function (output) { return output.enabled; });
+    connected.forEach(function (output) {
+        var identity = String(output.identity || output.name);
+        if (!Object.prototype.hasOwnProperty.call(result, identity)
+                && Object.prototype.hasOwnProperty.call(legacyByConnector, output.name)) {
+            var legacyNumber = legacyByConnector[output.name];
+            if (!used[legacyNumber]) {
+                result[identity] = legacyNumber;
+                used[legacyNumber] = true;
+            }
+        }
+    });
+
+    // First-time setup follows the current visual order. Thereafter each number
+    // is explicit and remains with that physical display.
+    var visuallyOrdered = connected.slice().sort(function (a, b) {
+        return Number(a.y) - Number(b.y) || Number(a.x) - Number(b.x)
+            || lexical(String(a.name), String(b.name));
+    });
+    visuallyOrdered.forEach(function (output) {
+        var identity = String(output.identity || output.name);
+        if (Object.prototype.hasOwnProperty.call(result, identity))
+            return;
+        var number = 1;
+        while (used[number]) number++;
+        result[identity] = number;
+        used[number] = true;
+    });
+    return result;
 }
 
-function escapeRe(s) {
-    return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function numberedOutputs(outputs, assignments, previousText) {
+    var numbers = assignments || monitorNumberAssignments(outputs, previousText);
+    return (outputs || []).filter(function (output) { return output.enabled; }).slice().sort(function (a, b) {
+        var an = numbers[String(a.identity || a.name)] || Number.MAX_SAFE_INTEGER;
+        var bn = numbers[String(b.identity || b.name)] || Number.MAX_SAFE_INTEGER;
+        return an - bn || lexical(String(a.identity || a.name), String(b.identity || b.name));
+    }).map(function (output) {
+        var copy = Object.assign({}, output);
+        copy.displayNumber = numbers[String(output.identity || output.name)] || 0;
+        return copy;
+    });
 }
 
-/**
- * Appends a new `hl.monitor({...})` block for an output the file does not know
- * yet, matching the field layout the installer ships. Returns `{ text, ok,
- * error }` like setMonitor.
- */
-function appendMonitor(luaText, output, mode, position, scale) {
-    var text = luaText;
-    if (text.length > 0 && text.charAt(text.length - 1) !== "\n")
-        text += "\n";
-    text += "\nhl.monitor({\n    output   = \"" + output + "\",\n    mode     = \"" + mode
-        + "\",\n    position = \"" + position + "\",\n    scale    = " + scale + ",\n})\n";
-    return { text: text, ok: true, error: "" };
+function assignMonitorNumber(outputs, assignments, identity, number) {
+    var result = Object.assign({}, assignments || {});
+    var next = Number(number);
+    if (!identity || !Number.isInteger(next) || next < 1)
+        return { ok: false, error: "Choose a valid display number." };
+    var selected = (outputs || []).find(function (output) {
+        return String(output.identity || output.name) === String(identity);
+    });
+    if (!selected || !selected.enabled)
+        return { ok: false, error: "The selected display is not connected and enabled." };
+    var previous = result[String(identity)];
+    var occupant = Object.keys(result).find(function (key) {
+        return key !== String(identity) && result[key] === next;
+    });
+    result[String(identity)] = next;
+    if (occupant && Number.isInteger(previous) && previous > 0)
+        result[occupant] = previous;
+    else if (occupant)
+        delete result[occupant];
+    return { ok: true, assignments: result, swappedIdentity: occupant || "" };
 }
 
-/**
- * Points the two workspace_rule loops at two real outputs: the loop covering
- * workspace 1 gets `mainName`, the other gets `otherName`. Whatever names the
- * loops carried before (including stale ones for unplugged monitors) are
- * replaced. Returns `{ text, ok, error, mainRange, otherRange }`; the ranges
- * carry each loop's from/to so the caller can move live workspaces to match.
- * ok is false when the file does not hold exactly two loops.
- */
-function setWorkspaceLoops(luaText, mainName, otherName) {
-    var re = /(for\s+i\s*=\s*(\d+)\s*,\s*(\d+)\s+do\s*\n\s*hl\.workspace_rule\(\{[^}]*monitor\s*=\s*")([^"]+)(")/g;
-    var hits = [];
-    var m;
-    while ((m = re.exec(luaText)) !== null)
-        hits.push({ start: m.index + m[1].length, end: m.index + m[1].length + m[4].length,
-            from: parseInt(m[2], 10), to: parseInt(m[3], 10) });
-    if (hits.length !== 2)
-        return { text: luaText, ok: false, error: "expected 2 workspace_rule loops, found " + hits.length };
-    var firstIsMain = hits[0].from <= 1 && hits[0].to >= 1;
-    var mainHit = firstIsMain ? hits[0] : hits[1];
-    var otherHit = firstIsMain ? hits[1] : hits[0];
-    var edits = [
-        { start: mainHit.start, end: mainHit.end, name: mainName },
-        { start: otherHit.start, end: otherHit.end, name: otherName }
-    ].sort(function (a, b) { return b.start - a.start; });
-    var text = luaText;
-    for (var i = 0; i < edits.length; i++)
-        text = text.slice(0, edits[i].start) + edits[i].name + text.slice(edits[i].end);
-    return { text: text, ok: true, error: "",
-        mainRange: [mainHit.from, mainHit.to], otherRange: [otherHit.from, otherHit.to] };
+function logicalSize(mode, scale, transform) {
+    if (!mode || !Number.isFinite(scale) || scale <= 0)
+        return { width: 0, height: 0 };
+    var swaps = ["90", "270", "flipped-90", "flipped-270"].indexOf(String(transform).toLowerCase()) !== -1;
+    return {
+        width: (swaps ? mode.h : mode.w) / scale,
+        height: (swaps ? mode.w : mode.h) / scale
+    };
+}
+
+function overlapError(rectangles) {
+    for (var i = 0; i < rectangles.length; i++) {
+        var a = rectangles[i];
+        for (var j = i + 1; j < rectangles.length; j++) {
+            var b = rectangles[j];
+            if (a.x < b.x + b.width && a.x + a.width > b.x
+                && a.y < b.y + b.height && a.y + a.height > b.y)
+                return "Displays " + a.label + " and " + b.label + " overlap.";
+        }
+    }
+    return "";
+}
+
+/* Snap a dragged output to the nearest legal edge-adjacent slot. The shorter
+ * axis is fully aligned within the target's span, so the outputs share an edge
+ * rather than overlap or leave a one-pixel gap. Candidates that collide with
+ * any third output are discarded. */
+function snapOutputPosition(rectangles, movingName, proposed) {
+    var moving = (rectangles || []).find(function (r) {
+        return r.name === movingName && r.enabled !== false;
+    });
+    if (!moving)
+        return { ok: false, error: "The dragged display is not enabled." };
+
+    var others = (rectangles || []).filter(function (r) {
+        return r.enabled !== false && r.name !== movingName;
+    });
+    if (others.length === 0)
+        return { ok: true, position: { x: Math.round(proposed.x), y: Math.round(proposed.y) }, target: "", side: "" };
+
+    function clamp(value, low, high) {
+        return Math.max(low, Math.min(high, value));
+    }
+
+    var candidates = [];
+    others.forEach(function (target) {
+        var alignY = clamp(proposed.y,
+            Math.min(target.y, target.y + target.height - moving.height),
+            Math.max(target.y, target.y + target.height - moving.height));
+        var alignX = clamp(proposed.x,
+            Math.min(target.x, target.x + target.width - moving.width),
+            Math.max(target.x, target.x + target.width - moving.width));
+        [
+            { side: "left", x: Math.floor(target.x - moving.width), y: Math.round(alignY) },
+            { side: "right", x: Math.ceil(target.x + target.width), y: Math.round(alignY) },
+            { side: "above", x: Math.round(alignX), y: Math.floor(target.y - moving.height) },
+            { side: "below", x: Math.round(alignX), y: Math.ceil(target.y + target.height) }
+        ].forEach(function (position) {
+            var rect = { name: movingName, label: moving.label, x: position.x, y: position.y,
+                width: moving.width, height: moving.height };
+            var collisions = others.filter(function (other) {
+                return other.name !== target.name && overlapError([rect, other]).length > 0;
+            });
+            if (collisions.length > 0)
+                return;
+            var dx = position.x - proposed.x;
+            var dy = position.y - proposed.y;
+            candidates.push({ position: { x: position.x, y: position.y }, target: target.name,
+                side: position.side, score: dx * dx + dy * dy });
+        });
+    });
+
+    if (candidates.length === 0)
+        return { ok: false, error: "No edge-adjacent position is free of other displays." };
+    candidates.sort(function (a, b) {
+        return a.score - b.score || lexical(a.target, b.target) || lexical(a.side, b.side);
+    });
+    return { ok: true, position: candidates[0].position,
+        target: candidates[0].target, side: candidates[0].side };
+}
+
+function modeString(mode) {
+    return mode.w + "x" + mode.h + "@" + (mode.refreshMilliHz / 1000).toFixed(3);
+}
+
+function kdlString(value) {
+    return JSON.stringify(String(value));
+}
+
+/* Retain generated settings for disconnected displays, so using the same SSD
+ * on a laptop does not erase the desktop's per-monitor configuration. */
+function parseManagedOutputBlocks(text) {
+    var result = {};
+    var re = /^output ("(?:\\.|[^"\\])*") \{\n([\s\S]*?)^\}\s*$/gm;
+    var match;
+    while ((match = re.exec(String(text || ""))) !== null) {
+        var identity;
+        try { identity = JSON.parse(match[1]); } catch (e) { continue; }
+        var body = match[2];
+        var mode = /^    mode ("(?:\\.|[^"\\])*")$/m.exec(body);
+        var scale = /^    scale ([0-9]+(?:\.[0-9]+)?)$/m.exec(body);
+        var transform = /^    transform ("(?:\\.|[^"\\])*")$/m.exec(body);
+        var position = /^    position x=(-?[0-9]+) y=(-?[0-9]+)$/m.exec(body);
+        var off = /^    off$/m.test(body);
+        if (!mode || !scale || !transform || !position)
+            continue;
+        try {
+            result[identity] = {
+                identity: identity,
+                mode: JSON.parse(mode[1]),
+                scale: Number(scale[1]),
+                transform: JSON.parse(transform[1]),
+                focusAtStartup: /^    focus-at-startup$/m.test(body),
+                x: Number(position[1]),
+                y: Number(position[2]),
+                enabled: !off,
+                block: match[0]
+            };
+        } catch (e) {
+            // Ignore malformed stale state; Niri validation will still protect writes.
+        }
+    }
+    return result;
+}
+
+function buildOutputFragment(outputs, settingsByName, previousText) {
+    var connectedIdentities = {};
+    var prepared = [];
+    var minX = 0;
+    var minY = 0;
+    var positioned = (outputs || []).filter(function (output) {
+        var settings = (settingsByName || {})[output.name] || {};
+        return settings.enabled === undefined ? output.enabled : settings.enabled !== false;
+    }).map(function (output) {
+        var position = (settingsByName || {})[output.name] && (settingsByName || {})[output.name].position;
+        return position || { x: output.x, y: output.y };
+    });
+    if (positioned.length > 0) {
+        minX = Math.min.apply(null, positioned.map(function (p) { return Number(p.x); }));
+        minY = Math.min.apply(null, positioned.map(function (p) { return Number(p.y); }));
+    }
+
+    (outputs || []).forEach(function (output) {
+        var settings = (settingsByName || {})[output.name] || {};
+        var current = output.currentMode;
+        var mode = settings.mode || current;
+        if (!mode)
+            return;
+        var transform = VALID_TRANSFORMS.indexOf(String(settings.transform || output.transform).toLowerCase()) >= 0
+            ? String(settings.transform || output.transform).toLowerCase() : "normal";
+        var scale = Number(settings.scale === undefined ? output.scale : settings.scale);
+        if (!Number.isFinite(scale) || scale < 0.1 || scale > 10)
+            return;
+        var position = settings.position || { x: output.x, y: output.y };
+        var size = logicalSize(mode, scale, transform);
+        prepared.push({
+            output: output,
+            identity: String(output.identity || output.name),
+            mode: mode,
+            scale: scale,
+            transform: transform,
+            focusAtStartup: settings.focusAtStartup === true,
+            x: Math.round(Number(position.x) - minX),
+            y: Math.round(Number(position.y) - minY),
+            width: size.width,
+            height: size.height,
+            enabled: settings.enabled === undefined ? output.enabled : settings.enabled !== false
+        });
+        connectedIdentities[String(output.identity || output.name)] = true;
+    });
+
+    var rectangles = prepared.filter(function (entry) { return entry.enabled; }).map(function (entry) {
+        return { label: entry.output.label, x: entry.x, y: entry.y,
+            width: entry.width, height: entry.height };
+    });
+    var overlap = overlapError(rectangles);
+    if (overlap)
+        return { ok: false, error: overlap, text: "" };
+    if (prepared.filter(function (entry) { return entry.focusAtStartup; }).length > 1)
+        return { ok: false, error: "Only one display can be focused at Niri startup.", text: "" };
+
+    var lines = ["// Generated by Sparrow Display settings; do not edit."];
+    prepared.sort(function (a, b) { return lexical(a.identity, b.identity); });
+    prepared.forEach(function (entry) {
+        lines.push("output " + kdlString(entry.identity) + " {");
+        if (!entry.enabled)
+            lines.push("    off");
+        lines.push("    mode " + kdlString(modeString(entry.mode)));
+        lines.push("    scale " + String(entry.scale));
+        lines.push("    transform " + kdlString(entry.transform));
+        if (entry.focusAtStartup)
+            lines.push("    focus-at-startup");
+        lines.push("    position x=" + entry.x + " y=" + entry.y);
+        lines.push("}");
+    });
+
+    var old = parseManagedOutputBlocks(previousText);
+    var hasConnectedOutputs = prepared.length > 0;
+    Object.keys(old).sort(lexical).forEach(function (identity) {
+        if (!connectedIdentities[identity]) {
+            var retainedBlock = old[identity].block;
+            if (hasConnectedOutputs)
+                retainedBlock = retainedBlock.replace(/^    focus-at-startup\n/m, "");
+            lines.push(retainedBlock);
+        }
+    });
+    return { ok: true, error: "", text: lines.join("\n") + "\n" };
+}
+
+function monitorBinds(outputs, assignments, previousText) {
+    var numbers = monitorNumberAssignments(outputs, previousText);
+    Object.keys(assignments || {}).forEach(function (identity) {
+        if (Number.isInteger(assignments[identity]) && assignments[identity] > 0)
+            numbers[identity] = assignments[identity];
+    });
+    var ordered = numberedOutputs(outputs, numbers);
+    var lines = ["// Generated by Sparrow from the current Niri output arrangement.", "binds {"];
+    Object.keys(numbers).sort(function (a, b) {
+        return numbers[a] - numbers[b] || lexical(a, b);
+    }).forEach(function (identity) {
+        lines.push("    // sparrow-monitor-number " + kdlString(identity) + " " + numbers[identity]);
+    });
+    for (var i = 0; i < ordered.length; i++) {
+        var n = ordered[i].displayNumber;
+        var key = "F" + n;
+        lines.push("    Super+" + key + " hotkey-overlay-title=" + kdlString("Focus display " + n)
+            + " { focus-monitor " + kdlString(ordered[i].name) + "; }");
+        lines.push("    Super+Shift+" + key + " hotkey-overlay-title=" + kdlString("Move focused window to display " + n)
+            + " { move-window-to-monitor " + kdlString(ordered[i].name) + "; }");
+    }
+    lines.push("}");
+    return lines.join("\n") + "\n";
 }
 
 if (typeof module !== "undefined" && module.exports) {
-    module.exports = { parseMode, parse, setMonitor, appendMonitor, setWorkspaceLoops };
+    module.exports = {
+        VALID_TRANSFORMS,
+        normalizeTransform,
+        parseNiri,
+        parseMonitorNumbers,
+        monitorNumberAssignments,
+        assignMonitorNumber,
+        numberedOutputs,
+        snapOutputPosition,
+        logicalSize,
+        overlapError,
+        modeString,
+        parseManagedOutputBlocks,
+        buildOutputFragment,
+        monitorBinds
+    };
 }

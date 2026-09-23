@@ -16,7 +16,7 @@ import "Singletons"
  * and wheel move focus, clicking a neighbour glides to it, Enter or a tap on
  * the focused thumb applies it via wallpaper.sh (strip stays open so you can
  * keep trying picks). Hold the focused thumb for the heat duration to trash the
- * file (press-and-hold confirm, same as the clipboard wipe); progress sweeps
+ * file (press-and-hold confirm); progress sweeps
  * along the thumb's lower edge and drains on early release.
  *
  * Typing any printable character while the strip is open drops it into a

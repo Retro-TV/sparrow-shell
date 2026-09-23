@@ -51,6 +51,7 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             width: 64 * pick.s
             text: pick.label
+            elide: Text.ElideRight
             color: Theme.faint
             font.family: Theme.font
             font.pixelSize: 10.5 * pick.s

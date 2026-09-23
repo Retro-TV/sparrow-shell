@@ -7,32 +7,10 @@ import "lib/monitors.js" as Mon
 import "Singletons"
 
 /**
- * 画 DISPLAY sub-surface. A proportional mini-map of the monitor layout sits on
- * top: one tile per output (scaled from logical size, placed by real x/y), the
- * main monitor wears a star, clicking a tile selects it and dragging one snaps
- * it left/right/above/below the other monitor as a pending move. Below the map
- * a single card edits the selected output: resolution, refresh and scale from
- * availableModes, plus a Set as main toggle on non-main outputs.
- *
- * Apply hands mode/position/scale to display-apply.sh, which snapshots the old
- * spec, evals the new one through `hl.monitor` and arms a detached 12s watchdog
- * that reverts if the change is not confirmed — so a mode that blanks the
- * screen heals itself even if the pill dies. A confirmed Keep clears the
- * watchdog and persists by rewriting that output's block in monitors.lua, or
- * appending one when the file does not know the output yet (port swaps rename
- * outputs, so a stale file must never swallow a save). Leaving the surface
- * with a change still pending reverts it right away instead of letting the
- * watchdog fire later with no countdown visible. A main swap needs no revert:
- * on Apply it points the two workspace_rule loops at the two real outputs
- * (ground truth for who is main: the loop that carries workspace 1), drags
- * the live workspaces to their new monitors and marks the output primary for
- * XWayland via xrandr.
- *
- * monitors.lua is held as in-memory text after the first read and every rewrite
- * goes through it, so a main swap and a later Keep in the same session never
- * clobber each other through a stale FileView cache. The card rows join the
- * surface row registry, so hover, the soul seam and keyboard focus behave like
- * the other settings surfaces.
+ * Niri-native display controls in Sparrow's existing settings surface. Output
+ * discovery and display numbers come from Niri IPC; arrangement is represented
+ * in logical pixels. Changes use validated Sparrow-owned config fragments and
+ * a detached rollback watchdog for display confirmation.
  */
 SettingsSurface {
     id: root
@@ -40,43 +18,58 @@ SettingsSurface {
     backSurface: "settings"
     implicitHeight: content.implicitHeight
 
-    readonly property string monitorsPath: Quickshell.env("HOME") + "/.config/hypr/modules/monitors.lua"
-    readonly property string helper: Quickshell.env("HOME") + "/.config/hypr/scripts/display-apply.sh"
+    readonly property var monitors: Niri.outputs || []
+    readonly property string outputFragmentPath: (Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")) + "/niri/sparrow/display-outputs.kdl"
 
-    property var monitors: []
-    property string pendingOut: ""
+    property string pendingToken: ""
+    property int pendingRequestId: -1
+    property int pendingNumberRequestId: -1
+    property int pendingDisplayNumber: 0
     property string openPicker: ""
     property int countdown: 0
     property string note: ""
-    property bool quietRead: false
-
     property string selName: ""
-    property string mainName: ""
-    property string luaText: ""
-
-    /** Pending arrangement from a map drag: `{ name, side }`, or null. */
-    property var pendingMove: null
+    property var pendingPositions: ({})
+    property var editsByName: ({})
+    property string outputFragmentText: ""
 
     readonly property var selMon: monitorByName(selName)
-    readonly property bool selIsMain: selMon !== null && selMon.name === mainName
+    readonly property var orderedMonitors: Niri.numberedOutputs || []
+    readonly property var displayList: {
+        var active = orderedMonitors;
+        var inactive = (monitors || []).filter(function (o) { return !o.enabled; }).slice();
+        inactive.sort(function (a, b) { return a.name < b.name ? -1 : (a.name > b.name ? 1 : 0); });
+        return active.concat(inactive);
+    }
 
     readonly property var scaleOptions: [
+        { label: "0.75", value: 0.75 },
         { label: "1.0", value: 1 },
         { label: "1.25", value: 1.25 },
         { label: "1.5", value: 1.5 },
-        { label: "2.0", value: 2 }
+        { label: "1.75", value: 1.75 },
+        { label: "2.0", value: 2 },
+        { label: "2.5", value: 2.5 },
+        { label: "3.0", value: 3 }
     ]
 
     onActiveChanged: {
         if (active) {
-            cancelCountdown();
-            readProc.running = true;
-        } else {
-            if (root.pendingOut.length > 0) {
-                revertProc.out = root.pendingOut;
-                revertProc.running = true;
+            Niri.refreshOutputs();
+            outputFile.reload();
+            root.outputFragmentText = outputFile.text();
+            var ordered = root.orderedMonitors || [];
+            if (!root.selMon && ordered.length > 0)
+                root.selName = ordered[0].name;
+            if (root.selMon) {
+                Qt.callLater(function () {
+                    if (root.active && root.selMon)
+                        card.syncToCurrent();
+                });
             }
-            cancelCountdown();
+        } else {
+            if (root.pendingToken.length > 0)
+                Niri.rollbackManagedFragment(root.pendingToken);
             openPicker = "";
             focusRowItem = null;
             kbIndex = -1;
@@ -84,27 +77,33 @@ SettingsSurface {
     }
 
     onSelMonChanged: if (selMon) card.syncToCurrent()
+    onMonitorsChanged: {
+        if (!active)
+            return;
+        if (!selMon) {
+            var ordered = root.orderedMonitors || [];
+            if (ordered.length > 0)
+                root.selName = ordered[0].name;
+        } else if (!card.pending) {
+            card.syncToCurrent();
+        }
+    }
 
     rows: {
         void root.selMon;
-        void root.mainName;
+        void root.monitors;
         var e = [
             { item: resRow, kind: "scrub", bump: function (d) { card.bumpRes(d); } },
             { item: rateRow, kind: "scrub", bump: function (d) { card.bumpRate(d); } },
-            { item: scaleRow, kind: "seg", vals: root.scaleOptions.map(function (o) { return o.value; }), get: function () { return card.pickScale; }, set: function (v) { card.pickScale = v; } }
+            { item: scaleRow, kind: "seg", vals: root.scaleOptions.map(function (o) { return o.value; }), get: function () { return card.pickScale; }, set: function (v) { card.pickScale = v; card.saveCardEdit(); } },
+            { item: transformRow, kind: "scrub", bump: function (d) { card.bumpTransform(d); } },
+            { item: numberRow, kind: "seg", vals: root.numberOptions(), get: function () { return root.displayNumber(root.selName); }, set: function (v) { root.assignDisplayNumber(v); } },
+            { item: startupFocusRow, kind: "toggle", get: function () { return card.pickFocusAtStartup; }, set: function (v) { card.setFocusAtStartup(v); } }
         ];
-        if (root.selMon && !root.selIsMain)
-            e.push({ item: mainRow, kind: "toggle", get: function () { return card.pendingMain; }, set: function (v) { card.pendingMain = v; } });
         return e;
     }
 
-    /**
-     * Reduces a monitor's parsed modes to the list of distinct WxH, each carrying
-     * the descending list of whole-number Hz offered for that resolution. The
-     * native (current width/height) resolution sorts first, then the rest by
-     * pixel count descending, so the default selection lands on the panel's real
-     * mode.
-     */
+    /** Group Niri's exact milli-Hz modes without rounding away near-duplicates. */
     function resolutionsFor(mon) {
         var byRes = {};
         for (var i = 0; i < mon.modes.length; i++) {
@@ -112,17 +111,17 @@ SettingsSurface {
             var key = m.w + "x" + m.h;
             if (!byRes[key])
                 byRes[key] = { w: m.w, h: m.h, key: key, rates: [] };
-            if (byRes[key].rates.indexOf(m.hz) === -1)
-                byRes[key].rates.push(m.hz);
+            if (!byRes[key].rates.some(function (rate) { return rate.refreshMilliHz === m.refreshMilliHz; }))
+                byRes[key].rates.push(m);
         }
         var list = [];
         for (var k in byRes) {
-            byRes[k].rates.sort(function (a, b) { return b - a; });
+            byRes[k].rates.sort(function (a, b) { return b.refreshMilliHz - a.refreshMilliHz; });
             list.push(byRes[k]);
         }
         list.sort(function (a, b) {
-            if (a.w === mon.width && a.h === mon.height) return -1;
-            if (b.w === mon.width && b.h === mon.height) return 1;
+            if (mon.currentMode && a.w === mon.currentMode.w && a.h === mon.currentMode.h) return -1;
+            if (mon.currentMode && b.w === mon.currentMode.w && b.h === mon.currentMode.h) return 1;
             return (b.w * b.h) - (a.w * a.h);
         });
         return list;
@@ -135,68 +134,149 @@ SettingsSurface {
         return null;
     }
 
-    /** The first monitor that is not `name`; the anchor for placement moves. */
-    function otherMonitor(name) {
-        for (var i = 0; i < monitors.length; i++)
-            if (monitors[i].name !== name)
-                return monitors[i];
-        return null;
+    function storedSettings(mon) {
+        return Mon.parseManagedOutputBlocks(outputFragmentText)[mon.identity] || null;
     }
 
-    /**
-     * Logical x/y of a monitor of `myW`x`myH` placed on `side` of `other`, top
-     * or left edge aligned with the anchor. Negative coordinates are fine for
-     * Hyprland, so left/above of an origin monitor need no re-anchoring.
-     */
-    function placementXY(other, side, myW, myH) {
-        var oW = Math.round(other.width / other.scale);
-        var oH = Math.round(other.height / other.scale);
-        if (side === "left")
-            return { x: other.x - myW, y: other.y };
-        if (side === "above")
-            return { x: other.x, y: other.y - myH };
-        if (side === "below")
-            return { x: other.x, y: other.y + oH };
-        return { x: other.x + oW, y: other.y };
+    function editsDifferFromOtherLiveOutputs() {
+        var names = Object.keys(editsByName);
+        for (var i = 0; i < names.length; i++) {
+            var name = names[i];
+            if (name === selName)
+                continue;
+            var mon = monitorByName(name);
+            if (!mon)
+                return true;
+            var edit = editsByName[name];
+            var saved = storedSettings(mon);
+            var baselineMode = mon.currentMode;
+            if (!baselineMode && saved) {
+                for (var j = 0; j < mon.modes.length; j++)
+                    if (Mon.modeString(mon.modes[j]) === saved.mode) { baselineMode = mon.modes[j]; break; }
+            }
+            var baselineScale = mon.enabled ? mon.scale : (saved ? saved.scale : 1);
+            var baselineTransform = mon.enabled ? mon.transform : (saved ? saved.transform : "normal");
+            if ((edit.enabled !== undefined && edit.enabled !== mon.enabled)
+                    || (edit.scale !== undefined && edit.scale !== baselineScale)
+                    || (edit.transform !== undefined && edit.transform !== baselineTransform)
+                    || (edit.focusAtStartup !== undefined
+                        && edit.focusAtStartup !== !!(saved && saved.focusAtStartup))
+                    || (edit.mode !== undefined && (!baselineMode
+                        || Mon.modeString(edit.mode) !== Mon.modeString(baselineMode))))
+                return true;
+        }
+        return false;
     }
 
-    /** The pending-move x/y for `mon` using the card's current size picks, or null. */
-    function pendingXY(mon) {
-        if (!pendingMove || pendingMove.name !== mon.name)
+    function displayNumber(name) {
+        return Niri.monitorNumberForOutput(name);
+    }
+
+    function numberOptions() {
+        var count = root.monitors.filter(function (output) { return output.enabled; }).length;
+        count = Math.max(count, root.selMon ? root.displayNumber(root.selMon.name) : 0);
+        var options = [];
+        for (var i = 1; i <= count; i++)
+            options.push({ label: String(i), value: i });
+        return options;
+    }
+
+    function assignDisplayNumber(number) {
+        if (!root.selMon)
+            return;
+        var requestId = Niri.setMonitorNumber(root.selMon.name, number);
+        if (requestId < 0) {
+            root.note = "Could not save that display number; finish or revert the active display preview first.";
+        } else if (requestId === 0) {
+            root.note = "This display already has number " + number + ".";
+        } else {
+            root.pendingNumberRequestId = requestId;
+            root.pendingDisplayNumber = Number(number);
+            root.note = "Saving this as display " + number + "; the matching F-key shortcuts will follow.";
+        }
+    }
+
+    function outputSettings(mon) {
+        var old = storedSettings(mon);
+        var oldMode = null;
+        if (old) {
+            for (var i = 0; i < mon.modes.length; i++)
+                if (Mon.modeString(mon.modes[i]) === old.mode) { oldMode = mon.modes[i]; break; }
+        }
+        var settings = {
+            mode: mon.currentMode || oldMode || (mon.modes.find(function (m) { return m.preferred; }) || mon.modes[0] || null),
+            scale: mon.enabled ? mon.scale : (old ? old.scale : mon.scale),
+            transform: mon.enabled ? mon.transform : (old ? old.transform : mon.transform),
+            enabled: mon.enabled || (old ? old.enabled : false),
+            focusAtStartup: !!(old && old.focusAtStartup)
+        };
+        Object.assign(settings, root.editsByName[mon.name] || {});
+        if (mon.name === root.selName && card.ready) {
+            var res = card.resolutions[Math.min(card.resIndex, Math.max(0, card.resolutions.length - 1))];
+            var mode = res && res.rates.length > 0
+                ? res.rates[Math.min(card.rateIndex, res.rates.length - 1)] : mon.currentMode;
+            settings.mode = mode || settings.mode;
+            settings.scale = card.pickScale;
+            settings.transform = card.pickTransform;
+            settings.focusAtStartup = card.pickFocusAtStartup;
+        }
+        var position = root.pendingPositions[mon.name];
+        settings.position = position || (mon.enabled || !old
+            ? { x: mon.x, y: mon.y } : { x: old.x, y: old.y });
+        return settings;
+    }
+
+    function outputRect(mon) {
+        var settings = outputSettings(mon);
+        var mode = settings.mode || mon.currentMode;
+        if (!mode)
             return null;
-        var other = otherMonitor(mon.name);
-        if (!other || card.resolutions.length === 0)
-            return null;
-        var res = card.resolutions[Math.min(card.resIndex, card.resolutions.length - 1)];
-        return placementXY(other, pendingMove.side,
-            Math.round(res.w / card.pickScale), Math.round(res.h / card.pickScale));
+        var size = Mon.logicalSize(mode, Number(settings.scale || mon.scale), settings.transform || mon.transform);
+        return {
+            name: mon.name,
+            label: mon.label,
+            x: Number(settings.position.x),
+            y: Number(settings.position.y),
+            width: size.width,
+            height: size.height,
+            mode: mode,
+            scale: Number(settings.scale || mon.scale),
+            transform: settings.transform || mon.transform,
+            enabled: settings.enabled !== false
+        };
     }
 
-    /**
-     * A dropped tile snaps to whichever side of the other monitor its centre
-     * ended on, judged in tile-normalised offsets so flat and tall layouts bias
-     * the same. A drop that lands the monitor back on its current x/y clears
-     * the pending move instead of arming a no-op.
-     */
     function dropTile(name, cx, cy) {
-        var mon = monitorByName(name);
-        var other = otherMonitor(name);
-        if (!mon || !other)
+        if (!monitorByName(name) || mapLayout.factor <= 0)
             return;
-        var oT = null;
-        var tiles = mapLayout.tiles;
-        for (var i = 0; i < tiles.length; i++)
-            if (tiles[i].name !== name) { oT = tiles[i]; break; }
-        if (!oT)
+        var current = monitorByName(name);
+        var movingRect = root.outputRect(current);
+        var proposed = {
+            x: (cx - mapLayout.offsetX) / mapLayout.factor + mapLayout.minX - movingRect.width / 2,
+            y: (cy - mapLayout.offsetY) / mapLayout.factor + mapLayout.minY - movingRect.height / 2
+        };
+        var rectangles = [];
+        for (var i = 0; i < root.monitors.length; i++) {
+            var rect = root.outputRect(root.monitors[i]);
+            if (rect && rect.enabled)
+                rectangles.push(rect);
+        }
+        var snapped = Mon.snapOutputPosition(rectangles, name, proposed);
+        if (!snapped.ok) {
+            root.note = snapped.error;
             return;
-        var nx = (cx - (oT.x + oT.w / 2)) / oT.w;
-        var ny = (cy - (oT.y + oT.h / 2)) / oT.h;
-        var side = Math.abs(nx) >= Math.abs(ny) ? (nx < 0 ? "left" : "right") : (ny < 0 ? "above" : "below");
-        var res = card.resolutions.length > 0 ? card.resolutions[Math.min(card.resIndex, card.resolutions.length - 1)] : null;
-        var myW = res ? Math.round(res.w / card.pickScale) : Math.round(mon.width / mon.scale);
-        var myH = res ? Math.round(res.h / card.pickScale) : Math.round(mon.height / mon.scale);
-        var p = placementXY(other, side, myW, myH);
-        pendingMove = (p.x === mon.x && p.y === mon.y) ? null : { name: name, side: side };
+        }
+        var positions = Object.assign({}, root.pendingPositions);
+        positions[name] = snapped.position;
+        var saved = root.storedSettings(current);
+        var baseline = current.enabled || !saved
+            ? { x: current.x, y: current.y } : { x: saved.x, y: saved.y };
+        if (positions[name].x === baseline.x && positions[name].y === baseline.y)
+            delete positions[name];
+        root.pendingPositions = positions;
+        if (snapped.target)
+            root.note = "Snapped " + current.label + " to the " + snapped.side + " edge of "
+                + monitorByName(snapped.target).label + ".";
     }
 
     /**
@@ -207,215 +287,143 @@ SettingsSurface {
      * tile never rebuilds the Repeater under an active press.
      */
     readonly property var mapLayout: {
-        var mons = root.monitors;
+        var mons = root.displayList;
         if (mons.length === 0 || mapBox.width <= 0)
-            return { h: 0, tiles: [] };
+            return { h: 0, tiles: [], factor: 0, minX: 0, minY: 0, offsetX: 0, offsetY: 0 };
+        var inactive = mons.filter(function (m) { return !m.enabled; });
         var rects = [];
         var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
         for (var i = 0; i < mons.length; i++) {
             var m = mons[i];
-            var r = { name: m.name, hz: m.refresh, x: m.x, y: m.y, w: Math.round(m.width / m.scale), h: Math.round(m.height / m.scale) };
-            var p = root.pendingXY(m);
-            if (p) {
-                var res = card.resolutions[Math.min(card.resIndex, card.resolutions.length - 1)];
-                r.x = p.x;
-                r.y = p.y;
-                r.w = Math.round(res.w / card.pickScale);
-                r.h = Math.round(res.h / card.pickScale);
-            }
+            var r = root.outputRect(m);
+            if (!r || !r.enabled)
+                continue;
+            r.w = r.width;
+            r.h = r.height;
             rects.push(r);
             minX = Math.min(minX, r.x);
             minY = Math.min(minY, r.y);
             maxX = Math.max(maxX, r.x + r.w);
             maxY = Math.max(maxY, r.y + r.h);
         }
-        var k = Math.min(mapBox.width / (maxX - minX), (96 * root.s) / (maxY - minY));
-        var ox = (mapBox.width - (maxX - minX) * k) / 2;
+        var k = rects.length > 0
+            ? Math.min(mapBox.width / Math.max(1, maxX - minX), (112 * root.s) / Math.max(1, maxY - minY)) : 0;
+        var ox = rects.length > 0 ? (mapBox.width - (maxX - minX) * k) / 2 : 0;
         var tiles = rects.map(function (t) {
-            return { name: t.name, hz: t.hz, x: ox + (t.x - minX) * k, y: (t.y - minY) * k, w: t.w * k, h: t.h * k };
+            return { name: t.name, label: t.label, number: root.displayNumber(t.name), enabled: t.enabled,
+                mode: t.mode, refreshMilliHz: t.mode.refreshMilliHz,
+                x: ox + (t.x - minX) * k, y: (t.y - minY) * k,
+                w: t.w * k, h: t.h * k };
         });
-        return { h: (maxY - minY) * k, tiles: tiles };
-    }
-
-    /**
-     * monitors.lua as in-memory text: read once, then every rewrite updates it
-     * before hitting disk, so back-to-back edits never read a stale file cache.
-     */
-    function luaNow() {
-        if (luaText.length === 0)
-            luaText = monitorsFile.text();
-        return luaText;
-    }
-
-    /** The main monitor is whichever one the workspace-1 rule loop points at. */
-    function mainFromLua(text) {
-        var re = /for\s+i\s*=\s*(\d+)\s*,\s*(\d+)\s+do\s*\n\s*hl\.workspace_rule\(\{[^}]*monitor\s*=\s*"([^"]+)"/g;
-        var m;
-        while ((m = re.exec(text)) !== null)
-            if (parseInt(m[1], 10) <= 1 && parseInt(m[2], 10) >= 1)
-                return m[3];
-        return "";
-    }
-
-    function applyMainSwap(name) {
-        var other = otherMonitor(name);
-        if (!other) {
-            note = "Set as main needs two connected monitors.";
-            return;
-        }
-        var res = Mon.setWorkspaceLoops(luaNow(), name, other.name);
-        card.pendingMain = false;
-        if (!res.ok) {
-            note = "Could not rewrite the workspace rules in monitors.lua.";
-            return;
-        }
-        luaText = res.text;
-        writer.setText(res.text);
-        mainName = mainFromLua(res.text);
-        xrandrProc.out = name;
-        xrandrProc.running = true;
-        wsMoveProc.mainOut = name;
-        wsMoveProc.otherOut = other.name;
-        wsMoveProc.mainRange = res.mainRange;
-        wsMoveProc.otherRange = res.otherRange;
-        wsMoveProc.running = true;
-        if (!card.dirty)
-            note = "Saved. " + name + " is the main monitor now.";
-    }
-
-    Process {
-        id: readProc
-        command: ["hyprctl", "monitors", "-j"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                root.monitors = Mon.parse(this.text);
-                root.mainName = root.mainFromLua(root.luaNow());
-                if (!root.monitorByName(root.selName)) {
-                    var main = root.monitorByName(root.mainName);
-                    root.selName = main ? main.name : (root.monitors.length > 0 ? root.monitors[0].name : "");
-                }
-                if (!root.quietRead)
-                    root.note = "Changes apply live, no reload. If a mode looks wrong, it reverts on its own after 12s.";
-                root.quietRead = false;
+        var layoutHeight = rects.length > 0 ? Math.max(38 * root.s, (maxY - minY) * k) : 0;
+        if (inactive.length > 0) {
+            var gap = 6 * root.s;
+            var chipW = Math.max(58 * root.s, (mapBox.width - gap * (inactive.length - 1)) / inactive.length);
+            for (var j = 0; j < inactive.length; j++) {
+                var offRect = root.outputRect(inactive[j]);
+                if (!offRect)
+                    continue;
+                tiles.push({ name: offRect.name, label: offRect.label, number: 0, enabled: false,
+                    mode: offRect.mode, refreshMilliHz: offRect.mode.refreshMilliHz,
+                    x: j * (chipW + gap), y: layoutHeight + (layoutHeight > 0 ? 8 * root.s : 0),
+                    w: chipW, h: 42 * root.s });
             }
         }
+        return { h: layoutHeight + (inactive.length > 0 ? 50 * root.s : 0), tiles: tiles,
+            factor: k, minX: minX, minY: minY, offsetX: ox, offsetY: 0 };
     }
 
-    Process {
-        id: applyProc
-        property string out: ""
-        property string mode: ""
-        property string position: ""
-        property real scale: 1
-        command: ["sh", "-c",
-            "sh \"$1\" apply \"$2\" \"$3\" \"$4\" \"$5\"",
-            "sh", root.helper, out, mode, position, String(scale)]
-        onExited: (exitCode) => {
-            if (exitCode === 0) {
-                root.startCountdown();
-            } else {
-                root.pendingOut = "";
-                root.note = "Apply failed — the helper could not snapshot the current mode.";
-            }
-        }
+    // Output monitor numbers are determined by Mon.numberedOutputs, shared with the bind generator.
+
+    FileView {
+        id: outputFile
+        path: root.outputFragmentPath
+        blockLoading: true
+        printErrors: false
     }
 
-    Process {
-        id: keepProc
-        property string out: ""
-        command: ["sh", "-c", "sh \"$1\" keep \"$2\"", "sh", root.helper, out]
-    }
-
-    Process {
-        id: revertProc
-        property string out: ""
-        command: ["sh", "-c", "sh \"$1\" revert \"$2\"", "sh", root.helper, out]
-    }
-
-    /** Drags each live workspace onto its new monitor after a main swap. */
-    Process {
-        id: wsMoveProc
-        property string mainOut: ""
-        property string otherOut: ""
-        property var mainRange: [1, 5]
-        property var otherRange: [6, 10]
-        command: ["sh", "-c",
-            "for i in $(seq \"$1\" \"$2\"); do hyprctl dispatch moveworkspacetomonitor \"$i\" \"$3\" >/dev/null 2>&1; done; " +
-            "for i in $(seq \"$4\" \"$5\"); do hyprctl dispatch moveworkspacetomonitor \"$i\" \"$6\" >/dev/null 2>&1; done",
-            "sh", String(mainRange[0]), String(mainRange[1]), mainOut,
-            String(otherRange[0]), String(otherRange[1]), otherOut]
-    }
-
-    /** XWayland primary flag; runs only when a main swap is applied. */
-    Process {
-        id: xrandrProc
-        property string out: ""
-        command: ["xrandr", "--output", out, "--primary"]
-    }
-
-    /**
-     * Applies whatever is pending on the selected monitor. A main swap persists
-     * at once (it is not a mode change, nothing to revert); mode, scale or a
-     * dragged move go to the helper's apply verb and its 12s watchdog. Only
-     * availableModes Hz reach the mode string, so an unsupported mode can never
-     * be requested.
-     */
     function apply() {
-        var mon = root.selMon;
-        if (!mon || root.pendingOut.length > 0)
+        if (!root.selMon || root.pendingRequestId >= 0 || root.pendingToken.length > 0 || !card.applyReady)
             return;
-        if (card.pendingMain && !root.selIsMain)
-            applyMainSwap(mon.name);
-        if (!card.dirty)
-            return;
-        var res = card.resolutions[Math.min(card.resIndex, card.resolutions.length - 1)];
-        var hz = res.rates[Math.min(card.rateIndex, res.rates.length - 1)];
-        var p = pendingXY(mon);
-        applyProc.out = mon.name;
-        applyProc.mode = res.w + "x" + res.h + "@" + hz;
-        applyProc.position = p ? p.x + "x" + p.y : mon.x + "x" + mon.y;
-        applyProc.scale = card.pickScale;
-        root.pendingOut = mon.name;
-        applyProc.running = true;
-    }
-
-    function startCountdown() {
-        root.countdown = 12;
-        countTimer.start();
-    }
-
-    /**
-     * Confirm the pending change: clear the helper's watchdog so it will not
-     * revert, persist by rewriting that output's block in monitors.lua, then
-     * quietly re-read the live layout so the map lands on ground truth.
-     */
-    function keep() {
-        if (root.pendingOut.length === 0)
-            return;
-        keepProc.out = root.pendingOut;
-        keepProc.running = true;
-        var res = Mon.setMonitor(luaNow(), applyProc.out, applyProc.mode, applyProc.position, applyProc.scale);
-        cancelCountdown();
-        if (!res.ok) {
-            root.note = "Live for now, but monitors.lua was not written: " + res.error;
+        var settings = {};
+        for (var i = 0; i < monitors.length; i++)
+            settings[monitors[i].name] = outputSettings(monitors[i]);
+        var candidate = Mon.buildOutputFragment(monitors, settings, outputFragmentText);
+        if (!candidate.ok) {
+            note = candidate.error;
             return;
         }
-        luaText = res.text;
-        writer.setText(res.text);
-        root.quietRead = true;
-        readProc.running = true;
-        root.note = "Saved. " + applyProc.out + " set to " + applyProc.mode + " · scale " + applyProc.scale;
+        pendingRequestId = Niri.writeManagedFragment("display-outputs", candidate.text, true);
+        note = "Applying a temporary layout…";
     }
 
-    /**
-     * Stop the countdown and forget the pending output. Called on Keep, on the
-     * watchdog-driven timeout (the helper has already reverted the live mode), and
-     * when the surface closes.
-     */
-    function cancelCountdown() {
+    function keep() {
+        if (pendingToken.length === 0)
+            return;
         countTimer.stop();
-        root.countdown = 0;
-        root.pendingOut = "";
+        pendingResolveRequestId = Niri.confirmManagedFragment(pendingToken);
+        note = "Saving the confirmed Niri display configuration…";
+    }
+
+    function revert() {
+        if (pendingToken.length === 0)
+            return;
+        pendingResolveRequestId = Niri.rollbackManagedFragment(pendingToken);
+        countTimer.stop();
+        note = "Reverting to the previous display configuration…";
+    }
+
+    property int pendingResolveRequestId: -1
+
+    Connections {
+        target: Niri
+        function onManagedFragmentWriteFinished(requestId, status, message, token, timeoutSeconds) {
+            if (requestId === root.pendingRequestId) {
+                root.pendingRequestId = -1;
+                if (status === "confirmation_pending") {
+                    root.pendingToken = token;
+                    root.countdown = timeoutSeconds;
+                    countTimer.start();
+                    root.note = "Test the displays now. Keep this layout within " + timeoutSeconds + " seconds; otherwise it rolls back.";
+                } else if (status === "success") {
+                    root.note = "Display configuration already matches; nothing needed changing.";
+                } else {
+                    root.note = "Display change was not applied: " + message;
+                }
+            } else if (requestId === root.pendingNumberRequestId) {
+                root.pendingNumberRequestId = -1;
+                root.note = status === "success"
+                    ? "Saved as display " + root.pendingDisplayNumber + "; matching F-key shortcuts are updated."
+                    : "Could not save the display number: " + message;
+            } else if (requestId === root.pendingResolveRequestId) {
+                root.pendingResolveRequestId = -1;
+                if (status === "confirmed") {
+                    countTimer.stop();
+                    root.pendingToken = "";
+                    root.countdown = 0;
+                    root.pendingPositions = ({});
+                    root.editsByName = ({});
+                    outputFile.reload();
+                    root.outputFragmentText = outputFile.text();
+                    Niri.refreshOutputs();
+                    root.note = "Kept. Niri's output settings and display-number bindings are saved.";
+                } else if (status === "rolled_back" || status === "already_resolved") {
+                    root.pendingToken = "";
+                    root.countdown = 0;
+                    root.pendingPositions = ({});
+                    root.editsByName = ({});
+                    outputFile.reload();
+                    root.outputFragmentText = outputFile.text();
+                    Niri.refreshOutputs();
+                    root.note = "Reverted to the previous display configuration.";
+                } else {
+                    if (root.pendingToken.length > 0 && root.countdown > 0)
+                        countTimer.start();
+                    root.note = "Could not finish the display transaction: " + message;
+                    Niri.refreshOutputs();
+                }
+            }
+        }
     }
 
     Timer {
@@ -425,29 +433,9 @@ SettingsSurface {
         onTriggered: {
             root.countdown -= 1;
             if (root.countdown <= 0) {
-                root.cancelCountdown();
-                root.quietRead = true;
-                readProc.running = true;
-                root.note = "Reverted — the change was not confirmed in time.";
+                stop();
+                root.revert();
             }
-        }
-    }
-
-    FileView {
-        id: monitorsFile
-        path: root.monitorsPath
-        blockLoading: true
-        printErrors: false
-    }
-
-    FileView {
-        id: writer
-        path: root.monitorsPath
-        atomicWrites: true
-        printErrors: false
-        onSaveFailed: (err) => {
-            root.note = "Live mode kept, but writing monitors.lua failed.";
-            console.log("display: write failed: " + err);
         }
     }
 
@@ -566,8 +554,7 @@ SettingsSurface {
                         required property var modelData
 
                         readonly property bool sel: tile.modelData.name === root.selName
-                        readonly property bool isMain: tile.modelData.name === root.mainName
-                        readonly property bool moved: root.pendingMove !== null && root.pendingMove.name === tile.modelData.name
+                        readonly property bool moved: !!root.pendingPositions[tile.modelData.name]
                         property real dx: 0
                         property real dy: 0
 
@@ -575,14 +562,15 @@ SettingsSurface {
                         y: tile.modelData.y + 1.5 * root.s + dy
                         width: Math.max(2, tile.modelData.w - 3 * root.s)
                         height: Math.max(2, tile.modelData.h - 3 * root.s)
-                        z: tileMA.pressed ? 10 : (tile.sel ? 5 : 0)
+                        z: tileDrag.active ? 10 : (tile.sel ? 5 : 0)
                         radius: 7 * root.s
-                        color: tile.sel ? Qt.alpha(Theme.onGlow, 0.13) : Theme.cardTop
+                        color: !tile.modelData.enabled ? Qt.alpha(Theme.cardTop, 0.52)
+                            : (tile.sel ? Qt.alpha(Theme.onGlow, 0.13) : Theme.cardTop)
                         border.width: 1
                         border.color: tile.moved ? Qt.alpha(Theme.vermLit, 0.7) : (tile.sel ? Theme.cream : Theme.hairSoft)
 
-                        Behavior on x { enabled: !tileMA.pressed; NumberAnimation { duration: Motion.standard; easing.type: Motion.easeStandard } }
-                        Behavior on y { enabled: !tileMA.pressed; NumberAnimation { duration: Motion.standard; easing.type: Motion.easeStandard } }
+                        Behavior on x { enabled: !tileDrag.active; NumberAnimation { duration: Motion.standard; easing.type: Motion.easeStandard } }
+                        Behavior on y { enabled: !tileDrag.active; NumberAnimation { duration: Motion.standard; easing.type: Motion.easeStandard } }
                         Behavior on color { ColorAnimation { duration: Motion.fast } }
                         Behavior on border.color { ColorAnimation { duration: Motion.fast } }
 
@@ -592,68 +580,77 @@ SettingsSurface {
 
                             Text {
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                text: tile.modelData.name
+                                width: Math.max(0, tile.width - 10 * root.s)
+                                horizontalAlignment: Text.AlignHCenter
+                                elide: Text.ElideRight
+                                text: tile.modelData.enabled
+                                    ? (tile.modelData.number > 0 ? String(tile.modelData.number) : "…") : "Off"
                                 color: tile.sel ? Theme.cream : Theme.subtle
                                 font.family: Theme.font
-                                font.pixelSize: 10 * root.s
+                                font.pixelSize: 12 * root.s
                                 font.weight: Font.DemiBold
                             }
                             Text {
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                text: tile.modelData.hz + "Hz"
+                                width: Math.max(0, tile.width - 10 * root.s)
+                                horizontalAlignment: Text.AlignHCenter
+                                elide: Text.ElideRight
+                                text: tile.modelData.mode.w + "×" + tile.modelData.mode.h + " · "
+                                    + (tile.modelData.refreshMilliHz / 1000).toFixed(3) + " Hz"
                                 color: Theme.faint
                                 font.family: Theme.font
-                                font.pixelSize: 8.5 * root.s
+                                font.pixelSize: 7.5 * root.s
                                 font.weight: Font.Medium
                                 font.features: { "tnum": 1 }
                             }
                         }
 
-                        Text {
-                            anchors.top: parent.top
-                            anchors.right: parent.right
-                            anchors.topMargin: 3 * root.s
-                            anchors.rightMargin: 5 * root.s
-                            visible: tile.isMain
-                            text: "★"
-                            color: Theme.vermLit
-                            font.family: Theme.fontJp
-                            font.pixelSize: 9.5 * root.s
+                        TapHandler {
+                            onTapped: {
+                                if (root.pendingRequestId < 0 && root.pendingToken.length === 0)
+                                    root.selName = tile.modelData.name;
+                            }
                         }
 
-                        /**
-                         * Manual drag: local deltas accumulate onto the layout
-                         * position, so the binding keeps owning x/y and the snap
-                         * animation plays the moment the deltas reset on release.
-                         */
-                        MouseArea {
-                            id: tileMA
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: pressed ? Qt.ClosedHandCursor : (root.monitors.length >= 2 ? Qt.OpenHandCursor : Qt.PointingHandCursor)
-                            property real sx: 0
-                            property real sy: 0
-                            onPressed: (mouse) => {
-                                if (root.pendingOut.length === 0)
+                        DragHandler {
+                            id: tileDrag
+                            target: null
+                            acceptedButtons: Qt.LeftButton
+                            enabled: tile.modelData.enabled && root.monitors.length >= 2
+                                && root.pendingRequestId < 0 && root.pendingToken.length === 0
+                            cursorShape: active ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+                            onActiveChanged: {
+                                if (active) {
                                     root.selName = tile.modelData.name;
-                                sx = mouse.x;
-                                sy = mouse.y;
+                                } else if (tile.dx !== 0 || tile.dy !== 0) {
+                                    root.dropTile(tile.modelData.name,
+                                        tile.modelData.x + tile.modelData.w / 2 + tile.dx,
+                                        tile.modelData.y + tile.modelData.h / 2 + tile.dy);
+                                    tile.dx = 0;
+                                    tile.dy = 0;
+                                }
                             }
-                            onPositionChanged: (mouse) => {
-                                if (!pressed || root.monitors.length < 2 || root.pendingOut.length > 0)
-                                    return;
-                                tile.dx += mouse.x - sx;
-                                tile.dy += mouse.y - sy;
-                            }
-                            onReleased: {
-                                if (tile.dx !== 0 || tile.dy !== 0)
-                                    root.dropTile(tile.modelData.name, tile.x + tile.width / 2, tile.y + tile.height / 2);
-                                tile.dx = 0;
-                                tile.dy = 0;
+                            onActiveTranslationChanged: {
+                                if (active) {
+                                    tile.dx = activeTranslation.x;
+                                    tile.dy = activeTranslation.y;
+                                }
                             }
                         }
                     }
                 }
+            }
+
+            Text {
+                width: parent.width
+                text: Object.keys(root.pendingPositions).length > 0
+                    ? "Drag to snap displays edge-to-edge · Apply and Keep to save position"
+                    : "Drag to arrange · set each display number below"
+                color: Theme.faint
+                font.family: Theme.font
+                font.pixelSize: 9.5 * root.s
+                font.weight: Font.Medium
+                wrapMode: Text.WordWrap
             }
 
             Rectangle {
@@ -670,73 +667,98 @@ SettingsSurface {
                 property int resIndex: 0
                 property int rateIndex: 0
                 property real pickScale: 1
-                property bool pendingMain: false
+                property string pickTransform: "normal"
+                property bool pickFocusAtStartup: false
+                property bool ready: false
 
                 readonly property var resolutions: root.selMon ? root.resolutionsFor(root.selMon) : []
                 readonly property var rates: resolutions.length > 0 ? resolutions[Math.min(resIndex, resolutions.length - 1)].rates : []
-                readonly property bool pending: root.selMon !== null && root.pendingOut === root.selMon.name
+                readonly property var transforms: ["normal", "90", "180", "270", "flipped", "flipped-90", "flipped-180", "flipped-270"]
+                readonly property bool pending: root.pendingToken.length > 0 || root.pendingRequestId >= 0
 
-                /** Anything the helper flow would change: mode, scale or a dragged move. */
+                /** Any mode, position, scale or transform difference is a config change. */
                 readonly property bool dirty: {
-                    var mon = root.selMon;
-                    if (!mon || card.resolutions.length === 0)
+                    if (!root.selMon || !card.ready || card.rates.length === 0)
                         return false;
-                    var res = card.resolutions[Math.min(card.resIndex, card.resolutions.length - 1)];
-                    var hz = res.rates[Math.min(card.rateIndex, res.rates.length - 1)];
-                    if (res.w !== mon.width || res.h !== mon.height || hz !== mon.refresh)
-                        return true;
-                    if (card.pickScale !== mon.scale)
-                        return true;
-                    var p = root.pendingXY(mon);
-                    return p !== null && (p.x !== mon.x || p.y !== mon.y);
+                    var mode = card.rates[Math.min(card.rateIndex, card.rates.length - 1)];
+                    var mon = root.selMon;
+                    var saved = root.storedSettings(mon);
+                    var oldPosition = root.pendingPositions[mon.name]
+                        || (mon.enabled || !saved ? { x: mon.x, y: mon.y } : { x: saved.x, y: saved.y });
+                    var liveMode = mon.currentMode;
+                    var baselineMode = liveMode;
+                    if (!baselineMode && saved) {
+                        for (var i = 0; i < mon.modes.length; i++)
+                            if (Mon.modeString(mon.modes[i]) === saved.mode) { baselineMode = mon.modes[i]; break; }
+                    }
+                    var modeChanged = baselineMode
+                        ? Mon.modeString(mode) !== Mon.modeString(baselineMode) : !!mode;
+                    var baseScale = mon.enabled ? mon.scale : (saved ? saved.scale : 1);
+                    var baseTransform = mon.enabled ? mon.transform : (saved ? saved.transform : "normal");
+                    var anyOtherEdit = root.editsDifferFromOtherLiveOutputs();
+                    return modeChanged || card.pickScale !== baseScale
+                        || card.pickTransform !== baseTransform
+                        || card.pickFocusAtStartup !== !!(saved && saved.focusAtStartup)
+                        || (mon.enabled && (oldPosition.x !== mon.x || oldPosition.y !== mon.y)) || anyOtherEdit
+                        || Object.keys(root.pendingPositions).length > 0;
                 }
-                readonly property bool applyReady: dirty || (pendingMain && !root.selIsMain)
+                readonly property string arrangementError: {
+                    var rects = [];
+                    for (var i = 0; i < root.displayList.length; i++) {
+                        var rect = root.outputRect(root.displayList[i]);
+                        if (rect && rect.enabled)
+                            rects.push({ label: rect.label, x: rect.x, y: rect.y,
+                                width: rect.width, height: rect.height });
+                    }
+                    return Mon.overlapError(rects);
+                }
+                readonly property bool applyReady: dirty && arrangementError.length === 0 && !pending
 
-                /**
-                 * Seed the pickers from the selected monitor's live mode: the
-                 * resolution whose WxH matches the current width/height, then the
-                 * Hz nearest the current refresh within that resolution. Switching
-                 * selection lands here too, dropping any un-applied edits.
-                 */
-                /**
-                 * Seeds from locally computed lists, never from `card.rates`: inside
-                 * onSelMonChanged the dependent bindings can still hold the previous
-                 * monitor's values (handler order vs binding invalidation), which
-                 * seeded HDMI's rate index against DP-1's rate list.
-                 */
                 function syncToCurrent() {
                     var mon = root.selMon;
                     if (!mon)
                         return;
                     var resos = root.resolutionsFor(mon);
+                    var stored = root.storedSettings(mon);
+                    var edit = root.editsByName[mon.name] || null;
+                    var selectedMode = edit && edit.mode ? edit.mode : mon.currentMode;
+                    if (!selectedMode && stored) {
+                        for (var m = 0; m < mon.modes.length; m++)
+                            if (Mon.modeString(mon.modes[m]) === stored.mode) { selectedMode = mon.modes[m]; break; }
+                    }
+                    if (!selectedMode)
+                        selectedMode = mon.modes.find(function (mode) { return mode.preferred; }) || mon.modes[0] || null;
                     var ri = 0;
                     for (var i = 0; i < resos.length; i++) {
-                        if (resos[i].w === mon.width && resos[i].h === mon.height) {
+                        if (selectedMode && resos[i].w === selectedMode.w && resos[i].h === selectedMode.h) {
                             ri = i;
                             break;
                         }
                     }
                     card.resIndex = ri;
-                    card.rateIndex = card.nearestIn(resos.length > 0 ? resos[ri].rates : [], mon.refresh);
-                    card.pickScale = mon.scale;
-                    card.pendingMain = false;
-                    if (root.pendingMove)
-                        root.pendingMove = null;
+                    card.rateIndex = card.nearestIn(resos.length > 0 ? resos[ri].rates : [], selectedMode ? selectedMode.refreshMilliHz : 0);
+                    card.pickScale = edit && edit.scale !== undefined
+                        ? edit.scale : (mon.enabled ? mon.scale : (stored ? stored.scale : 1));
+                    card.pickTransform = edit && edit.transform !== undefined
+                        ? edit.transform : (mon.enabled ? mon.transform : (stored ? stored.transform : "normal"));
+                    card.pickFocusAtStartup = edit && edit.focusAtStartup !== undefined
+                        ? edit.focusAtStartup : !!(stored && stored.focusAtStartup);
+                    card.ready = true;
                     root.openPicker = "";
                 }
 
-                function nearestIn(rates, hz) {
+                function nearestIn(rates, refreshMilliHz) {
                     var best = 0;
                     var bestDiff = 1e9;
                     for (var i = 0; i < rates.length; i++) {
-                        var d = Math.abs(rates[i] - hz);
+                        var d = Math.abs(rates[i].refreshMilliHz - refreshMilliHz);
                         if (d < bestDiff) { bestDiff = d; best = i; }
                     }
                     return best;
                 }
 
-                function nearestRateIndex(hz) {
-                    return nearestIn(card.rates, hz);
+                function nearestRateIndex(refreshMilliHz) {
+                    return nearestIn(card.rates, refreshMilliHz);
                 }
 
                 function bumpRes(d) {
@@ -744,12 +766,51 @@ SettingsSurface {
                     if (i === card.resIndex)
                         return;
                     card.resIndex = i;
-                    card.rateIndex = card.nearestRateIndex(card.rates.length > 0 ? card.rates[0] : 60);
+                    card.rateIndex = card.nearestRateIndex(card.rates.length > 0 ? card.rates[0].refreshMilliHz : 0);
+                    card.saveCardEdit();
                 }
 
                 function bumpRate(d) {
                     var cur = Math.min(card.rateIndex, Math.max(0, card.rates.length - 1));
                     card.rateIndex = Math.max(0, Math.min(card.rates.length - 1, cur + d));
+                    card.saveCardEdit();
+                }
+
+                function bumpTransform(d) {
+                    var index = transforms.indexOf(card.pickTransform);
+                    card.pickTransform = transforms[(index + d + transforms.length) % transforms.length];
+                    card.saveCardEdit();
+                }
+
+                function setFocusAtStartup(value) {
+                    if (value && (!root.selMon || !root.selMon.enabled)) {
+                        root.note = "An inactive display cannot be selected for startup focus.";
+                        return;
+                    }
+                    var edits = Object.assign({}, root.editsByName);
+                    for (var i = 0; i < root.monitors.length; i++) {
+                        var output = root.monitors[i];
+                        var edit = Object.assign({}, edits[output.name] || {});
+                        edit.focusAtStartup = value && output.name === root.selName;
+                        edits[output.name] = edit;
+                    }
+                    root.editsByName = edits;
+                    card.pickFocusAtStartup = value;
+                    card.saveCardEdit();
+                }
+
+                function saveCardEdit() {
+                    var mon = root.selMon;
+                    if (!mon || !card.ready || card.rates.length === 0)
+                        return;
+                    var edits = Object.assign({}, root.editsByName);
+                    edits[mon.name] = {
+                        mode: card.rates[Math.min(card.rateIndex, card.rates.length - 1)],
+                        scale: card.pickScale,
+                        transform: card.pickTransform,
+                        focusAtStartup: card.pickFocusAtStartup
+                    };
+                    root.editsByName = edits;
                 }
 
                 Column {
@@ -763,12 +824,15 @@ SettingsSurface {
                     spacing: 9 * root.s
 
                     Text {
-                        text: root.selMon ? root.selMon.name + (root.selIsMain ? "  ·  Main" : "") : ""
+                        width: parent.width
+                        text: root.selMon ? "DISPLAY " + root.displayNumber(root.selMon.name)
+                            + "  ·  " + root.selMon.label + "  ·  " + root.selMon.name : ""
                         color: Theme.cream
                         font.family: Theme.font
                         font.pixelSize: 12.5 * root.s
                         font.weight: Font.Bold
                         font.letterSpacing: 0.3 * root.s
+                        elide: Text.ElideRight
                     }
 
                     CardRow {
@@ -785,7 +849,8 @@ SettingsSurface {
                             onRequestToggle: root.openPicker = (root.openPicker === root.selName + ":res" ? "" : root.selName + ":res")
                             onPicked: (v) => {
                                 card.resIndex = v;
-                                card.rateIndex = card.nearestRateIndex(card.rates.length > 0 ? card.rates[0] : 60);
+                                card.rateIndex = card.nearestRateIndex(card.rates.length > 0 ? card.rates[0].refreshMilliHz : 0);
+                                card.saveCardEdit();
                                 root.openPicker = "";
                             }
                         }
@@ -799,12 +864,13 @@ SettingsSurface {
                             width: parent.width
                             s: root.s
                             label: "Refresh"
-                            options: card.rates.map(function (hz, i) { return { label: hz + "Hz", value: i }; })
+                            options: card.rates.map(function (mode, i) { return { label: (mode.refreshMilliHz / 1000).toFixed(3) + " Hz", value: i }; })
                             value: Math.min(card.rateIndex, Math.max(0, card.rates.length - 1))
                             open: root.openPicker === root.selName + ":rate"
                             onRequestToggle: root.openPicker = (root.openPicker === root.selName + ":rate" ? "" : root.selName + ":rate")
                             onPicked: (v) => {
                                 card.rateIndex = v;
+                                card.saveCardEdit();
                                 root.openPicker = "";
                             }
                         }
@@ -814,34 +880,68 @@ SettingsSurface {
                         id: scaleRow
                         icon: "scaling"
 
-                        Row {
+                        DisplayPicker {
                             width: parent.width
-                            spacing: 8 * root.s
-
-                            Text {
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: 64 * root.s
-                                text: "Scale"
-                                color: Theme.faint
-                                font.family: Theme.font
-                                font.pixelSize: 10.5 * root.s
-                                font.weight: Font.Medium
-                            }
-
-                            SettingsSeg {
-                                anchors.verticalCenter: parent.verticalCenter
-                                s: root.s
-                                options: root.scaleOptions
-                                value: card.pickScale
-                                onPicked: (v) => card.pickScale = v
+                            s: root.s
+                            label: "Scale"
+                            options: root.scaleOptions
+                            value: card.pickScale
+                            open: root.openPicker === root.selName + ":scale"
+                            onRequestToggle: root.openPicker = (root.openPicker === root.selName + ":scale" ? "" : root.selName + ":scale")
+                            onPicked: (v) => {
+                                card.pickScale = v;
+                                card.saveCardEdit();
+                                root.openPicker = "";
                             }
                         }
                     }
 
                     CardRow {
-                        id: mainRow
-                        glyphText: "★"
-                        visible: root.selMon !== null && !root.selIsMain
+                        id: transformRow
+                        icon: "rotate-cw"
+
+                        DisplayPicker {
+                            width: parent.width
+                            s: root.s
+                            label: "Orientation"
+                            options: card.transforms.map(function (value) {
+                                var names = { "normal": "0°", "90": "90°", "180": "180°", "270": "270°",
+                                    "flipped": "Flipped", "flipped-90": "Flipped 90°", "flipped-180": "Flipped 180°", "flipped-270": "Flipped 270°" };
+                                return { label: names[value], value: value };
+                            })
+                            value: card.pickTransform
+                            open: root.openPicker === root.selName + ":transform"
+                            onRequestToggle: root.openPicker = (root.openPicker === root.selName + ":transform" ? "" : root.selName + ":transform")
+                            onPicked: (v) => {
+                                card.pickTransform = v;
+                                card.saveCardEdit();
+                                root.openPicker = "";
+                            }
+                        }
+                    }
+
+                    CardRow {
+                        id: numberRow
+                        icon: "monitor"
+
+                        DisplayPicker {
+                            width: parent.width
+                            s: root.s
+                            label: "Number"
+                            options: root.numberOptions()
+                            value: root.selMon ? root.displayNumber(root.selMon.name) : 0
+                            open: root.openPicker === root.selName + ":number"
+                            onRequestToggle: root.openPicker = (root.openPicker === root.selName + ":number" ? "" : root.selName + ":number")
+                            onPicked: (v) => {
+                                root.assignDisplayNumber(v);
+                                root.openPicker = "";
+                            }
+                        }
+                    }
+
+                    CardRow {
+                        id: startupFocusRow
+                        icon: "monitor"
 
                         Item {
                             width: parent.width
@@ -850,7 +950,7 @@ SettingsSurface {
                             Text {
                                 anchors.left: parent.left
                                 anchors.verticalCenter: parent.verticalCenter
-                                text: "Set as main"
+                                text: "Focus at Niri startup"
                                 color: Theme.cream
                                 font.family: Theme.font
                                 font.pixelSize: 11 * root.s
@@ -861,8 +961,8 @@ SettingsSurface {
                                 anchors.right: parent.right
                                 anchors.verticalCenter: parent.verticalCenter
                                 s: root.s
-                                on: card.pendingMain
-                                onToggled: card.pendingMain = !card.pendingMain
+                                on: card.pickFocusAtStartup
+                                onToggled: card.setFocusAtStartup(!card.pickFocusAtStartup)
                             }
                         }
                     }
@@ -875,7 +975,7 @@ SettingsSurface {
                             id: applyBtn
                             anchors.left: parent.left
                             anchors.verticalCenter: parent.verticalCenter
-                            visible: !card.pending && root.pendingOut.length === 0
+                            visible: !card.pending
                             width: applyLabel.implicitWidth + 28 * root.s
                             height: 28 * root.s
                             radius: 9 * root.s
@@ -892,7 +992,7 @@ SettingsSurface {
                                 text: "Apply"
                                 color: card.applyReady ? Theme.cream : Theme.faint
                                 font.family: Theme.font
-                                font.pixelSize: 10.5 * root.s
+                                font.pixelSize: 9.5 * root.s
                                 font.weight: Font.DemiBold
                                 font.letterSpacing: 0.3 * root.s
                             }
@@ -901,8 +1001,11 @@ SettingsSurface {
                                 id: applyArea
                                 anchors.fill: parent
                                 hoverEnabled: true
+                                enabled: card.applyReady
                                 cursorShape: card.applyReady ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                onClicked: if (card.applyReady) root.apply()
+                                onClicked: {
+                                    root.apply();
+                                }
                             }
                         }
 
@@ -910,7 +1013,7 @@ SettingsSurface {
                             anchors.left: parent.left
                             anchors.right: parent.right
                             anchors.verticalCenter: parent.verticalCenter
-                            visible: card.pending
+                            visible: root.pendingToken.length > 0
                             spacing: 9 * root.s
 
                             Rectangle {
@@ -942,6 +1045,34 @@ SettingsSurface {
                                 }
                             }
 
+                            Rectangle {
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: revertLabel.implicitWidth + 24 * root.s
+                                height: 28 * root.s
+                                radius: 9 * root.s
+                                color: revertArea.containsMouse ? Theme.frameBg : "transparent"
+                                border.width: 1
+                                border.color: Theme.hairSoft
+
+                                Text {
+                                    id: revertLabel
+                                    anchors.centerIn: parent
+                                    text: "Revert"
+                                    color: Theme.subtle
+                                    font.family: Theme.font
+                                    font.pixelSize: 10.5 * root.s
+                                    font.weight: Font.DemiBold
+                                }
+
+                                MouseArea {
+                                    id: revertArea
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.revert()
+                                }
+                            }
+
                             Text {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: "reverts automatically if not kept"
@@ -953,6 +1084,18 @@ SettingsSurface {
                         }
                     }
                 }
+            }
+
+            Text {
+                width: parent.width
+                visible: card.arrangementError.length > 0
+                text: card.arrangementError
+                color: Theme.vermLit
+                font.family: Theme.font
+                font.pixelSize: 10 * root.s
+                font.weight: Font.DemiBold
+                wrapMode: Text.WordWrap
+                lineHeight: 1.25
             }
 
             Text {
@@ -973,7 +1116,7 @@ SettingsSurface {
 
     MouseArea {
         anchors.fill: parent
-        enabled: root.pendingOut.length > 0
+        enabled: root.pendingToken.length > 0 || root.pendingRequestId >= 0
         z: 50
         onClicked: {}
     }

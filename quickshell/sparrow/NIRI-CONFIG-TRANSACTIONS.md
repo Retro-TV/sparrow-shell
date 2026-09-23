@@ -4,7 +4,9 @@ Sparrow changes Niri configuration only through
 `scripts/niri-config-transaction.py`, called from the public
 `Niri.writeManagedFragment(id, content)` API or by Sparrow's wallpaper palette
 generator. Callers pass an allowlisted fragment ID and KDL text; paths and
-commands are never accepted from callers.
+commands are never accepted from callers. Display previews can request a
+temporary confirmation transaction; the helper arms an independent 15-second
+rollback watchdog before reporting that the layout is ready to keep.
 
 For `generated-colors`, the helper additionally permits only the two border
 color properties under `layout > border`; arbitrary KDL directives and
@@ -20,6 +22,8 @@ candidate tree, including color-value semantics and KDL syntax.
 | `sparrow/binds.kdl` | User, hand-written | No |
 | `sparrow/window-rules.kdl` | User, hand-written | No |
 | `sparrow/generated-colors.kdl` | Sparrow-generated palette | Yes, ID `generated-colors` |
+| `sparrow/display-outputs.kdl` | Sparrow Display settings | Yes, ID `display-outputs` |
+| `sparrow/display-binds.kdl` | Sparrow-generated live output bindings | Yes, ID `display-binds` |
 
 Adding future managed fragments requires an explicit entry in the helper's
 `MANAGED_FRAGMENTS` registry and an update to this table. The helper refuses
@@ -27,7 +31,10 @@ unknown IDs, absolute paths, and caller-selected paths.
 
 ## Transaction contract
 
-The helper takes one JSON object on stdin with exactly `fragment` and `content`.
+The helper takes one JSON object on stdin with `fragment` and `content`; only
+the display-output transaction may additionally request `confirm: true`. A
+separate confirmation/rollback request requires the unpredictable token returned
+for that display preview.
 It serializes all callers with an advisory `flock` under
 `$XDG_STATE_HOME/sparrow-shell/niri-config-transactions/`. It copies the current
 Niri config directory to a private staging tree, substitutes only the selected
@@ -52,7 +59,8 @@ succeeded. Validation and all writes run as the current user; no shell is used.
 
 ## Result statuses
 
-`success`, `invalid_fragment`, `invalid_request`, `invalid_content`, `staging_failed`,
+`success`, `confirmation_pending`, `confirmed`, `rolled_back`, `invalid_fragment`,
+`invalid_request`, `invalid_confirmation`, `invalid_content`, `staging_failed`,
 `validation_failed`, `backup_failed`, `write_failed`, or `reload_failed`.
 `success` with `changed: false` means the file was already byte-identical and no
 backup or reload was needed. JSON stdout is the machine-readable result; a

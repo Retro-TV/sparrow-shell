@@ -16,9 +16,11 @@ import Quickshell.Io
  * two resolvers, each emitting `targetReady(token)` on a valid pick or
  * `targetAborted()` on cancel: `prepareScreen(name)` resolves synchronously to a
  * monitor connector name (`-w DP-1`, falling back to `-w screen`);
- * `prepareWindow()` feeds the Hyprland client rectangles to `slurp` for one
- * combined Window / Region pick — clicking a window snaps to it, dragging draws
- * a freeform region — and resolves to that `WxH+X+Y` geometry. Only after
+ * `prepareWindow()` feeds active floating-window rectangles from Niri IPC to
+ * `slurp` for one combined Window / Region pick — clicking a floating window
+ * snaps to it, while dragging anywhere draws a freeform region. Niri 26.04 does
+ * not expose tiled-window viewport positions, so tiled windows can be captured
+ * by drawing a region around them but cannot be click-snapped. Only after
  * `targetReady` does the surface run its countdown and call `start(token)`, so
  * the order is pick → countdown → record. Audio uses gsr's device aliases (`default_output` for desktop,
  * `default_input` for the mic) so no device id is ever hardcoded; the surface's
@@ -47,7 +49,8 @@ Singleton {
     readonly property string home: Quickshell.env("HOME")
     readonly property string defaultDir: home + "/Videos/Recordings"
     readonly property string thumbDir: (Quickshell.env("XDG_CACHE_HOME") || (home + "/.cache")) + "/ricelin/rec-thumbs/"
-    readonly property string thumbScript: home + "/.config/hypr/scripts/rec-thumbs.sh"
+    readonly property string thumbScript: home + "/Projects/sparrow-shell/quickshell/sparrow/scripts/rec-thumbs.sh"
+    readonly property string windowPickerScript: home + "/Projects/sparrow-shell/quickshell/sparrow/scripts/niri-record-window-pick.py"
     readonly property string outDir: {
         var d = Flags.recordDir;
         return d && d.length > 0 ? d : defaultDir;
@@ -159,19 +162,19 @@ Singleton {
     }
 
     /**
-     * Connected monitors as `{ name, w, h, label }` for the Screen sub-chooser.
-     * gsr's `-w <name>` records a monitor by its connector name, so the chooser
-     * passes the chosen `name` straight into `prepareScreen()`. A single screen
-     * needs no chooser; the surface uses the lone entry directly.
+     * Connected Niri outputs as `{ name, w, h, label }` for the Screen
+     * sub-chooser. GSR records an output by connector name, so the chooser passes
+     * the selected `name` directly to `prepareScreen()`.
      */
     readonly property var monitors: {
-        var out = [];
-        var sc = Quickshell.screens;
-        for (var i = 0; i < sc.length; i++) {
-            var s = sc[i];
-            out.push({ name: s.name, w: s.width, h: s.height, label: s.name + " · " + s.width + "×" + s.height });
-        }
-        return out;
+        var outputs = Niri.outputs || [];
+        return outputs.filter(function(output) { return output.enabled; }).map(function(output) {
+            var mode = output.currentMode || {};
+            var width = mode.w || Math.round(output.logicalWidth * output.scale);
+            var height = mode.h || Math.round(output.logicalHeight * output.scale);
+            return { name: output.name, w: width, h: height,
+                     label: output.name + " · " + width + "×" + height };
+        });
     }
 
     /**
@@ -219,11 +222,12 @@ Singleton {
     }
 
     /**
-     * Feed the Hyprland client rectangles to `slurp` so the user picks at
-     * leisure with nothing recording yet: clicking a window snaps to that
-     * window, dragging draws a freeform region (one combined Window / Region
-     * pick, like a screenshot tool). Announces the chosen `WxH+X+Y` geometry, or
-     * aborts on cancel / non-zero exit (the user pressed Escape).
+     * Feed active floating-window rectangles from Niri IPC to `slurp` so the
+     * user picks at leisure with nothing recording yet. Clicking one snaps to
+     * its geometry; dragging anywhere draws a freeform region. Niri does not
+     * expose current tiled-window viewport geometry, so tiled-window snapping
+     * is unavailable; those windows remain selectable by drawing a region.
+     * Announces the chosen `WxH+X+Y` geometry, or aborts on cancel / error.
      */
     function prepareWindow() {
         if (busy)
@@ -232,9 +236,14 @@ Singleton {
     }
 
     function buildArgs(captureToken, file) {
-        var args = ["gpu-screen-recorder", "-w", captureToken,
-                    "-f", String(fps), "-q", qualityPreset[quality] || "high",
-                    "-cursor", captureCursor ? "yes" : "no"];
+        var args = ["gpu-screen-recorder"];
+        var region = /^(\d+)x(\d+)([+-]\d+)([+-]\d+)$/.exec(String(captureToken));
+        if (region)
+            args = args.concat(["-w", "region", "-region", captureToken]);
+        else
+            args = args.concat(["-w", captureToken]);
+        args = args.concat(["-f", String(fps), "-q", qualityPreset[quality] || "high",
+                            "-cursor", captureCursor ? "yes" : "no"]);
         var a = audioArg();
         if (a.length > 0)
             args = args.concat(["-a", a]);
@@ -330,15 +339,13 @@ Singleton {
     }
 
     /**
-     * Combined Window / Region picker: feeds each Hyprland client's current
-     * rectangle to `slurp`, so clicking a window snaps to its `WxH+X+Y` geometry
-     * while dragging draws a freeform region. The rectangle is captured
-     * statically, so a window moved or resized after the pick is not followed.
-     * Empty pick or non-zero exit (Escape) aborts.
+     * Combined Window / Region picker. The Niri helper supplies visible
+     * floating-window geometry where available; manual region selection works
+     * independently. Selected geometry is static and is not followed if moved.
      */
     Process {
         id: windowProc
-        command: ["sh", "-c", "hyprctl clients -j | jq -r '.[] | \"\\(.at[0]),\\(.at[1]) \\(.size[0])x\\(.size[1])\"' | slurp -f \"%wx%h+%x+%y\""]
+        command: ["python3", root.windowPickerScript]
         stdout: StdioCollector {
             onStreamFinished: {
                 var geom = this.text.trim();

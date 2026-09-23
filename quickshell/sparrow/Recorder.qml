@@ -21,9 +21,10 @@ import "Singletons"
  * recording yet, THEN a pre-roll countdown runs, THEN gsr records. Pressing while
  * idle opens an in-surface source chooser with two choices — Screen and Window /
  * Region. Screen resolves to a monitor (a sub-chooser of the connected screens
- * when more than one) via ScreenRec.prepareScreen; Window / Region feeds the
- * Hyprland client rectangles to slurp (prepareWindow) so a click snaps to a
- * window and a drag draws a freeform region, captured as a static rectangle.
+ * when more than one) via ScreenRec.prepareScreen; Window / Region feeds Niri's
+ * available floating-window rectangles to slurp (prepareWindow) so a click
+ * snaps to a floating window and a drag draws a freeform region. Tiled-window
+ * positions are not exposed by Niri 26.04, so those can only be region-picked.
  * Either resolves to ScreenRec.targetReady(token), at which point the
  * Flags.recordCountdown countdown runs (the bar fills over it, tap cancels) and
  * then gsr starts. Zero countdown starts at once; a cancelled pick aborts

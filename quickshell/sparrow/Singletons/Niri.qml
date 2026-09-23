@@ -4,6 +4,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import "../lib/monitors.js" as Mon
 
 Singleton {
     id: root
@@ -12,6 +13,11 @@ Singleton {
     property var workspaces: []
     property var windows: []
     property var outputs: []
+    readonly property var monitorNumberMap: Mon.monitorNumberAssignments(outputs, displayBindsFile.text())
+    readonly property var numberedOutputs: Mon.numberedOutputs(outputs, monitorNumberMap)
+    property var boundOutputNames: []
+    property var pendingBoundOutputNames: []
+    property int monitorBindingsRequestId: -1
 
     // One-shot output queries are refreshed by workspace configuration events.
     property bool outputRefreshPending: false
@@ -20,6 +26,9 @@ Singleton {
     // earlier niri-msg process when Process.exec() is called again.
     property var actionQueue: []
     property string activeAction: ""
+    property string pendingDisplayConfirmationToken: ""
+    property int pendingDisplayConfirmationSeconds: 0
+    property string lastDesiredMonitorBinds: ""
 
     // Managed-config transactions are serialized in this backend before they
     // reach the shared helper (which also locks across non-QML callers).
@@ -27,7 +36,7 @@ Singleton {
     property var activeConfigTransaction: null
     property int configTransactionSerial: 0
 
-    signal managedFragmentWriteFinished(int requestId, string status, string message)
+    signal managedFragmentWriteFinished(int requestId, string status, string message, string confirmationToken, int timeoutSeconds)
 
     // Derived focus state.
     property int focusedWorkspaceId: -1
@@ -54,18 +63,45 @@ Singleton {
      * Callers receive the final status through managedFragmentWriteFinished.
      * IDs, never filesystem paths, are accepted at this boundary.
      */
-    function writeManagedFragment(fragmentId, content) {
+    function writeManagedFragment(fragmentId, content, confirm = false) {
         var requestId = ++configTransactionSerial;
-        if (fragmentId !== "generated-colors" || typeof content !== "string") {
+        var supported = ["generated-colors", "display-outputs", "display-binds"];
+        if (supported.indexOf(fragmentId) < 0 || typeof content !== "string"
+                || (confirm && fragmentId !== "display-outputs")) {
             Qt.callLater(function() {
                 root.managedFragmentWriteFinished(requestId, "invalid_request",
-                    "unsupported managed fragment or non-text content");
+                    "unsupported managed fragment or confirmation request", "", 0);
             });
             return requestId;
         }
 
         var next = configTransactionQueue.slice();
-        next.push({ requestId: requestId, fragmentId: fragmentId, content: content });
+        next.push({ requestId: requestId, operation: "transact", fragmentId: fragmentId,
+                    content: content, confirm: confirm });
+        configTransactionQueue = next;
+        startNextConfigTransaction();
+        return requestId;
+    }
+
+    function confirmManagedFragment(token) {
+        return resolveManagedConfirmation("confirm", token);
+    }
+
+    function rollbackManagedFragment(token) {
+        return resolveManagedConfirmation("rollback", token);
+    }
+
+    function resolveManagedConfirmation(operation, token) {
+        var requestId = ++configTransactionSerial;
+        if ((operation !== "confirm" && operation !== "rollback") || !token || token !== pendingDisplayConfirmationToken) {
+            Qt.callLater(function() {
+                root.managedFragmentWriteFinished(requestId, "invalid_confirmation",
+                    "no matching display change is awaiting confirmation", "", 0);
+            });
+            return requestId;
+        }
+        var next = configTransactionQueue.slice();
+        next.push({ requestId: requestId, operation: operation, token: token });
         configTransactionQueue = next;
         startNextConfigTransaction();
         return requestId;
@@ -96,8 +132,31 @@ Singleton {
         if (exitCode !== 0 && status === "success")
             status = "helper_failed";
 
+        var token = result && result.confirmationToken ? result.confirmationToken : "";
+        var timeout = result && result.timeoutSeconds ? Number(result.timeoutSeconds) : 0;
+        if (status === "confirmation_pending") {
+            pendingDisplayConfirmationToken = token;
+            pendingDisplayConfirmationSeconds = timeout;
+        } else if (request && (request.operation === "confirm" || request.operation === "rollback")
+                   && (status === "confirmed" || status === "rolled_back"
+                       || (request.operation === "rollback" && status === "already_resolved"))) {
+            pendingDisplayConfirmationToken = "";
+            pendingDisplayConfirmationSeconds = 0;
+        }
+
         if (request)
-            managedFragmentWriteFinished(request.requestId, status, message);
+            managedFragmentWriteFinished(request.requestId, status, message, token, timeout);
+        if (request && request.requestId === monitorBindingsRequestId) {
+            if (status === "success") {
+                boundOutputNames = pendingBoundOutputNames.slice();
+                displayBindsFile.reload();
+            } else {
+                lastDesiredMonitorBinds = "";
+                console.warn("Sparrow Niri: monitor shortcut regeneration failed:", message);
+            }
+            pendingBoundOutputNames = [];
+            monitorBindingsRequestId = -1;
+        }
         activeConfigTransaction = null;
         Qt.callLater(root.startNextConfigTransaction);
     }
@@ -134,6 +193,53 @@ Singleton {
 
         outputRefreshPending = false;
         outputsQuery.running = true;
+    }
+
+    function monitorNumberForOutput(name) {
+        var output = outputByName(String(name));
+        return output ? (monitorNumberMap[String(output.identity || output.name)] || 0) : 0;
+    }
+
+    function writeMonitorBindings(assignments) {
+        if (outputs.length === 0 || pendingDisplayConfirmationToken.length > 0
+                || monitorBindingsRequestId >= 0
+                || (activeConfigTransaction && activeConfigTransaction.operation === "transact"
+                    && activeConfigTransaction.fragmentId === "display-outputs" && activeConfigTransaction.confirm))
+            return -1;
+        var desired = Mon.monitorBinds(outputs, assignments, displayBindsFile.text());
+        var desiredNames = Mon.numberedOutputs(outputs, Mon.monitorNumberAssignments(outputs, desired))
+            .map(function (output) { return output.name; });
+        if (desired === displayBindsFile.text()) {
+            lastDesiredMonitorBinds = desired;
+            boundOutputNames = desiredNames;
+            return 0;
+        }
+        if (desired === lastDesiredMonitorBinds)
+            return -1;
+        lastDesiredMonitorBinds = desired;
+        pendingBoundOutputNames = desiredNames;
+        monitorBindingsRequestId = writeManagedFragment("display-binds", desired);
+        return monitorBindingsRequestId >= 0 ? monitorBindingsRequestId : -1;
+    }
+
+    function setMonitorNumber(name, number) {
+        var output = outputByName(String(name));
+        if (!output || !output.enabled)
+            return -1;
+        var assignment = Mon.assignMonitorNumber(outputs, monitorNumberMap,
+            String(output.identity || output.name), Number(number));
+        if (!assignment.ok)
+            return -1;
+        return writeMonitorBindings(assignment.assignments);
+    }
+
+    function syncMonitorBindings() {
+        if (outputs.length === 0 || pendingDisplayConfirmationToken.length > 0
+                || monitorBindingsRequestId >= 0
+                || (activeConfigTransaction && activeConfigTransaction.operation === "transact"
+                    && activeConfigTransaction.fragmentId === "display-outputs" && activeConfigTransaction.confirm))
+            return;
+        writeMonitorBindings(monitorNumberMap);
     }
 
     function enqueueAction(command, description) {
@@ -428,6 +534,10 @@ Singleton {
             removeWindow(event.WindowClosed.id);
         }
 
+        else if (event.ConfigLoaded) {
+            refreshOutputs();
+        }
+
         else if (event.WindowFocusChanged) {
             var focusId = event.WindowFocusChanged.id;
             var focused = windows.slice();
@@ -496,15 +606,7 @@ Singleton {
             onRead: data => {
                 try {
                     var byName = JSON.parse(data);
-                    var next = [];
-
-                    Object.keys(byName).forEach(function(name) {
-                        var output = Object.assign({}, byName[name]);
-                        output.name = output.name || name;
-                        next.push(output);
-                    });
-
-                    root.outputs = next;
+                    root.outputs = Mon.parseNiri(JSON.stringify(byName));
                 } catch (e) {
                     console.warn("Sparrow Niri: output query parse error:", e, data);
                 }
@@ -518,7 +620,17 @@ Singleton {
 
             if (root.outputRefreshPending)
                 Qt.callLater(root.refreshOutputs);
+            else
+                Qt.callLater(root.syncMonitorBindings);
         }
+    }
+
+    FileView {
+        id: displayBindsFile
+        path: (Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config"))
+            + "/niri/sparrow/display-binds.kdl"
+        blockLoading: true
+        printErrors: false
     }
 
     Process {
@@ -530,10 +642,13 @@ Singleton {
 
         onStarted: {
             if (root.activeConfigTransaction) {
-                transactionProcess.write(JSON.stringify({
-                    fragment: root.activeConfigTransaction.fragmentId,
-                    content: root.activeConfigTransaction.content
-                }) + "\n");
+                var request = root.activeConfigTransaction.operation === "transact"
+                    ? { fragment: root.activeConfigTransaction.fragmentId,
+                        content: root.activeConfigTransaction.content,
+                        confirm: root.activeConfigTransaction.confirm }
+                    : { operation: root.activeConfigTransaction.operation,
+                        token: root.activeConfigTransaction.token };
+                transactionProcess.write(JSON.stringify(request) + "\n");
             }
         }
 

@@ -33,16 +33,38 @@ map_put_all() {
 }
 ensure_awww() {
     awww query >/dev/null 2>&1 && return 0
+    if [[ "${SPARROW_AWWW_DAEMON_MANAGED:-0}" == 1 ]]; then
+        for _ in {1..40}; do awww query >/dev/null 2>&1 && return 0; sleep 0.15; done
+        echo "Sparrow wallpaper: systemd-managed awww daemon did not become available" >&2
+        return 1
+    fi
+    if pgrep -x awww-daemon >/dev/null 2>&1; then
+        for _ in {1..40}; do awww query >/dev/null 2>&1 && return 0; sleep 0.15; done
+        echo "Sparrow wallpaper: existing awww daemon did not become available" >&2
+        return 1
+    fi
     awww-daemon >/dev/null 2>&1 &
     for _ in {1..40}; do awww query >/dev/null 2>&1 && return 0; sleep 0.15; done
     echo "Sparrow wallpaper: awww daemon did not become available" >&2
     return 1
 }
+awww_image_for_output() {
+    awww query --json | jq -r --arg output "$1" '.[""][]? | select(.name == $output) | .displaying.image // empty'
+}
 mpvpaper_pid_is_sparrow() {
-    local pid="$1" out="$2" cmd
+    local pid="$1" out="$2" expected_pic="${3:-}" cmd
     [[ "$pid" =~ ^[0-9]+$ ]] || return 1
     cmd="$(tr '\0' ' ' 2>/dev/null < "/proc/$pid/cmdline" || true)"
-    [[ "$cmd" == *mpvpaper* && "$cmd" == *"input-ipc-server=/tmp/sparrow-wallpaper-$out"* ]]
+    [[ "$cmd" == *mpvpaper* && "$cmd" == *"input-ipc-server=/tmp/sparrow-wallpaper-$out"* ]] || return 1
+    [[ -z "$expected_pic" || "$cmd" == *" $out $expected_pic" ]]
+}
+video_is_current() {
+    local out="$1" pic="$2" safe_out pidfile pid=""
+    safe_out="${out//[^[:alnum:]_.-]/_}"
+    pidfile="$state_root/mpvpaper-$safe_out.pid"
+    [[ -r "$pidfile" ]] || return 1
+    read -r pid < "$pidfile" || true
+    mpvpaper_pid_is_sparrow "${pid:-}" "$out" "$pic"
 }
 stop_video() {
     local out="$1" safe_out pidfile pid=""
@@ -95,19 +117,23 @@ make_still() {
     mv -f -- "$target.tmp.png" "$target"
 }
 apply_visual() {
-    local pic="$1" out="${2:-}" show="$1" target_out previous; local -a output_args=() video_outputs=()
+    local pic="$1" out="${2:-}" instant="${3:-false}" show="$1" target_out previous; local -a output_args=() video_outputs=() transition_args=()
     [[ -z "$out" ]] || output_args=(--outputs "$out")
+    if [[ "$instant" == true ]]; then
+        transition_args=(--transition-type none)
+    else
+        transition_args=(--transition-type wave --transition-angle 30 --transition-wave "60,30" --transition-fps 60 --transition-step 90)
+    fi
     if is_video "$pic"; then
         command -v mpvpaper >/dev/null || { echo "Sparrow wallpaper: mpvpaper is required for video wallpapers; install it to enable video playback" >&2; return 1; }
         show="$still"; make_still "$pic" "$show"
     elif [[ "${pic,,}" == *.gif ]]; then
         show="$still"; make_still "$pic" "$show"
     fi
-    awww img "${output_args[@]}" "$show" --transition-type wave --transition-angle 30 \
-        --transition-wave "60,30" --transition-fps 60 --transition-step 90
+    awww img "${output_args[@]}" "$show" "${transition_args[@]}"
     if [[ "$show" != "$pic" ]]; then
         if ! is_video "$pic"; then
-            sleep 0.9
+            [[ "$instant" == true ]] || sleep 0.9
             awww img "${output_args[@]}" "$pic" --transition-type none
         fi
     fi
@@ -191,6 +217,12 @@ case "$cmd" in
         exit 0 ;;
     init)
         focused_output_name="${1:-}"; outputs_csv="${2:-}"
+        if [[ -z "$outputs_csv" ]]; then
+            outputs_json="$(niri msg --json outputs)" || { echo "Sparrow wallpaper: could not query Niri outputs" >&2; exit 1; }
+            outputs_csv="$(jq -r 'keys | join(",")' <<< "$outputs_json")"
+            focused_json="$(niri msg --json focused-output)" || { echo "Sparrow wallpaper: could not query Niri focused output" >&2; exit 1; }
+            focused_output_name="$(jq -r '.name // empty' <<< "$focused_json")"
+        fi
         ensure_awww || exit 1
         any=false; active=""; saved="$(cat "$state" 2>/dev/null || true)"
         while IFS= read -r out; do
@@ -201,7 +233,13 @@ case "$cmd" in
             if is_video "$pic" && ! command -v mpvpaper >/dev/null; then
                 echo "Sparrow wallpaper: saved video on $out not restored (mpvpaper missing)" >&2; continue
             fi
-            if apply_visual "$pic" "$out"; then
+            if { is_video "$pic" && video_is_current "$out" "$pic"; } \
+                    || { ! is_video "$pic" && [[ "$(awww_image_for_output "$out")" == "$pic" ]]; }; then
+                map_put "$out" "$pic"; any=true
+                [[ "$out" == "$(focused_output)" ]] && active="$pic"
+                continue
+            fi
+            if apply_visual "$pic" "$out" true; then
                 map_put "$out" "$pic"; any=true
                 [[ "$out" == "$(focused_output)" ]] && active="$pic"
             fi

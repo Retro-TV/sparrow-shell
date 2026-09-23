@@ -1,0 +1,18 @@
+[Unit]
+Description=Sparrow wallpaper daemon and saved wallpaper restore
+After=niri.service
+Before=graphical-session.target
+PartOf=graphical-session.target
+ConditionEnvironment=XDG_CURRENT_DESKTOP=niri
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/awww-daemon
+ExecStartPost=/usr/bin/env SPARROW_AWWW_DAEMON_MANAGED=1 /usr/bin/bash %h/.config/quickshell/sparrow/scripts/wallpaper.sh init
+ExecStop=/usr/bin/awww kill
+Restart=on-failure
+RestartSec=2
+TimeoutStopSec=5
+
+[Install]
+WantedBy=graphical-session.target

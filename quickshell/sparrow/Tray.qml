@@ -121,12 +121,22 @@ Item {
         property var entryData
         property real indent: 0
         property bool expanded: false
+        readonly property bool validEntry: entryData !== null && entryData !== undefined
+            && typeof entryData === "object"
+        readonly property var safeEntryData: validEntry ? entryData : ({
+            isSeparator: false,
+            icon: "",
+            text: "",
+            enabled: false,
+            hasChildren: false
+        })
         signal activated()
 
-        height: entryData.isSeparator ? 9 * tray.s : 32 * tray.s
+        visible: validEntry
+        height: !validEntry ? 0 : (safeEntryData.isSeparator ? 9 * tray.s : 32 * tray.s)
 
         Rectangle {
-            visible: mrow.entryData.isSeparator
+            visible: mrow.safeEntryData.isSeparator
             anchors.verticalCenter: parent.verticalCenter
             anchors.left: parent.left
             anchors.right: parent.right
@@ -137,11 +147,11 @@ Item {
         }
 
         Rectangle {
-            visible: !mrow.entryData.isSeparator
+            visible: !mrow.safeEntryData.isSeparator
             anchors.fill: parent
             anchors.leftMargin: mrow.indent
             radius: 8 * tray.s
-            color: mrowArea.containsMouse && mrow.entryData.enabled
+            color: mrowArea.containsMouse && mrow.safeEntryData.enabled
                 ? Theme.frameBg : "transparent"
 
             Rectangle {
@@ -161,10 +171,10 @@ Item {
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.leftMargin: 16 * tray.s
-                readonly property bool isCheck: mrow.entryData.buttonType === QsMenuButtonType.CheckBox
-                readonly property bool isRadio: mrow.entryData.buttonType === QsMenuButtonType.RadioButton
+                readonly property bool isCheck: mrow.safeEntryData.buttonType === QsMenuButtonType.CheckBox
+                readonly property bool isRadio: mrow.safeEntryData.buttonType === QsMenuButtonType.RadioButton
                 readonly property bool present: isCheck || isRadio
-                readonly property bool checked: mrow.entryData.checkState === Qt.Checked
+                readonly property bool checked: mrow.safeEntryData.checkState === Qt.Checked
                 visible: present
                 width: present ? 11 * tray.s : 0
                 height: 11 * tray.s
@@ -188,25 +198,25 @@ Item {
                 anchors.left: stateBox.right
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.leftMargin: stateBox.present ? 8 * tray.s : 0
-                width: mrow.entryData.icon ? 15 * tray.s : 0
+                width: mrow.safeEntryData.icon ? 15 * tray.s : 0
                 height: 15 * tray.s
-                source: mrow.entryData.icon
+                source: mrow.safeEntryData.icon
                 sourceSize.width: 30
                 sourceSize.height: 30
                 fillMode: Image.PreserveAspectFit
                 smooth: true
                 cache: true
-                visible: mrow.entryData.icon
+                visible: mrow.safeEntryData.icon
             }
 
             Text {
                 anchors.left: entryIcon.right
-                anchors.leftMargin: mrow.entryData.icon ? 9 * tray.s : 0
+                anchors.leftMargin: mrow.safeEntryData.icon ? 9 * tray.s : 0
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.right: chevron.visible ? chevron.left : parent.right
                 anchors.rightMargin: 14 * tray.s
-                text: mrow.entryData.text
-                color: !mrow.entryData.enabled ? Theme.dim
+                text: mrow.safeEntryData.text
+                color: !mrow.safeEntryData.enabled ? Theme.dim
                     : (mrowArea.containsMouse ? Theme.cream : Theme.creamMenu)
                 font.family: Theme.font
                 font.pixelSize: 13 * tray.s
@@ -219,7 +229,7 @@ Item {
                 anchors.right: parent.right
                 anchors.rightMargin: 10 * tray.s
                 anchors.verticalCenter: parent.verticalCenter
-                visible: mrow.entryData.hasChildren === true
+                visible: mrow.safeEntryData.hasChildren === true
                 width: 10 * tray.s
                 height: 10 * tray.s
                 name: "chevron-right"
@@ -233,7 +243,7 @@ Item {
                 id: mrowArea
                 anchors.fill: parent
                 hoverEnabled: true
-                enabled: mrow.entryData.enabled
+                enabled: mrow.safeEntryData.enabled
                 cursorShape: Qt.PointingHandCursor
                 onClicked: mrow.activated()
             }
@@ -333,15 +343,22 @@ Item {
 
                             required property var modelData
                             required property int index
+                            readonly property bool validEntry: modelData !== null
+                                && modelData !== undefined && typeof modelData === "object"
                             readonly property bool expanded: card.expandedIdx === index
 
                             width: col.width
+                            visible: validEntry
+                            height: validEntry ? implicitHeight : 0
 
                             MenuRow {
                                 width: parent.width
-                                entryData: entry.modelData
+                                entryData: entry.validEntry ? entry.modelData : null
                                 expanded: entry.expanded
                                 onActivated: {
+                                    if (!entry.validEntry)
+                                        return;
+
                                     if (entry.modelData.hasChildren) {
                                         card.expandedIdx = entry.expanded ? -1 : entry.index;
                                     } else {
@@ -353,7 +370,7 @@ Item {
 
                             QsMenuOpener {
                                 id: childOpener
-                                menu: entry.expanded ? entry.modelData : null
+                                menu: entry.validEntry && entry.expanded ? entry.modelData : null
                             }
 
                             Repeater {
@@ -365,8 +382,8 @@ Item {
                                     indent: 14 * tray.s
                                     entryData: modelData
                                     onActivated: {
-                                        if (!modelData.hasChildren) {
-                                            modelData.triggered();
+                                        if (validEntry && !safeEntryData.hasChildren) {
+                                            safeEntryData.triggered();
                                             menu.open = false;
                                         }
                                     }

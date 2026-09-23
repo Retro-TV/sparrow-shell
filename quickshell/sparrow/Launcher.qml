@@ -60,7 +60,10 @@ PillSurface {
             return false;
 
         root.launching = true;
-        launchProcess.command = ["gtk-launch", entry.id];
+        launchProcess.command = [
+            "sh", "-c", "exec gtk-launch \"$1\" >/dev/null 2>&1",
+            "sparrow-launch", entry.id
+        ];
         launchProcess.running = true;
         return true;
     }

@@ -1,12 +1,12 @@
 [Unit]
-Description=Sparrow idle policy monitor
+Description=Sparrow Quickshell desktop shell
 After=graphical-session.target
 PartOf=graphical-session.target
 ConditionEnvironment=XDG_CURRENT_DESKTOP=niri
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/qs --no-duplicate --path %h/.config/quickshell/sparrow/idle/shell.qml
+ExecStart=/usr/bin/qs --no-duplicate --path %h/.config/quickshell/sparrow
 Restart=on-failure
 RestartSec=2
 

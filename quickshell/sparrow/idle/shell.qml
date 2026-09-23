@@ -9,8 +9,7 @@ import "../Singletons" as SparrowBackend
 ShellRoot {
     id: root
 
-    readonly property string lockTrigger: Quickshell.env("HOME")
-        + "/Projects/sparrow-shell/quickshell/sparrow/scripts/sparrow-lock"
+    readonly property string lockTrigger: Quickshell.shellPath("../scripts/sparrow-lock")
     property bool screenOffRequested: false
 
     function dispatchLock(operation: string): void {

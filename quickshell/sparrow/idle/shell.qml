@@ -60,7 +60,7 @@ ShellRoot {
         id: lockProcess
         onExited: (exitCode, exitStatus) => {
             if (exitCode !== 0)
-                console.error("Sparrow idle: secure lock/power request failed", exitCode, exitStatus);
+                console.error("Sparrow idle: lock/power action failed", exitCode, exitStatus);
         }
     }
 }

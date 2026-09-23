@@ -1,9 +1,0 @@
-[Unit]
-Description=Sparrow secure Wayland session lock
-After=graphical-session.target
-PartOf=graphical-session.target
-
-[Service]
-Type=simple
-ExecStart=/usr/bin/qs --no-duplicate --path /home/vrabko/Projects/sparrow-shell/quickshell/sparrow/lock/shell.qml
-Restart=no

@@ -2,24 +2,52 @@
 set -euo pipefail
 
 operation="${1:-lock}"
-case "$operation" in
-    lock) method="lock" ;;
-    power-off) method="powerOff" ;;
-    suspend) method="suspend" ;;
-    *) printf 'sparrow-lock: unknown operation: %s\n' "$operation" >&2; exit 2 ;;
-esac
+lock_config="${HOME}/.config/sparrow/hyprlock.conf"
+hyprlock_bin="$(command -v hyprlock || true)"
 
-lock_config="${HOME}/Projects/sparrow-shell/quickshell/sparrow/lock/shell.qml"
-systemctl --user import-environment WAYLAND_DISPLAY NIRI_SOCKET
-systemctl --user start sparrow-lock.service
+if [[ -z "$hyprlock_bin" ]]; then
+    printf 'sparrow-lock: hyprlock is not installed or not on PATH\n' >&2
+    exit 127
+fi
+if [[ ! -r "$lock_config" ]]; then
+    printf 'sparrow-lock: cannot read Hyprlock config: %s\n' "$lock_config" >&2
+    exit 1
+fi
 
-for attempt in {1..30}; do
-    if qs ipc --path "$lock_config" call lock "$method" >/dev/null 2>&1; then
-        exit 0
+start_lock_if_needed() {
+    if pgrep -x hyprlock >/dev/null 2>&1; then
+        return 0
     fi
-    sleep 0.1
-done
 
-logger -t sparrow-lock "Quickshell lock IPC did not become available for operation ${operation}"
-printf 'sparrow-lock: secure lock process did not become available\n' >&2
-exit 1
+    "$hyprlock_bin" --config "$lock_config" --grace 0 >/dev/null 2>&1 &
+    local locker_pid=$!
+
+    # Give the native session-lock client time to initialize before powering
+    # the displays off or suspending. If it exits immediately, don't proceed.
+    for _ in {1..10}; do
+        if ! kill -0 "$locker_pid" 2>/dev/null; then
+            wait "$locker_pid" || true
+            printf 'sparrow-lock: Hyprlock exited before the power action\n' >&2
+            return 1
+        fi
+        sleep 0.1
+    done
+}
+
+case "$operation" in
+    lock)
+        exec "$hyprlock_bin" --config "$lock_config" --grace 0
+        ;;
+    power-off)
+        start_lock_if_needed
+        exec niri msg action power-off-monitors
+        ;;
+    suspend)
+        start_lock_if_needed
+        exec systemctl suspend
+        ;;
+    *)
+        printf 'sparrow-lock: unknown operation: %s\n' "$operation" >&2
+        exit 2
+        ;;
+esac

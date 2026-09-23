@@ -208,7 +208,14 @@ case "$cmd" in
         done < <(outputs)
         if [[ "$any" == true ]]; then
             [[ -n "$active" ]] || active="$saved"
-            [[ -n "$active" ]] && { printf '%s\n' "$active" > "$state.tmp"; mv -f "$state.tmp" "$state"; palette "$active" || true; }
+            if [[ -n "$active" ]]; then
+                printf '%s\n' "$active" > "$state.tmp"
+                mv -f "$state.tmp" "$state"
+                palette_file="${XDG_CACHE_HOME:-$HOME/.cache}/sparrow-shell/palette.json"
+                if [[ "$active" != "$saved" || ! -s "$palette_file" ]]; then
+                    palette "$active" || true
+                fi
+            fi
         fi
         exit 0 ;;
     recolor)

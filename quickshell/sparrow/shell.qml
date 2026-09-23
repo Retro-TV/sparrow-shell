@@ -53,6 +53,8 @@ ShellRoot {
     Component.onCompleted: {
         refresh();
         Devices.restore();
+        // Restore wallpapers independently of the lazily-created picker surface.
+        Walls.startSessionRestore();
 	void GameMode.active;
 	void Niri.focusedOutput;
         sessionEnvironment.running = true;

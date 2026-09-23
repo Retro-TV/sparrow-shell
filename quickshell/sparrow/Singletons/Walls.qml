@@ -32,10 +32,9 @@ Singleton {
     property string resolvedDir: ""
     readonly property string wpDir: Flags.wallpaperDir.length > 0 ? Flags.wallpaperDir
         : (resolvedDir.length > 0 ? resolvedDir : Quickshell.env("HOME") + "/Pictures/wallpapers")
-    readonly property string helperDir: Quickshell.env("HOME") + "/Projects/sparrow-shell/quickshell/sparrow/scripts"
     readonly property string thumbDir: (Quickshell.env("XDG_CACHE_HOME") || (Quickshell.env("HOME") + "/.cache")) + "/sparrow-shell/wallpaper-thumbs/"
-    readonly property string thumbScript: root.helperDir + "/wallpaper-thumbs.sh"
-    readonly property string setScript: root.helperDir + "/wallpaper.sh"
+    readonly property string thumbScript: Quickshell.shellPath("scripts/wallpaper-thumbs.sh")
+    readonly property string setScript: Quickshell.shellPath("scripts/wallpaper.sh")
     readonly property string stateFile: (Quickshell.env("XDG_STATE_HOME") || (Quickshell.env("HOME") + "/.local/state")) + "/sparrow-shell/wallpaper"
     readonly property string dirStateFile: (Quickshell.env("XDG_STATE_HOME") || (Quickshell.env("HOME") + "/.local/state")) + "/sparrow-shell/wallpaper-dir"
 

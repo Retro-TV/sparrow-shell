@@ -273,7 +273,7 @@ PillSurface {
         }
     }
 
-    readonly property string searchScript: Quickshell.env("HOME") + "/Projects/sparrow-shell/quickshell/sparrow/scripts/wallpaper-search.sh"
+    readonly property string searchScript: Quickshell.shellPath("scripts/wallpaper-search.sh")
 
     /**
      * Remote video previews. Qt's MediaPlayer chokes on streaming https, so

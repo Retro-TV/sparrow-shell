@@ -612,7 +612,8 @@ SettingsSurface {
             FieldRow {
                 id: nlModeRow
                 label: "Mode"
-                caption: "Off, always warm, or auto by time"
+                caption: NightLight.available ? "Off, always warm, or auto by time"
+                    : NightLight.unavailableReason
                 SettingsSeg {
                     s: root.s
                     options: root.nightModeOptions

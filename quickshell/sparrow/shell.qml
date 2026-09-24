@@ -55,8 +55,9 @@ ShellRoot {
         Devices.restore();
         // Restore wallpapers independently of the lazily-created picker surface.
         Walls.startSessionRestore();
-	void GameMode.active;
-	void Niri.focusedOutput;
+        // Probe and restore optional Night Light in the main session, not on UI open.
+        NightLight.probe();
+        void Niri.focusedOutput;
         sessionEnvironment.running = true;
     }
 
@@ -176,7 +177,6 @@ ShellRoot {
                 ScreenRec.quickChoosing = true;
             }
         }
-        function gameMode(mon: string): void { Flags.gameMode = !Flags.gameMode; }
         function sysmon(mon: string): void { root.toggleSurface(mon, "sysmon"); }
         function system(mon: string): void { root.toggleSurface(mon, "sysmon"); }
         function wallpaper(mon: string): void { root.toggleSurface(mon, "wallpaper"); }
@@ -206,16 +206,14 @@ ShellRoot {
             /** Trimming the reserved band below the pill's bottom lets windows climb, so App gap sets the pill-to-window air without touching the desktop gaps_out. */
             readonly property real reservedH: Math.max(0, restHeight + topGap - 12 * (1 - Flags.appGap) * s)
 
-            readonly property real gameBarH: 34 * s
-
             screen: modelData
             color: "transparent"
             exclusionMode: ExclusionMode.Normal
-            exclusiveZone: Flags.gameMode ? gameBarH : reservedH
+            exclusiveZone: reservedH
             aboveWindows: true
 
             anchors { top: true; left: true; right: true }
-            implicitHeight: Flags.gameMode ? gameBarH : reservedH
+            implicitHeight: reservedH
 
             mask: emptyReserve
             Region { id: emptyReserve }
@@ -388,7 +386,7 @@ ShellRoot {
                     readonly property real pad: 56 * overlay.s
                     readonly property bool swiping: pill.swipeX !== 0 || pill.swipeY !== 0
                     anchors.top: parent.top
-                    anchors.topMargin: (pill.mode === "game" ? 0 : overlay.topGap) - pad
+                    anchors.topMargin: overlay.topGap - pad
                     anchors.horizontalCenter: parent.horizontalCenter
                     width: pill.width + 2 * pad
                     height: pill.height + 2 * pad

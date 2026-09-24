@@ -16,6 +16,5 @@ singleton Cava Cava.qml
 singleton Spaces Spaces.qml
 singleton Players Players.qml
 singleton NightLight NightLight.qml
-singleton GameMode GameMode.qml
 singleton Peripherals Peripherals.qml
 singleton Niri 1.0 Niri.qml

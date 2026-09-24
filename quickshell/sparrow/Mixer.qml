@@ -70,6 +70,7 @@ PillSurface {
     readonly property var faders: {
         void brRep.count;
         void blLoader.item;
+        void vibLoader.item;
         var out = [];
         for (var i = 0; i < brRep.count; i++) {
             var f = brRep.itemAt(i);
@@ -78,7 +79,9 @@ PillSurface {
         }
         if (blLoader.item)
             out.push(blLoader.item);
-        out.push(vibFader, volFader, micFader);
+        if (vibLoader.item)
+            out.push(vibLoader.item);
+        out.push(volFader, micFader);
         return out;
     }
     readonly property bool surfaceHovered: hoverTracker.hovered
@@ -159,6 +162,22 @@ PillSurface {
 
     property real pendingVibrance: -1
     property int pendingBacklight: -1
+    property int previewBacklight: -1
+
+    Connections {
+        target: root
+        function onOpenChanged() {
+            if (root.open) {
+                Devices.detect()
+                NightLight.probe()
+            }
+        }
+    }
+
+    Connections {
+        target: Backlight
+        function onChanged() { root.previewBacklight = -1; }
+    }
 
     Timer {
         id: vibDebounce
@@ -186,6 +205,7 @@ PillSurface {
         id: chip
         property string glyph: ""
         property bool on: false
+        property bool interactive: true
         property string tipTitle: ""
         property string tipDesc: ""
         signal toggled()
@@ -210,8 +230,9 @@ PillSurface {
         }
         MouseArea {
             anchors.fill: parent
-            cursorShape: Qt.PointingHandCursor
-            onClicked: chip.toggled()
+            enabled: chip.interactive
+            cursorShape: chip.interactive ? Qt.PointingHandCursor : Qt.ArrowCursor
+            onClicked: if (chip.interactive) chip.toggled()
         }
 
         Tooltip {
@@ -334,17 +355,12 @@ PillSurface {
             }
             IconChip {
                 glyph: "sun"
-                on: Flags.nightLightMode !== "off"
+                on: NightLight.enabled
+                interactive: NightLight.available || Flags.nightLightMode !== "off"
                 tipTitle: "Night light"
-                tipDesc: "Warm the screen"
+                tipDesc: NightLight.available ? "Warm the screen"
+                    : NightLight.unavailableReason
                 onToggled: NightLight.setMode(Flags.nightLightMode === "off" ? "on" : "off")
-            }
-            IconChip {
-                glyph: "gamepad"
-                on: Flags.gameMode
-                tipTitle: "Game mode"
-                tipDesc: "Strip effects, quiet the desktop"
-                onToggled: Flags.gameMode = !Flags.gameMode
             }
         }
     }
@@ -526,7 +542,10 @@ PillSurface {
 
                 Process {
                     id: brRead
-                    command: ["timeout", "3", "ddcutil", "getvcp", "10", "--bus", brFader.modelData.bus, "--brief"]
+                    command: ["sh", "-c",
+                        'command -v ddcutil >/dev/null 2>&1 || exit 0; '
+                        + 'exec timeout 3 ddcutil getvcp 10 --bus "$1" --brief 2>/dev/null',
+                        "sh", brFader.modelData.bus]
                     running: true
                     stdout: StdioCollector {
                         onStreamFinished: {
@@ -541,7 +560,7 @@ PillSurface {
 
         Loader {
             id: blLoader
-            active: Devices.backlightPresent
+            active: Backlight.present && Devices.brightnessctlAvailable
             visible: active
             width: active ? faderRow.colW : 0
 
@@ -552,25 +571,35 @@ PillSurface {
                 subLabel: "Brightness"
                 subPersistent: false
                 focused: root.focusIndex === brRep.count
-                value: Devices.backlightPct / 100
-                valueLabel: Devices.backlightPct + "%"
-                onMoved: (v) => Devices.backlightPct = Math.max(1, Math.min(100, Math.round(v * 100)))
-                onCommitted: (v) => { root.pendingBacklight = Math.max(1, Math.min(100, Math.round(v * 100))); blDebounce.restart(); }
+                value: root.previewBacklight >= 0 ? root.previewBacklight / 100 : Backlight.brightness
+                valueLabel: (root.previewBacklight >= 0 ? root.previewBacklight : Math.round(Backlight.brightness * 100)) + "%"
+                onMoved: (v) => root.previewBacklight = Math.max(1, Math.min(100, Math.round(v * 100)))
+                onCommitted: (v) => {
+                    root.previewBacklight = Math.max(1, Math.min(100, Math.round(v * 100)));
+                    root.pendingBacklight = root.previewBacklight;
+                    blDebounce.restart();
+                }
             }
         }
 
-        VFader {
-            id: vibFader
-            width: faderRow.colW
-            s: root.s
-            icon: "monitor"
-            subLabel: "Vibrance"
-            subPersistent: false
-            focused: root.focusIndex === root.faderCount - 3
-            value: Devices.vibrance / 100
-            valueLabel: Devices.vibrance + "%"
-            onMoved: (v) => Devices.vibrance = Math.round(v * 100)
-            onCommitted: (v) => { root.pendingVibrance = v * 100; vibDebounce.restart(); }
+        Loader {
+            id: vibLoader
+            active: Devices.vibranceAvailable
+            visible: active
+            width: active ? faderRow.colW : 0
+
+            sourceComponent: VFader {
+                width: faderRow.colW
+                s: root.s
+                icon: "monitor"
+                subLabel: "Vibrance"
+                subPersistent: false
+                focused: root.focusIndex === root.faderCount - 3
+                value: Devices.vibrance / 100
+                valueLabel: Devices.vibrance + "%"
+                onMoved: (v) => Devices.vibrance = Math.round(v * 100)
+                onCommitted: (v) => { root.pendingVibrance = v * 100; vibDebounce.restart(); }
+            }
         }
         VFader {
             id: volFader

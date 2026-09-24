@@ -4,161 +4,170 @@ import Quickshell
 import Quickshell.Io
 
 /**
- * 灯 Night-light controller over hyprsunset, the Hyprland blue-light filter.
- * Off and On push straight to the running daemon over its IPC, so the screen
- * warms or clears at once with no service flicker. Scheduled mode writes a
- * two-profile hyprsunset.conf and restarts the service, handing the clock to the
- * daemon so the tint flips at the set times on its own and survives a logout.
- * The mode, warmth and the two times all live in Flags, so the pill and a fresh
- * login restore the same state. The service is enabled once at install, which is
- * why nothing here ever starts it; it is already up under the graphical session.
+ * Niri night-light controller. A managed wlsunset process applies the Wayland
+ * gamma-control protocol to every enabled output. The saved mode, temperature,
+ * and schedule remain in Flags; probing and startup restoration happen with
+ * the main shell, not when the settings surface is opened. Quickshell owns the
+ * process, so it is stopped on shell exit/reload and recreated from Flags.
  */
 Singleton {
     id: root
 
-    readonly property string confPath: Quickshell.env("HOME") + "/.config/hypr/hyprsunset.conf"
+    property bool binaryAvailable: false
+    property bool backendFailed: false
+    property bool restartPending: false
+    property string backendError: ""
+
+    readonly property bool available: binaryAvailable && !backendFailed
+    readonly property bool enabled: available && runner.running && root.shouldRun()
+    readonly property string unavailableReason: !binaryAvailable
+        ? "Unavailable — install wlsunset to apply color temperature"
+        : (backendFailed ? "Unavailable — wlsunset could not initialize for this session" : "Checking wlsunset")
 
     function clampTemp(t) {
         return Math.max(2200, Math.min(6000, Math.round(t)));
     }
 
-    function nowMin() {
-        var d = clock.date;
-        return d.getHours() * 60 + d.getMinutes();
-    }
-
-    /** True while the clock sits inside the on→off window, with the wrap past midnight handled. */
-    function windowOpen() {
-        var on = Flags.nightLightOnMin;
-        var off = Flags.nightLightOffMin;
-        var n = root.nowMin();
-        return on <= off ? (n >= on && n < off) : (n >= on || n < off);
-    }
-
     function hhmm(min) {
         var h = Math.floor(min / 60);
         var m = min % 60;
-        return h + ":" + (m < 10 ? "0" + m : m);
+        return (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m;
     }
 
-    /** hyprsunset.conf for the current Flags. Off and On are one all-day profile, Scheduled is two. */
-    function buildConf() {
-        var out = "max-gamma = 150\n\n";
-        if (Flags.nightLightMode === "scheduled") {
-            out += "profile {\n    time = " + root.hhmm(Flags.nightLightOnMin)
-                + "\n    temperature = " + root.clampTemp(Flags.nightLightTemp) + "\n}\n\n"
-                + "profile {\n    time = " + root.hhmm(Flags.nightLightOffMin)
-                + "\n    identity = true\n}\n";
-        } else if (Flags.nightLightMode === "on") {
-            out += "profile {\n    time = 0:00\n    temperature = "
-                + root.clampTemp(Flags.nightLightTemp) + "\n}\n";
-        } else {
-            out += "profile {\n    time = 0:00\n    identity = true\n}\n";
-        }
-        return out;
-    }
-
-    /** The IPC command the current mode and clock resolve to. */
-    function desiredCmd() {
-        var warm = Flags.nightLightMode === "on"
-            || (Flags.nightLightMode === "scheduled" && root.windowOpen());
-        return warm
-            ? ["hyprctl", "hyprsunset", "temperature", String(root.clampTemp(Flags.nightLightTemp))]
-            : ["hyprctl", "hyprsunset", "identity"];
+    function shouldRun() {
+        return Flags.nightLightMode === "on"
+            || (Flags.nightLightMode === "scheduled"
+                && Flags.nightLightOnMin !== Flags.nightLightOffMin);
     }
 
     /**
-     * Pushes the resolved state to the live daemon at once. A scrub tick that
-     * lands while the prior hyprctl is still running is folded into the trailing
-     * re-push in the process exit handler, so the final value always arrives.
+     * wlsunset interpolates low→high from sunrise to sunset. For a night
+     * interval, the warm value is low; for a daytime interval the endpoints
+     * are reversed so the same warm window remains exact. Duration zero keeps
+     * the previous immediate-on/off behavior.
      */
-    function pushLive() {
-        if (ipc.running)
+    function desiredCommand() {
+        if (!root.shouldRun())
+            return [];
+
+        var temp = root.clampTemp(Flags.nightLightTemp);
+        if (Flags.nightLightMode === "on") {
+            // Keep low/high distinct (wlsunset divides by their difference).
+            // Equal sunrise/sunset makes its calculated position stay at low
+            // all day, so the exact selected temperature is held continuously.
+            return ["wlsunset", "-t", String(temp), "-T", String(temp + 1),
+                    "-S", "00:00", "-s", "00:00", "-d", "0"];
+        }
+
+        var on = Flags.nightLightOnMin;
+        var off = Flags.nightLightOffMin;
+        if (on > off) {
+            // Overnight: warm from the configured sunset through sunrise.
+            return ["wlsunset", "-t", String(temp), "-T", "6500",
+                    "-S", root.hhmm(off), "-s", root.hhmm(on), "-d", "0"];
+        }
+
+        // Daytime interval: invert the endpoints so the configured interval is
+        // warm, matching the original windowOpen() behavior.
+        return ["wlsunset", "-t", "6500", "-T", String(temp),
+                "-S", root.hhmm(on), "-s", root.hhmm(off), "-d", "0"];
+    }
+
+    function sameCommand(a, b) {
+        return a.length === b.length && a.join("\u0000") === b.join("\u0000");
+    }
+
+    function probe() {
+        if (!binaryAvailable && !probeProcess.running)
+            probeProcess.running = true;
+    }
+
+    function sync() {
+        if (!root.binaryAvailable)
             return;
-        ipc.command = root.desiredCmd();
-        ipc.running = true;
+
+        var desired = root.desiredCommand();
+        if (runner.running) {
+            if (desired.length && root.sameCommand(runner.command, desired))
+                return;
+            root.restartPending = true;
+            runner.running = false;
+            return;
+        }
+
+        if (!desired.length)
+            return;
+
+        root.backendFailed = false;
+        root.backendError = "";
+        runner.command = desired;
+        runner.running = true;
     }
 
-    property bool pendingRestart: false
-
-    /**
-     * Persists conf for the next login and pushes live now. The conf write and
-     * the daemon re-arm are both debounced, so a scrub flurry collapses into one
-     * write and one restart.
-     */
-    function commit(restart) {
-        if (restart)
-            root.pendingRestart = true;
-        confTimer.restart();
-        root.pushLive();
+    function requestSync() {
+        if (Flags.nightLightMode === "off") {
+            configTimer.stop();
+            root.sync();
+        } else {
+            configTimer.restart();
+        }
     }
 
-    /**
-     * Re-arm is needed whenever scheduled sits on either side of the change, so
-     * the daemon never holds stale profiles that would override the new choice at
-     * the next clock boundary. Pure off↔on rides the IPC push alone, since its
-     * conf is a single all-day profile that only fires at 0:00.
-     */
-    function setMode(m) {
-        var was = Flags.nightLightMode;
-        Flags.nightLightMode = m;
-        root.commit(was === "scheduled" || m === "scheduled");
+    function setMode(mode) {
+        Flags.nightLightMode = mode;
+        root.requestSync();
     }
 
-    function setTemp(t) {
-        Flags.nightLightTemp = root.clampTemp(t);
-        root.commit(Flags.nightLightMode === "scheduled");
+    function setTemp(temp) {
+        Flags.nightLightTemp = root.clampTemp(temp);
+        root.requestSync();
     }
 
-    function setOnMin(v) {
-        Flags.nightLightOnMin = v;
-        root.commit(Flags.nightLightMode === "scheduled");
+    function setOnMin(value) {
+        Flags.nightLightOnMin = value;
+        root.requestSync();
     }
 
-    function setOffMin(v) {
-        Flags.nightLightOffMin = v;
-        root.commit(Flags.nightLightMode === "scheduled");
+    function setOffMin(value) {
+        Flags.nightLightOffMin = value;
+        root.requestSync();
     }
 
-    SystemClock {
-        id: clock
-        precision: SystemClock.Minutes
-    }
+    Component.onCompleted: root.probe()
 
-    FileView {
-        id: writer
-        path: root.confPath
-        atomicWrites: true
-        printErrors: false
+    Process {
+        id: probeProcess
+        command: ["sh", "-c",
+            "command -v wlsunset >/dev/null 2>&1 && printf 'available'"]
+        running: false
+        stdout: StdioCollector {
+            onStreamFinished: {
+                root.binaryAvailable = this.text.trim() === "available";
+                if (root.binaryAvailable)
+                    root.sync();
+            }
+        }
     }
 
     Process {
-        id: ipc
+        id: runner
         command: []
+        running: false
         onExited: {
-            var want = root.desiredCmd();
-            if (want.join(" ") !== ipc.command.join(" ")) {
-                ipc.command = want;
-                ipc.running = true;
+            if (root.restartPending) {
+                root.restartPending = false;
+                root.sync();
+            } else if (root.shouldRun()) {
+                root.backendFailed = true;
+                root.backendError = "wlsunset stopped unexpectedly";
+                console.warn("Sparrow Night Light: " + root.backendError);
             }
         }
     }
 
-    /** Debounced conf write, then a re-arm restart when a scheduled change asked for one. */
     Timer {
-        id: confTimer
+        id: configTimer
         interval: 250
-        onTriggered: {
-            writer.setText(root.buildConf());
-            if (root.pendingRestart) {
-                root.pendingRestart = false;
-                restartProc.running = true;
-            }
-        }
-    }
-
-    Process {
-        id: restartProc
-        command: ["systemctl", "--user", "restart", "hyprsunset"]
+        onTriggered: root.sync()
     }
 }

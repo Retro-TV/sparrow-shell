@@ -11,8 +11,8 @@ import Quickshell.Io
  * DDC monitors come from `ddcutil detect` (one brightness fader each); the
  * setvcp/getvcp wire format lives here so every caller speaks it the same.
  * The internal laptop backlight (eDP, no DDC/CI) is driven separately via
- * brightnessctl and gated on /sys/class/backlight being present, so a desktop
- * exposes nothing.
+ * brightnessctl. Backlight.present is the shared hardware-presence source used
+ * by the OSD and Mixer, while this singleton tracks the optional CLI backend.
  */
 Singleton {
     id: root
@@ -21,17 +21,17 @@ Singleton {
 
     property int vibrance: 40
 
+    /** Optional backends are probed through a shell so absent tools are not QML launch errors. */
+    property bool ddcutilAvailable: false
+    property bool brightnessctlAvailable: false
+    property bool vibranceAvailable: false
+    property bool pendingVibranceRestore: false
+
     /**
      * DDC-capable monitors from `ddcutil detect`: [{ bus, label }] with label
      * taken from the DRM connector, falling back to the I2C bus number.
      */
     property var ddcMonitors: []
-
-    /** True once an internal backlight has been found under /sys/class/backlight. */
-    property bool backlightPresent: false
-
-    /** Current internal-backlight level, 0..100. */
-    property int backlightPct: 75
 
     /**
      * Loads the persisted vibrance percent and applies it once, so the saved
@@ -42,8 +42,11 @@ Singleton {
         var raw = vibState.text();
         var v = parseInt((raw || "40").trim());
         root.vibrance = isNaN(v) ? 40 : v;
-        if (raw && raw.trim().length)
+        root.pendingVibranceRestore = !!(raw && raw.trim().length);
+        if (root.pendingVibranceRestore && root.vibranceAvailable) {
             applyVibrance(root.vibrance);
+            root.pendingVibranceRestore = false;
+        }
     }
 
     /**
@@ -51,6 +54,8 @@ Singleton {
      * persists it to the state file. `vibrance` mirrors the last set value.
      */
     function setVibrance(pct) {
+        if (!root.vibranceAvailable)
+            return;
         root.vibrance = Math.round(pct);
         applyVibrance(pct);
         saveVibrance(pct);
@@ -61,6 +66,8 @@ Singleton {
      * same value goes to every slot rather than guessing which ones are lit.
      */
     function applyVibrance(pct) {
+        if (!root.vibranceAvailable)
+            return;
         var raw = Math.round(Math.max(0, Math.min(100, pct)) * 1023 / 100);
         var args = ["nvibrant"];
         for (var i = 0; i < 16; i++)
@@ -75,11 +82,12 @@ Singleton {
     }
 
     function detect() {
-        ddcDetect.running = true;
-        blDetect.running = true;
+        toolsDetect.running = true;
     }
 
     function setBrightness(bus, pct) {
+        if (!root.ddcutilAvailable)
+            return;
         Quickshell.execDetached(["timeout", "3", "ddcutil", "setvcp", "10",
             String(pct), "--bus", bus, "--noverify"]);
     }
@@ -90,8 +98,10 @@ Singleton {
      * simply finds no device), and inert when brightnessctl is absent.
      */
     function setBacklight(pct) {
-        root.backlightPct = Math.round(Math.max(1, Math.min(100, pct)));
-        Quickshell.execDetached(["brightnessctl", "set", root.backlightPct + "%"]);
+        if (!root.brightnessctlAvailable || !Backlight.present)
+            return;
+        Quickshell.execDetached(["brightnessctl", "--class=backlight", "set",
+            Math.round(Math.max(1, Math.min(100, pct))) + "%"]);
     }
 
     /**
@@ -104,8 +114,33 @@ Singleton {
     }
 
     Process {
+        id: toolsDetect
+        command: ["sh", "-c",
+            'command -v ddcutil >/dev/null 2>&1 && echo ddcutil; '
+            + 'command -v brightnessctl >/dev/null 2>&1 && echo brightnessctl; '
+            + 'command -v nvibrant >/dev/null 2>&1 && [ -c /dev/nvidia-modeset ] && echo nvibrant']
+        running: false
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var found = this.text.trim().split(/\s+/);
+                root.ddcutilAvailable = found.indexOf("ddcutil") >= 0;
+                root.brightnessctlAvailable = found.indexOf("brightnessctl") >= 0;
+                root.vibranceAvailable = found.indexOf("nvibrant") >= 0;
+                if (root.ddcutilAvailable)
+                    ddcDetect.running = true;
+                else
+                    root.ddcMonitors = [];
+                if (root.vibranceAvailable && root.pendingVibranceRestore) {
+                    root.applyVibrance(root.vibrance);
+                    root.pendingVibranceRestore = false;
+                }
+            }
+        }
+    }
+
+    Process {
         id: ddcDetect
-        command: ["ddcutil", "detect", "--brief"]
+        command: ["sh", "-c", "ddcutil detect --brief 2>/dev/null"]
         running: false
         stdout: StdioCollector {
             onStreamFinished: {
@@ -118,21 +153,6 @@ Singleton {
                         mons.push({ bus: bus[1], label: conn ? conn[1] : "BUS " + bus[1] });
                 }
                 root.ddcMonitors = mons;
-            }
-        }
-    }
-
-    Process {
-        id: blDetect
-        command: ["sh", "-c", "dev=$(ls /sys/class/backlight 2>/dev/null | head -n1); [ -n \"$dev\" ] || exit 0; max=$(cat /sys/class/backlight/$dev/max_brightness); cur=$(cat /sys/class/backlight/$dev/brightness); echo \"$(( cur * 100 / max ))\""]
-        running: false
-        stdout: StdioCollector {
-            onStreamFinished: {
-                var v = parseInt(this.text.trim(), 10);
-                if (!isNaN(v)) {
-                    root.backlightPct = Math.max(1, Math.min(100, v));
-                    root.backlightPresent = true;
-                }
             }
         }
     }

@@ -44,11 +44,6 @@ Singleton {
     property alias idleSuspendMin: adapter.idleSuspendMin
     property alias weatherCity: adapter.weatherCity
     property alias musicViz: adapter.musicViz
-    property alias gameMode: adapter.gameMode
-    property alias gamePrevDnd: adapter.gamePrevDnd
-    property alias gamePrevViz: adapter.gamePrevViz
-    property alias gamePrevAwake: adapter.gamePrevAwake
-    property alias gamePrevProfile: adapter.gamePrevProfile
     property alias nightLightMode: adapter.nightLightMode
     property alias nightLightTemp: adapter.nightLightTemp
     property alias nightLightOnMin: adapter.nightLightOnMin
@@ -105,11 +100,6 @@ Singleton {
             property int idleSuspendMin: 0
             property string weatherCity: ""
             property bool musicViz: true
-            property bool gameMode: false
-            property bool gamePrevDnd: false
-            property bool gamePrevViz: true
-            property bool gamePrevAwake: false
-            property string gamePrevProfile: ""
             property string nightLightMode: "off"
             property int nightLightTemp: 4000
             property int nightLightOnMin: 1260

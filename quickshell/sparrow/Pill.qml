@@ -205,7 +205,7 @@ Item {
         : (toastActive && !held ? "toast"
         : (expanded ? "hover" : "rest"))))))
 
-    /** Multi-format file-drop state, live only while a file hovers the resting pill. */
+    /** Wallpaper file-drop state, live only while an image hovers the resting pill. */
     property bool dragActive: false
     property string dragName: ""
     property string dragStage: ""
@@ -755,8 +755,6 @@ Item {
         onTapped: pill.pinned = !pill.pinned
     }
 
-    property var installQueue: []
-
     function localPath(url) {
         var s = String(url);
         if (s.indexOf("file://") === 0)
@@ -764,101 +762,63 @@ Item {
         return decodeURIComponent(s);
     }
 
-    readonly property var dropExt: /\.(deb|rpm|flatpakref|zip|tgz|txz|tbz2|ttf|otf|png|jpe?g|webp)$|\.(pkg\.)?tar\.(gz|xz|bz2|zst)$/i
+    readonly property var wallpaperDropExt: /\.(png|jpe?g|webp)$/i
+    property var wallpaperDropQueue: []
+    property bool wallpaperDropSucceeded: false
+    property bool wallpaperDropFailed: false
 
-    function droppablePaths(urls) {
+    function wallpaperDropPaths(urls) {
         var out = [];
         for (var i = 0; i < urls.length; i++)
-            if (pill.dropExt.test(String(urls[i])))
+            if (pill.wallpaperDropExt.test(String(urls[i])))
                 out.push(pill.localPath(urls[i]));
         return out;
     }
 
     function dropLabel(urls) {
         var p = pill.localPath(urls.length ? urls[0] : "");
-        return p.substring(p.lastIndexOf("/") + 1).replace(pill.dropExt, "");
+        return p.substring(p.lastIndexOf("/") + 1).replace(pill.wallpaperDropExt, "");
     }
 
-    property bool installedAny: false
-    property bool installedApp: false
-    property bool installFailed: false
-    property string installKind: "app"
-    property string installAction: "new"
-    property string installLine: ""
-    property string installProto: ""
-    property string installPct: ""
-    property int installSeconds: 0
+    function startWallpaperDrop(sourcePath) {
+        pill.dragName = sourcePath.substring(sourcePath.lastIndexOf("/") + 1).replace(pill.wallpaperDropExt, "");
+        var context = Walls.contextArgs();
+        dropWallpaperProc.command = [
+            "bash", "-c",
+            "set -eu; dir=$1; src=$2; script=$3; focused=$4; outputs=$5; "
+            + "mkdir -p -- \"$dir\"; dest=\"$dir/${src##*/}\"; "
+            + "if [ \"$src\" != \"$dest\" ]; then cp -f -- \"$src\" \"$dest\"; fi; "
+            + "exec bash \"$script\" set \"$dest\" \"\" \"$focused\" \"$outputs\"",
+            "sparrow-wallpaper-drop", Walls.wpDir, sourcePath, Walls.setScript, context[0], context[1]
+        ];
+        dropWallpaperProc.running = true;
+    }
 
-    function runNextInstall() {
-        if (pill.installQueue.length === 0) {
-            pill.dragStage = pill.installedAny ? "done" : "fail";
-            (pill.installedAny ? dropDoneTimer : dropBadTimer).restart();
+    function runNextWallpaperDrop() {
+        if (pill.wallpaperDropQueue.length === 0) {
+            pill.dragStage = pill.wallpaperDropSucceeded
+                ? (pill.wallpaperDropFailed ? "partial" : "done") : "fail";
+            (pill.wallpaperDropSucceeded ? dropDoneTimer : dropBadTimer).restart();
             return;
         }
-        var next = pill.installQueue.shift();
-        pill.dragName = next.substring(next.lastIndexOf("/") + 1).replace(pill.dropExt, "");
-        pill.installLine = "";
-        pill.installProto = "";
-        pill.installPct = "";
-        installProc.command = ["bash", Quickshell.env("HOME") + "/.config/hypr/scripts/app-install.sh", "install", next];
-        installProc.running = true;
+        pill.startWallpaperDrop(pill.wallpaperDropQueue.shift());
     }
 
-    /**
-     * Streams installer stdout instead of collecting it: slow backends (flatpak
-     * runtime pulls, pacman) narrate their steps, and the drop face mirrors the
-     * newest line live. The machine-readable result is the one tab-separated
-     * kind-prefixed line, fished out of the stream as it passes.
-     */
     Process {
-        id: installProc
-        stdout: SplitParser {
-            onRead: (data) => {
-                var seg = data.split("\r").pop().replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "").trim();
-                if (seg.length === 0)
-                    return;
-                if (/^(app|native|font|wallpaper)\t/.test(seg)) {
-                    pill.installProto = seg;
-                } else {
-                    pill.installLine = seg;
-                    var pct = seg.match(/(\d{1,3})\s*%/);
-                    if (pct && Number(pct[1]) <= 100)
-                        pill.installPct = pct[1] + "%";
-                }
-            }
+        id: dropWallpaperProc
+        stderr: StdioCollector {
+            onStreamFinished: if (this.text.trim().length > 0)
+                console.warn("Sparrow wallpaper drop:", this.text.trim());
         }
-        onExited: (exitCode) => {
-            if (exitCode === 0 && pill.installProto.length > 0) {
-                pill.installedAny = true;
-                var parts = pill.installProto.split("\t");
-                pill.installKind = parts[0];
-                pill.installAction = parts[2];
-                if (parts[0] === "app" || parts[0] === "native")
-                    pill.installedApp = true;
-                if (parts[0] === "font" && parts.length >= 4)
-                    droppedFont.source = "file://" + parts[3];
+        onExited: function(exitCode) {
+            if (exitCode === 0) {
+                pill.wallpaperDropSucceeded = true;
+                Walls.refresh();
             } else {
-                pill.installFailed = true;
+                pill.wallpaperDropFailed = true;
             }
-            pill.runNextInstall();
+            pill.runNextWallpaperDrop();
         }
-    }
-
-    Timer {
-        interval: 1000
-        repeat: true
-        running: pill.dragStage === "installing"
-        onTriggered: pill.installSeconds++
-    }
-
-    /**
-     * Registers a just-dropped font in this running process; the fontconfig
-     * cache alone only reaches apps started later. Ready -> the font picker's
-     * family list refreshes and the new face shows up without a restart.
-     */
-    FontLoader {
-        id: droppedFont
-        onStatusChanged: if (status === FontLoader.Ready) Theme.refreshFonts()
     }
 
     Timer {
@@ -867,8 +827,6 @@ Item {
         onTriggered: {
             pill.dragActive = false;
             pill.dragStage = "";
-            if (pill.installedApp)
-                pill.requestSurface("launcher");
         }
     }
 
@@ -884,17 +842,18 @@ Item {
     /**
      * File drops land only on the resting pill; an open surface turns the pill
      * into a fullscreen modal that swallows the drag before it can start.
-     * app-install.sh routes each drop by type (apps install, fonts land in the
-     * font dir, images become the wallpaper), anything else flashes a rejection.
+     * Image drops are imported into Sparrow's configured wallpaper directory
+     * and applied through the same wallpaper backend as the picker and keybind.
      */
     DropArea {
         anchors.fill: parent
-        enabled: !pill.surfaceOpen && pill.dragStage !== "installing" && pill.dragStage !== "done"
+        enabled: !pill.surfaceOpen && pill.dragStage !== "applying"
+            && pill.dragStage !== "done" && pill.dragStage !== "partial"
         keys: ["text/uri-list"]
         onEntered: (drag) => {
             drag.acceptProposedAction();
             pill.dragActive = true;
-            pill.dragStage = pill.droppablePaths(drag.urls).length > 0 ? "hover" : "bad";
+            pill.dragStage = pill.wallpaperDropPaths(drag.urls).length > 0 ? "hover" : "bad";
             pill.dragName = pill.dropLabel(drag.urls);
         }
         onExited: {
@@ -905,7 +864,7 @@ Item {
         }
         onDropped: (drop) => {
             drop.acceptProposedAction();
-            var files = pill.droppablePaths(drop.urls);
+            var files = pill.wallpaperDropPaths(drop.urls);
             if (files.length === 0) {
                 pill.dragActive = true;
                 pill.dragStage = "bad";
@@ -914,23 +873,15 @@ Item {
                 return;
             }
             pill.dragActive = true;
-            pill.dragStage = "installing";
-            pill.installedAny = false;
-            pill.installedApp = false;
-            pill.installFailed = false;
-            pill.installKind = "app";
-            pill.installAction = "new";
-            pill.installSeconds = 0;
-            pill.installQueue = files;
-            pill.runNextInstall();
+            pill.dragStage = "applying";
+            pill.wallpaperDropQueue = files;
+            pill.wallpaperDropSucceeded = false;
+            pill.wallpaperDropFailed = false;
+            pill.runNextWallpaperDrop();
         }
     }
 
-    /**
-     * Drop-zone face: corner brackets frame a stage glyph and label that walk
-     * from "drop to install" through the spinner to a checkmark. Shares the morph
-     * fade of the other pill faces, so it grows in as the pill reaches its size.
-     */
+    /** Wallpaper-drop face: corner brackets frame the image and its apply status. */
     Item {
         id: dragOverView
         anchors.fill: parent
@@ -941,7 +892,7 @@ Item {
 
         Behavior on opacity { NumberAnimation { duration: Motion.standard; easing.type: Motion.easeStandard } }
 
-        readonly property color accent: (pill.dragStage === "bad" || pill.dragStage === "fail") ? "#e0533f" : Theme.vermLit
+        readonly property color accent: (pill.dragStage === "bad" || pill.dragStage === "fail" || pill.dragStage === "partial") ? "#e0533f" : Theme.vermLit
         readonly property real brLen: 15 * pill.s
         readonly property real brThick: 2 * pill.s
 
@@ -995,34 +946,28 @@ Item {
                     anchors.fill: parent
                     stroke: 2
                     color: dragOverView.accent
-                    name: (pill.dragStage === "bad" || pill.dragStage === "fail") ? "close"
-                        : (pill.dragStage === "installing" ? "reboot"
+                    name: (pill.dragStage === "bad" || pill.dragStage === "fail" || pill.dragStage === "partial") ? "close"
+                        : (pill.dragStage === "applying" ? "reboot"
                         : (pill.dragStage === "done" ? "check" : "download"))
 
                     RotationAnimation on rotation {
-                        running: pill.dragStage === "installing"
+                        running: pill.dragStage === "applying"
                         loops: Animation.Infinite
                         from: 0
                         to: 360
                         duration: 900
                     }
-                    onNameChanged: if (pill.dragStage !== "installing") rotation = 0
+                    onNameChanged: if (pill.dragStage !== "applying") rotation = 0
                 }
             }
 
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: pill.dragStage === "bad" ? "Can't install this"
-                    : (pill.dragStage === "fail" ? "Install failed"
-                    : (pill.dragStage === "installing" ? ("Installing"
-                        + (pill.installPct.length > 0 ? " " + pill.installPct : "")
-                        + (pill.installSeconds >= 3 ? "  " + Math.floor(pill.installSeconds / 60) + ":" + String(pill.installSeconds % 60).padStart(2, "0") : ""))
-                    : (pill.dragStage === "done" ? (pill.installFailed ? "Installed, some failed"
-                        : (!pill.installedApp && pill.installKind === "wallpaper" ? "Wallpaper set"
-                        : (!pill.installedApp && pill.installKind === "font" ? "Font installed"
-                        : (pill.installAction === "updated" ? "Updated"
-                        : (pill.installAction === "reinstalled" ? "Reinstalled" : "Installed")))))
-                    : "Drop to install")))
+                text: pill.dragStage === "bad" ? "Wallpaper images only"
+                    : (pill.dragStage === "fail" ? "Couldn't set wallpaper"
+                    : (pill.dragStage === "partial" ? "Some images failed"
+                    : (pill.dragStage === "applying" ? "Setting wallpaper"
+                    : (pill.dragStage === "done" ? "Wallpaper set" : "Drop to set wallpaper"))))
                 color: Theme.cream
                 font.family: Theme.font
                 font.pixelSize: 13 * pill.s
@@ -1033,7 +978,7 @@ Item {
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: parent.width
                 horizontalAlignment: Text.AlignHCenter
-                text: pill.dragStage === "installing" && pill.installLine.length > 0 ? pill.installLine : pill.dragName
+                text: pill.dragName
                 color: Theme.subtle
                 font.family: Theme.font
                 font.pixelSize: 11 * pill.s

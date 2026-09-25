@@ -58,14 +58,14 @@ Singleton {
     }
 
     /**
-     * Submit KDL for an explicitly Sparrow-managed fragment. The helper owns
-     * staging, validation, backups, atomic replacement, reload, and rollback.
-     * Callers receive the final status through managedFragmentWriteFinished.
-     * IDs, never filesystem paths, are accepted at this boundary.
+     * Submit content for an explicitly Sparrow-managed fragment. Most callers
+     * send constrained KDL; user-binds sends a curated ID-to-chord JSON map.
+     * The helper owns staging, validation, backups, atomic replacement, reload,
+     * and rollback. IDs, never filesystem paths, are accepted at this boundary.
      */
     function writeManagedFragment(fragmentId, content, confirm = false) {
         var requestId = ++configTransactionSerial;
-        var supported = ["generated-colors", "user-appearance", "display-outputs", "display-binds", "user-input"];
+        var supported = ["generated-colors", "user-appearance", "display-outputs", "display-binds", "user-input", "user-binds"];
         if (supported.indexOf(fragmentId) < 0 || typeof content !== "string"
                 || (confirm && fragmentId !== "display-outputs")) {
             Qt.callLater(function() {

@@ -15,14 +15,20 @@ var NAMED_KEYS = {
     0x01000012: "Left",
     0x01000013: "Up",
     0x01000014: "Right",
-    0x01000015: "Down"
+    0x01000015: "Down",
+    0x01000070: "XF86AudioLowerVolume",
+    0x01000071: "XF86AudioMute",
+    0x01000072: "XF86AudioRaiseVolume",
+    0x010000b2: "XF86MonBrightnessUp",
+    0x010000b3: "XF86MonBrightnessDown",
+    0x01000113: "XF86AudioMicMute"
 };
 
 var MOD_BITS = [
-    { mask: 0x10000000, name: "SUPER" },
-    { mask: 0x04000000, name: "CTRL" },
-    { mask: 0x08000000, name: "ALT" },
-    { mask: 0x02000000, name: "SHIFT" }
+    { mask: 0x10000000, name: "Super" },
+    { mask: 0x04000000, name: "Ctrl" },
+    { mask: 0x08000000, name: "Alt" },
+    { mask: 0x02000000, name: "Shift" }
 ];
 
 var MODIFIER_KEYS = {
@@ -60,15 +66,14 @@ function modNames(modifiers) {
 }
 
 /**
- * Turn a captured Qt keypress (key code + modifier bitmask) into the combo
- * string Binds.rebind/inUse expect, e.g. "SUPER + K". Returns null for a bare
- * modifier press (Super/Ctrl/Alt/Shift alone) so the caller keeps listening for
- * the final key.
+ * Turn a captured Qt keypress (key code + modifier bitmask) into a Niri 26.04
+ * key chord (for example, "Super+Shift+K"). Bare modifier
+ * presses are ignored so capture remains armed for the final key.
  */
-function chord(key, modifiers) {
+function niriChord(key, modifiers) {
     var k = keyName(key);
     if (k === null) return null;
     var parts = modNames(modifiers);
     parts.push(k);
-    return parts.join(" + ");
+    return parts.join("+");
 }

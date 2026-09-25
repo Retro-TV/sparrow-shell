@@ -20,6 +20,7 @@ candidate tree, including color-value semantics and KDL syntax.
 | `~/.config/niri/config.kdl` | User, hand-written | No |
 | `sparrow/appearance.kdl` | User, hand-written | No |
 | `sparrow/binds.kdl` | User, hand-written | No |
+| `sparrow/user-binds.kdl` | Sparrow Keybinds user overrides | Yes, ID `user-binds` |
 | `sparrow/window-rules.kdl` | User, hand-written | No |
 | `sparrow/generated-colors.kdl` | Sparrow-generated palette | Yes, ID `generated-colors` |
 | `sparrow/display-outputs.kdl` | Sparrow Display settings | Yes, ID `display-outputs` |
@@ -40,6 +41,18 @@ cannot accidentally replace another Sparrow setting. The transaction validator
 accepts only the keyboard, touchpad, mouse, touch, tablet, and focus-follows-mouse
 settings surfaced by Sparrow; output names and XKB layout codes are escaped as
 KDL strings and validated by the installed Niri parser before commit.
+
+`niri/sparrow/binds.kdl` in the repository is the portable default keymap;
+the installed `~/.config/niri/sparrow/binds.kdl` is its deployed copy.
+`user-binds.kdl` is optional and contains only changes to stable IDs in the
+Keybinds catalog. Quickshell submits a JSON ID-to-chord map, not arbitrary KDL
+or commands. The transaction helper obtains actions from the default bind file,
+rejects collisions with other curated shortcuts and generated display binds,
+then validates the complete staged config with Niri. Niri has no native bind
+unset directive, so moving a default chord installs a harmless `spawn "true"`
+binding at its former chord and binds the same curated action at the new chord.
+Resetting that action removes its override and restores the shipped default.
+Display shortcuts remain owned by Display and are not editable here.
 
 ## Transaction contract
 

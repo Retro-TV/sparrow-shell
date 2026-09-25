@@ -1,0 +1,65 @@
+// Sparrow's portable Niri 26.04 default keymap.
+// Display-number shortcuts are generated separately by Sparrow Display.
+binds {
+    // Applications.
+    Super+T hotkey-overlay-title="Open Kitty" { spawn "kitty"; }
+    Super+E hotkey-overlay-title="Open Thunar" { spawn "thunar"; }
+    Super+F hotkey-overlay-title="Open Firefox" { spawn "firefox"; }
+    Super+Alt+L hotkey-overlay-title="Lock session" { spawn-sh "\"$HOME/.config/quickshell/sparrow/scripts/sparrow-lock\""; }
+    Super+Shift+S hotkey-overlay-title="Screenshot with Rishot" { spawn-sh "\"$HOME/.local/bin/rishot\""; }
+    Super+D hotkey-overlay-title="Open Sparrow Recorder" { spawn-sh "qs ipc --path \"$HOME/.config/quickshell/sparrow\" call pill recorder ''"; }
+    Super+Space hotkey-overlay-title="Open Sparrow Launcher" { spawn-sh "qs ipc --path \"$HOME/.config/quickshell/sparrow\" call pill launcher ''"; }
+    Super+C hotkey-overlay-title="Open Sparrow Wallpaper Picker" { spawn-sh "qs ipc --path \"$HOME/.config/quickshell/sparrow\" call pill wallpaper ''"; }
+    Super+B hotkey-overlay-title="Next Sparrow Wallpaper" { spawn-sh "qs ipc --path \"$HOME/.config/quickshell/sparrow\" call pill nextWallpaper"; }
+    Super+Q { close-window; }
+    Super+W { toggle-window-floating; }
+
+    // Hardware controls remain available while locked.
+    XF86AudioRaiseVolume allow-when-locked=true { spawn-sh "wpctl set-volume @DEFAULT_AUDIO_SINK@ 0.1+ -l 1.0"; }
+    XF86AudioLowerVolume allow-when-locked=true { spawn-sh "wpctl set-volume @DEFAULT_AUDIO_SINK@ 0.1-"; }
+    XF86AudioMute allow-when-locked=true { spawn-sh "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"; }
+    XF86AudioMicMute allow-when-locked=true { spawn-sh "wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle"; }
+    XF86MonBrightnessUp allow-when-locked=true { spawn "brightnessctl" "--class=backlight" "set" "+10%"; }
+    XF86MonBrightnessDown allow-when-locked=true { spawn "brightnessctl" "--class=backlight" "set" "10%-"; }
+
+    // Normal workspaces: move only the focused window, not its column.
+    Super+1 { focus-workspace 1; }
+    Super+2 { focus-workspace 2; }
+    Super+3 { focus-workspace 3; }
+    Super+4 { focus-workspace 4; }
+    Super+5 { focus-workspace 5; }
+    Super+6 { focus-workspace 6; }
+    Super+7 { focus-workspace 7; }
+    Super+8 { focus-workspace 8; }
+    Super+9 { focus-workspace 9; }
+    Super+Shift+1 { move-window-to-workspace 1; }
+    Super+Shift+2 { move-window-to-workspace 2; }
+    Super+Shift+3 { move-window-to-workspace 3; }
+    Super+Shift+4 { move-window-to-workspace 4; }
+    Super+Shift+5 { move-window-to-workspace 5; }
+    Super+Shift+6 { move-window-to-workspace 6; }
+    Super+Shift+7 { move-window-to-workspace 7; }
+    Super+Shift+8 { move-window-to-workspace 8; }
+    Super+Shift+9 { move-window-to-workspace 9; }
+
+    // Existing scrolling-layout navigation.
+    Super+O { toggle-overview; }
+    Super+Left { focus-column-left; }
+    Super+Down { focus-window-down; }
+    Super+Up { focus-window-up; }
+    Super+Right { focus-column-right; }
+    Super+Shift+Left { move-column-left; }
+    Super+Shift+Right { move-column-right; }
+    Super+Shift+Down { move-window-down; }
+    Super+Shift+Up { move-window-up; }
+    Super+Ctrl+Left { consume-or-expel-window-left; }
+    Super+Ctrl+Right { consume-or-expel-window-right; }
+    Super+Tab { toggle-column-tabbed-display; }
+    Super+V { switch-focus-between-floating-and-tiling; }
+    Super+R { switch-preset-column-width; }
+    Super+Shift+R { switch-preset-window-height; }
+    Super+Ctrl+R { reset-window-height; }
+    Super+M { maximize-column; }
+    Super+Shift+F { fullscreen-window; }
+    Super+Escape allow-inhibiting=false { toggle-keyboard-shortcuts-inhibit; }
+}

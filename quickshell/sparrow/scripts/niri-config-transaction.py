@@ -34,6 +34,7 @@ MANAGED_FRAGMENTS = {
     "display-outputs": Path("sparrow/display-outputs.kdl"),
     "display-binds": Path("sparrow/display-binds.kdl"),
     "user-input": Path("sparrow/user-input.kdl"),
+    "user-binds": Path("sparrow/user-binds.kdl"),
 }
 BACKUP_PREFIX = "niri-transaction-"
 BACKUP_LIMIT = 20
@@ -42,6 +43,37 @@ DISPLAY_CONFIRM_SECONDS = 15
 INCLUDE_RE = re.compile(r'^\s*include\s+(?:optional=true\s+)?(?P<path>r#+".*?"#+|"(?:\\.|[^"\\])*")\s*(?://.*)?$')
 COLOR_LINE_RE = re.compile(r'        (?:active|inactive)-color "[^"\\\r\n]*"\Z')
 KDL_STRING_RE = r'"(?:\\.|[^"\\])*"'
+
+# Stable IDs and shipped key assignments for the curated Keybinds surface.
+# Actions are copied from the tracked/default KDL bind file, never supplied by
+# the UI. User input is only a map from these IDs to a validated key chord.
+KEYBIND_DEFAULTS = {
+    "kitty": "Super+T", "thunar": "Super+E", "firefox": "Super+F",
+    "lock": "Super+Alt+L", "screenshot": "Super+Shift+S", "recorder": "Super+D",
+    "launcher": "Super+Space", "wallpaper-picker": "Super+C", "wallpaper-next": "Super+B",
+    "close": "Super+Q", "floating": "Super+W",
+    "volume-up": "XF86AudioRaiseVolume", "volume-down": "XF86AudioLowerVolume",
+    "volume-mute": "XF86AudioMute", "mic-mute": "XF86AudioMicMute",
+    "brightness-up": "XF86MonBrightnessUp", "brightness-down": "XF86MonBrightnessDown",
+    **{f"workspace-{i}": f"Super+{i}" for i in range(1, 10)},
+    **{f"move-workspace-{i}": f"Super+Shift+{i}" for i in range(1, 10)},
+    "overview": "Super+O", "focus-left": "Super+Left", "focus-down": "Super+Down",
+    "focus-up": "Super+Up", "focus-right": "Super+Right",
+    "move-column-left": "Super+Shift+Left", "move-column-right": "Super+Shift+Right",
+    "move-window-down": "Super+Shift+Down", "move-window-up": "Super+Shift+Up",
+    "consume-left": "Super+Ctrl+Left", "consume-right": "Super+Ctrl+Right",
+    "tabbed": "Super+Tab", "focus-floating-tiling": "Super+V",
+    "column-width": "Super+R", "window-height": "Super+Shift+R",
+    "reset-height": "Super+Ctrl+R", "maximize-column": "Super+M",
+    "fullscreen": "Super+Shift+F", "inhibit": "Super+Escape",
+}
+CHORD_RE = re.compile(r"^(?:(?:Super|Ctrl|Alt|Shift)\+)*(?:[A-Za-z][A-Za-z0-9_-]*|[0-9])$")
+NIRI_NAMED_KEYS = {
+    "Space", "Left", "Right", "Up", "Down", "Tab", "Escape", "Return", "Enter",
+    "Insert", "Delete", "Home", "End", "PageUp", "PageDown", "period", "comma",
+    "slash", "backslash", "semicolon", "apostrophe", "grave", "bracketleft",
+    "bracketright", "minus", "equal", "Print",
+}
 
 
 def _niri_config_path(env: dict[str, str]) -> Path:
@@ -278,6 +310,42 @@ def _safe_user_input(content: str) -> bool:
     return True
 
 
+def _parse_user_bind_overrides(content: str) -> Optional[dict[str, str]]:
+    """Accept only a JSON mapping of curated action IDs to Niri key chords."""
+    try:
+        values = json.loads(content)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(values, dict) or len(values) > len(KEYBIND_DEFAULTS):
+        return None
+    result: dict[str, str] = {}
+    seen: set[str] = set()
+    for bind_id, chord in values.items():
+        if bind_id not in KEYBIND_DEFAULTS or not isinstance(chord, str) or not _valid_key_chord(chord):
+            return None
+        if chord == KEYBIND_DEFAULTS[bind_id] or chord in seen:
+            return None
+        seen.add(chord)
+        result[bind_id] = chord
+    return result
+
+
+def _valid_key_chord(chord: str) -> bool:
+    if not CHORD_RE.fullmatch(chord):
+        return False
+    parts = chord.split("+")
+    modifiers, key = parts[:-1], parts[-1]
+    order = {"Super": 0, "Ctrl": 1, "Alt": 2, "Shift": 3}
+    return (
+        bool(modifiers)
+        and len(set(modifiers)) == len(modifiers)
+        and all(modifier in order for modifier in modifiers)
+        and modifiers == sorted(modifiers, key=order.__getitem__)
+        and (len(key) == 1 or key in NIRI_NAMED_KEYS or key.startswith("XF86")
+             or key.startswith("F") and key[1:].isdigit())
+    )
+
+
 class ConfigTransaction:
     """Filesystem transaction implementation; callers pass IDs, never paths."""
 
@@ -297,9 +365,52 @@ class ConfigTransaction:
     def _run(self, args: list[str], timeout: int) -> subprocess.CompletedProcess[str]:
         return self.command_runner(args, text=True, capture_output=True, timeout=timeout, check=False)
 
+    def _render_user_binds(self, content: str) -> str:
+        overrides = _parse_user_bind_overrides(content)
+        if overrides is None:
+            raise ValueError("shortcut overrides are malformed or outside Sparrow's curated actions")
+        default_file = self.config_root / "sparrow" / "binds.kdl"
+        if not default_file.is_file() or default_file.is_symlink():
+            raise ValueError("Sparrow default binds.kdl is missing or unsafe")
+        source_lines = default_file.read_text(encoding="utf-8").splitlines()
+        actions: dict[str, str] = {}
+        for bind_id, default_chord in KEYBIND_DEFAULTS.items():
+            matches = [line.strip() for line in source_lines
+                       if line.strip().startswith(default_chord + " ") and "{" in line and line.rstrip().endswith("}")]
+            if len(matches) != 1:
+                raise ValueError(f"default shortcut {bind_id} must have exactly one bind in Sparrow binds.kdl")
+            actions[bind_id] = matches[0][len(default_chord):].strip()
+
+        occupied = {chord: bind_id for bind_id, chord in KEYBIND_DEFAULTS.items() if bind_id not in overrides}
+        display_chords: set[str] = set()
+        display_file = self.config_root / "sparrow" / "display-binds.kdl"
+        if display_file.is_file() and not display_file.is_symlink():
+            for line in display_file.read_text(encoding="utf-8").splitlines():
+                match = re.match(r"^\s*(Super(?:\+Shift)?\+F[0-9]+)\s", line)
+                if match:
+                    display_chords.add(match.group(1))
+        for bind_id, chord in overrides.items():
+            if chord in occupied:
+                raise ValueError(f"{chord} is already assigned to {occupied[chord]}")
+            if chord in display_chords:
+                raise ValueError(f"{chord} is reserved for a generated display shortcut")
+            occupied[chord] = bind_id
+
+        lines = ["// Generated by Sparrow Keybinds; do not edit.", "binds {"]
+        for bind_id in KEYBIND_DEFAULTS:
+            chord = overrides.get(bind_id)
+            if not chord:
+                continue
+            default_chord = KEYBIND_DEFAULTS[bind_id]
+            lines.append(f"    // override: {bind_id} = {chord}")
+            lines.append(f"    {chord} {actions[bind_id]}")
+            lines.append(f'    {default_chord} {{ spawn "true"; }}')
+        lines.append("}")
+        return "\n".join(lines) + "\n"
+
     @staticmethod
     def _safe_fragment_payload(fragment_id: str, content: str) -> bool:
-        """Constrain each generated fragment to its documented Niri subset."""
+        """Constrain generated KDL and the Keybinds UI's ID/chord payload."""
         if fragment_id == "user-appearance":
             return _safe_user_appearance(content)
         if fragment_id == "display-outputs":
@@ -308,6 +419,8 @@ class ConfigTransaction:
             return _safe_display_binds(content)
         if fragment_id == "user-input":
             return _safe_user_input(content)
+        if fragment_id == "user-binds":
+            return _parse_user_bind_overrides(content) is not None
         if fragment_id != "generated-colors":
             return False
         allowed = {
@@ -475,6 +588,14 @@ class ConfigTransaction:
             return {"status": "invalid_request", "message": "fragment exceeds the 1 MiB safety limit"}
         if not self._safe_fragment_payload(fragment_id, content):
             return {"status": "invalid_content", "message": f"{fragment_id} content is outside Sparrow's restricted generated syntax"}
+        if fragment_id == "user-binds":
+            try:
+                content = self._render_user_binds(content)
+            except (OSError, UnicodeError, ValueError) as exc:
+                return {"status": "invalid_content", "message": str(exc)}
+            encoded = content.encode("utf-8")
+            if len(encoded) > MAX_CONTENT_BYTES:
+                return {"status": "invalid_request", "message": "rendered shortcut fragment exceeds the 1 MiB safety limit"}
 
         fragment_rel = MANAGED_FRAGMENTS[fragment_id]
         target = self.config_root / fragment_rel

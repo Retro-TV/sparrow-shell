@@ -59,9 +59,6 @@ Item {
     readonly property bool batteryOpen: surface === "battery"
     readonly property bool settingsOpen: surface === "settings"
     readonly property bool keybindsOpen: surface === "keybinds"
-    readonly property bool workspacesOpen: surface === "workspaces"
-    readonly property bool stashOpen: surface === "stash"
-    readonly property bool spaceappsOpen: surface === "spaceapps"
     readonly property bool recorderOpen: surface === "recorder"
     readonly property bool sysmonOpen: surface === "sysmon"
     readonly property bool appearanceOpen: surface === "appearance"
@@ -111,12 +108,6 @@ Item {
      */
     readonly property bool authPending: updatesOpen && ldUpdates.item !== null && ldUpdates.item.applying
 
-    /**
-     * The special workspace shown on this pill's monitor, surfaced as a plain word
-     * in place of the clock so it is obvious you are looking at the minimized stash
-     * or the private space rather than your real desktop. Empty in the normal case.
-     */
-    readonly property string specialView: ""
     readonly property bool toastActive: Notifs.popups.length > 0
     readonly property bool osdActive: osd.flashing
 
@@ -150,9 +141,6 @@ Item {
     readonly property real btW: 286 * s
     readonly property real settingsW: 392 * s
     readonly property real keybindsW: 460 * s
-    readonly property real workspacesW: 392 * s
-    readonly property real stashW: 392 * s
-    readonly property real spaceappsW: 392 * s
     readonly property real recorderW: 384 * s
     readonly property real sysmonW: 392 * s
     readonly property real appearanceW: 392 * s
@@ -209,9 +197,6 @@ Item {
         battery:   { size: () => Qt.size(batteryW, surfaceItem(ldBattery).implicitHeight + 26 * s), ame: () => surfaceItem(ldBattery) },
         settings:  { size: () => Qt.size(settingsW, surfaceItem(ldSettings).implicitHeight + 29 * s), ame: () => surfaceItem(ldSettings) },
         keybinds:  { size: () => Qt.size(keybindsW, surfaceItem(ldKeybinds).implicitHeight + 29 * s), ame: () => surfaceItem(ldKeybinds) },
-        workspaces: { size: () => Qt.size(workspacesW, surfaceItem(ldWorkspaces).implicitHeight + 29 * s), ame: () => surfaceItem(ldWorkspaces) },
-        stash:     { size: () => Qt.size(stashW, surfaceItem(ldStash).implicitHeight + 29 * s), ame: () => surfaceItem(ldStash) },
-        spaceapps: { size: () => Qt.size(spaceappsW, surfaceItem(ldSpaceapps).implicitHeight + 29 * s), ame: () => surfaceItem(ldSpaceapps) },
         recorder:  { size: () => Qt.size(recorderW, surfaceItem(ldRecorder).implicitHeight + 33 * s), ame: () => surfaceItem(ldRecorder) },
         sysmon:    { size: () => Qt.size(sysmonW, surfaceItem(ldSysmon).implicitHeight + 33 * s), ame: () => surfaceItem(ldSysmon) },
         appearance: { size: () => Qt.size(appearanceW, surfaceItem(ldAppearance).implicitHeight + 29 * s), ame: () => surfaceItem(ldAppearance) },
@@ -389,25 +374,7 @@ Item {
             pill.requestSurface("appearance");
             return;
         }
-        if (pill.stashOpen) {
-            if (ldStash.item && ldStash.item.addOpen)
-                ldStash.item.closeAdd();
-            else
-                pill.requestSurface("workspaces");
-            return;
-        }
-        if (pill.spaceappsOpen) {
-            if (ldSpaceapps.item && ldSpaceapps.item.addOpen)
-                ldSpaceapps.item.closeAdd();
-            else
-                pill.requestSurface("workspaces");
-            return;
-        }
-        if (pill.workspacesOpen && ldWorkspaces.item && ldWorkspaces.item.formOpen) {
-            ldWorkspaces.item.closeForm();
-            return;
-        }
-        if (pill.appearanceOpen || pill.updatesOpen || pill.displayOpen || pill.inputOpen || pill.lookOpen || pill.idlelockOpen || pill.workspacesOpen) {
+        if (pill.appearanceOpen || pill.updatesOpen || pill.displayOpen || pill.inputOpen || pill.lookOpen || pill.idlelockOpen) {
             pill.requestSurface("settings");
             return;
         }
@@ -1103,7 +1070,6 @@ Item {
             spacing: 9 * pill.s
             Item {
                 id: restKanji
-                visible: pill.specialView === ""
                 anchors.verticalCenter: parent.verticalCenter
                 width: kanjiFill.implicitWidth
                 height: kanjiFill.implicitHeight
@@ -1157,7 +1123,6 @@ Item {
                 }
             }
             Text {
-                visible: pill.specialView === ""
                 anchors.verticalCenter: parent.verticalCenter
                 text: clock.hhmm
                 color: Theme.cream
@@ -1165,15 +1130,6 @@ Item {
                 font.pixelSize: 16 * pill.s
                 font.weight: Font.DemiBold
                 font.features: { "tnum": 1 }
-            }
-            Text {
-                visible: pill.specialView !== ""
-                anchors.verticalCenter: parent.verticalCenter
-                text: pill.specialView
-                color: Theme.cream
-                font.family: Theme.font
-                font.pixelSize: 16 * pill.s
-                font.weight: Font.DemiBold
             }
         }
     }
@@ -1298,24 +1254,6 @@ Item {
                         font.weight: Font.Medium
                         font.features: { "tnum": 1 }
                     }
-                }
-
-                MinimizedTray {
-                    id: minimized
-                    anchors.verticalCenter: parent.verticalCenter
-                    s: pill.s
-                    screenName: pill.screenName
-                    enabled: hover.live
-                    visible: count > 0
-                }
-
-                Rectangle {
-                    anchors.verticalCenter: parent.verticalCenter
-                    visible: minimized.count > 0
-                    width: 1
-                    height: 14 * pill.s
-                    color: Theme.hair
-                    opacity: 0.7
                 }
 
                 Tray {
@@ -1855,45 +1793,6 @@ Item {
         sourceComponent: Keybinds {
             s: pill.s
             open: pill.keybindsOpen
-            morphCloseness: pill.morphCloseness
-            onRequestClose: pill.requestClose()
-            onRequestSurface: (name) => pill.requestSurface(name)
-        }
-    }
-
-    Loader {
-        id: ldWorkspaces
-        active: false
-        anchors.fill: parent
-        sourceComponent: WorkspacesSurface {
-            s: pill.s
-            open: pill.workspacesOpen
-            morphCloseness: pill.morphCloseness
-            onRequestClose: pill.requestClose()
-            onRequestSurface: (name) => pill.requestSurface(name)
-        }
-    }
-
-    Loader {
-        id: ldStash
-        active: false
-        anchors.fill: parent
-        sourceComponent: Stash {
-            s: pill.s
-            open: pill.stashOpen
-            morphCloseness: pill.morphCloseness
-            onRequestClose: pill.requestClose()
-            onRequestSurface: (name) => pill.requestSurface(name)
-        }
-    }
-
-    Loader {
-        id: ldSpaceapps
-        active: false
-        anchors.fill: parent
-        sourceComponent: SpaceApps {
-            s: pill.s
-            open: pill.spaceappsOpen
             morphCloseness: pill.morphCloseness
             onRequestClose: pill.requestClose()
             onRequestSurface: (name) => pill.requestSurface(name)

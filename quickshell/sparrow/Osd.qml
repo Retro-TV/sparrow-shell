@@ -82,7 +82,7 @@ Item {
      * switch feels instant, then the cooldown mutes the burst that hovering the
      * YouTube grid throws off. Anything that lands during the cooldown, or while
      * the OSD is suppressed (a surface open, the pill pinned), stays `dirty` and
-     * fires when the gate opens, so the stashed-player flash still replays.
+     * fires when the gate opens, so the deferred player flash still replays.
      */
     function tryShow() {
         if (cooling)

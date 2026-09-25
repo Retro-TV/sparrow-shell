@@ -13,8 +13,17 @@ ShellRoot {
     property bool screenOffRequested: false
 
     function dispatchLock(operation: string): void {
-        lockProcess.command = [root.lockTrigger, operation];
-        lockProcess.running = true;
+        var process = operation === "lock" ? lockProcess
+            : operation === "power-off" ? screenOffProcess
+            : operation === "suspend" ? suspendProcess : null;
+
+        if (!process) {
+            console.error("Sparrow idle: unknown action", operation);
+            return;
+        }
+
+        process.command = [root.lockTrigger, operation];
+        process.running = true;
     }
 
     function wakeOutputs(): void {
@@ -59,7 +68,23 @@ ShellRoot {
         id: lockProcess
         onExited: (exitCode, exitStatus) => {
             if (exitCode !== 0)
-                console.error("Sparrow idle: lock/power action failed", exitCode, exitStatus);
+                console.error("Sparrow idle: lock action failed", exitCode, exitStatus);
+        }
+    }
+
+    Process {
+        id: screenOffProcess
+        onExited: (exitCode, exitStatus) => {
+            if (exitCode !== 0)
+                console.error("Sparrow idle: screen-off action failed", exitCode, exitStatus);
+        }
+    }
+
+    Process {
+        id: suspendProcess
+        onExited: (exitCode, exitStatus) => {
+            if (exitCode !== 0)
+                console.error("Sparrow idle: suspend action failed", exitCode, exitStatus);
         }
     }
 }

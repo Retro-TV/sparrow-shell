@@ -33,6 +33,8 @@ PillSurface {
     property int holdingIndex: -1
     property real holdProgress: 0
 
+    readonly property string lockScript: Quickshell.shellPath("scripts/sparrow-lock")
+
     readonly property real anchorX: tiles.x + tiles.width / 2
     readonly property real anchorY: tiles.y - 10 * root.s
     property real tileHeatX: 0
@@ -47,9 +49,9 @@ PillSurface {
     amePoint: Qt.point(heatX, heatY)
 
     readonly property var actions: [
-        { key: "lock",     glyph: "lock",     label: "Lock",     confirm: false, argv: [Quickshell.env("HOME") + "/Projects/sparrow-shell/quickshell/sparrow/scripts/sparrow-lock", "lock"] },
+        { key: "lock",     glyph: "lock",     label: "Lock",     confirm: false, argv: [root.lockScript, "lock"] },
         { key: "logout",   glyph: "logout",   label: "Logout",   confirm: true,  argv: ["niri", "msg", "action", "quit", "--skip-confirmation"] },
-        { key: "suspend",  glyph: "suspend",  label: "Sleep",    confirm: false, argv: [Quickshell.env("HOME") + "/Projects/sparrow-shell/quickshell/sparrow/scripts/sparrow-lock", "suspend"] },
+        { key: "suspend",  glyph: "suspend",  label: "Sleep",    confirm: false, argv: [root.lockScript, "suspend"] },
         { key: "reboot",   glyph: "reboot",   label: "Restart",  confirm: true,  dispatch: "",             argv: ["systemctl", "reboot"] },
         { key: "shutdown", glyph: "shutdown", label: "Shutdown", confirm: true,  dispatch: "",             argv: ["systemctl", "poweroff"] }
     ]

@@ -45,11 +45,6 @@ PillSurface {
         root.calcCopied = true;
     }
 
-    /** Row index currently in AppImage edit mode (rename plus armed delete), -1 when none. */
-    property int editIndex: -1
-
-    readonly property string appimageScript: Quickshell.env("HOME") + "/.config/hypr/scripts/app-install.sh"
-
     function launch(entry) {
         if (!entry || !entry.id) {
             console.warn("Sparrow launcher: selected desktop entry has no ID");
@@ -67,12 +62,6 @@ PillSurface {
         launchProcess.running = true;
         return true;
     }
-
-    function appimageSlug(entry) {
-        return entry && entry.id && entry.id.indexOf("ricelin-") === 0 ? entry.id.substring(8) : "";
-    }
-
-    Process { id: appimageProc }
 
     /**
      * Window-coordinate position of the last hover event that was allowed to
@@ -178,7 +167,6 @@ PillSurface {
     onResultsChanged: {
         if (selectedIndex >= results.length)
             selectedIndex = 0;
-        editIndex = -1;
     }
 
     FileView {
@@ -311,8 +299,7 @@ PillSurface {
         anchors.topMargin: 6 * root.s
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.bottom: hint.visible ? hint.top : parent.bottom
-        anchors.bottomMargin: hint.visible ? 4 * root.s : 0
+        anchors.bottom: parent.bottom
         spacing: 5 * root.s
         clip: true
         boundsBehavior: Flickable.StopAtBounds
@@ -326,10 +313,6 @@ PillSurface {
 
             readonly property var entry: root.results[index]
             readonly property bool selected: index === root.selectedIndex
-            readonly property bool isAppImage: entry && entry.id && entry.id.indexOf("ricelin-") === 0
-            readonly property bool editing: root.editIndex === index && isAppImage
-            property bool armed: false
-            onEditingChanged: if (!editing) armed = false
 
             readonly property string secondary: {
                 if (!entry)
@@ -354,7 +337,7 @@ PillSurface {
                 id: rowArea
                 anchors.fill: parent
                 hoverEnabled: true
-                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                acceptedButtons: Qt.LeftButton
                 cursorShape: Qt.PointingHandCursor
                 onPositionChanged: (m) => {
                     var g = rowArea.mapToItem(null, m.x, m.y);
@@ -363,14 +346,7 @@ PillSurface {
                         root.selectedIndex = appRow.index;
                     }
                 }
-                onClicked: (m) => {
-                    if (m.button === Qt.RightButton) {
-                        if (appRow.isAppImage)
-                            root.editIndex = appRow.editing ? -1 : appRow.index;
-                        return;
-                    }
-                    if (appRow.editing)
-                        return;
+                onClicked: {
                     root.selectedIndex = appRow.index;
                     root.activate();
                 }
@@ -403,7 +379,7 @@ PillSurface {
                         if (!appRow.entry || !appRow.entry.icon)
                             return "";
                         var ic = appRow.entry.icon;
-                        if (appRow.isAppImage && ic.indexOf("/") === 0)
+                        if (ic.indexOf("/") === 0)
                             return "file://" + ic;
                         return Quickshell.iconPath(ic, true);
                     }
@@ -423,40 +399,9 @@ PillSurface {
                     color: Theme.vermLit
                     font.family: Theme.font
                     font.pixelSize: 12 * root.s
-                    visible: appRow.selected && !appRow.editing
+                    visible: appRow.selected
                     width: visible ? retMetrics.advanceWidth + 6 * root.s : 0
                     horizontalAlignment: Text.AlignRight
-                }
-
-                GlyphIcon {
-                    id: trashGlyph
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.right: parent.right
-                    width: appRow.editing ? 16 * root.s : 0
-                    height: 16 * root.s
-                    visible: appRow.editing
-                    stroke: 2
-                    name: "trash"
-                    color: appRow.armed ? "#e0533f" : Theme.dim
-
-                    MouseArea {
-                        anchors.fill: parent
-                        anchors.margins: -6 * root.s
-                        enabled: appRow.editing
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            if (!appRow.armed) {
-                                appRow.armed = true;
-                                return;
-                            }
-                            var slug = root.appimageSlug(appRow.entry);
-                            if (slug) {
-                                appimageProc.command = ["bash", root.appimageScript, "remove", slug];
-                                appimageProc.running = true;
-                            }
-                            root.editIndex = -1;
-                        }
-                    }
                 }
 
                 /**
@@ -468,7 +413,7 @@ PillSurface {
                 Column {
                     anchors.left: iconBg.right
                     anchors.leftMargin: 10 * root.s
-                    anchors.right: appRow.editing ? trashGlyph.left : ret.left
+                    anchors.right: ret.left
                     anchors.rightMargin: 8 * root.s
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: 1 * root.s
@@ -480,37 +425,12 @@ PillSurface {
                         Text {
                             id: nameText
                             anchors.fill: parent
-                            visible: !appRow.editing
                             text: appRow.entry ? appRow.entry.name : ""
                             color: Theme.cream
                             font.family: Theme.font
                             font.pixelSize: 13 * root.s
                             font.weight: appRow.selected ? Font.DemiBold : Font.Normal
                             elide: Text.ElideRight
-                        }
-                        TextInput {
-                            id: nameEdit
-                            anchors.fill: parent
-                            visible: appRow.editing
-                            text: appRow.entry ? appRow.entry.name : ""
-                            color: Theme.bright
-                            font.family: Theme.font
-                            font.pixelSize: 13 * root.s
-                            selectByMouse: true
-                            clip: true
-                            onVisibleChanged: if (visible) {
-                                selectAll();
-                                forceActiveFocus();
-                            }
-                            onEditingFinished: {
-                                var slug = root.appimageSlug(appRow.entry);
-                                var nm = nameEdit.text.trim();
-                                if (slug && nm.length > 0 && nm !== appRow.entry.name) {
-                                    appimageProc.command = ["bash", root.appimageScript, "rename", slug, nm];
-                                    appimageProc.running = true;
-                                }
-                                root.editIndex = -1;
-                            }
                         }
                     }
                     Text {
@@ -532,32 +452,5 @@ PillSurface {
         anchors.fill: list
         s: root.s
         flick: list
-    }
-
-    /** Faint nudge so the drag-to-install gesture is discoverable at all. */
-    Row {
-        id: hint
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: 2 * root.s
-        spacing: 5 * root.s
-        visible: root.query.length === 0 && root.editIndex === -1
-        opacity: 0.6
-
-        GlyphIcon {
-            anchors.verticalCenter: parent.verticalCenter
-            width: 12 * root.s
-            height: 12 * root.s
-            stroke: 1.7
-            name: "download"
-            color: Theme.faint
-        }
-        Text {
-            anchors.verticalCenter: parent.verticalCenter
-            text: "Drag an AppImage onto the pill"
-            color: Theme.faint
-            font.family: Theme.font
-            font.pixelSize: 10.5 * root.s
-        }
     }
 }

@@ -205,10 +205,7 @@ Item {
         : (toastActive && !held ? "toast"
         : (expanded ? "hover" : "rest"))))))
 
-    /**
-     * AppImage drag-install state, live only while a file hovers the resting pill.
-     * `dragStage` walks hover -> installing -> done, or bad for a non-AppImage drop.
-     */
+    /** Multi-format file-drop state, live only while a file hovers the resting pill. */
     property bool dragActive: false
     property string dragName: ""
     property string dragStage: ""
@@ -767,7 +764,7 @@ Item {
         return decodeURIComponent(s);
     }
 
-    readonly property var dropExt: /\.(appimage|deb|rpm|flatpakref|zip|tgz|txz|tbz2|ttf|otf|png|jpe?g|webp)$|\.(pkg\.)?tar\.(gz|xz|bz2|zst)$/i
+    readonly property var dropExt: /\.(deb|rpm|flatpakref|zip|tgz|txz|tbz2|ttf|otf|png|jpe?g|webp)$|\.(pkg\.)?tar\.(gz|xz|bz2|zst)$/i
 
     function droppablePaths(urls) {
         var out = [];

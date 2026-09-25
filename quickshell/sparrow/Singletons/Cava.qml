@@ -13,9 +13,8 @@ import Quickshell.Io
  * Silence arrives as an all-zero frame every tick, which `active` debounces into
  * a clean play/stop signal so the glyph morph does not flap between tracks.
  *
- * cava is an optional dependency: the in-app updater only merges config files and
- * never installs packages, so a machine that pulled an update without cava on it
- * must degrade cleanly. We probe for the binary once and only ever spawn it when
+ * cava is an optional dependency: when it is unavailable, Sparrow degrades
+ * cleanly. We probe for the binary once and only ever spawn it when
  * it is actually present, which keeps the plain clock on those machines.
  */
 Singleton {

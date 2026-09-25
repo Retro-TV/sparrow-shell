@@ -19,8 +19,7 @@ SettingsSurface {
         { item: displayRow, kind: "nav", surface: "display" },
         { item: inputRow, kind: "nav", surface: "input" },
         { item: keybindsRow, kind: "nav", surface: "keybinds" },
-        { item: idleRow, kind: "nav", surface: "idlelock" },
-        { item: updatesRow, kind: "nav", surface: "updates" }
+        { item: idleRow, kind: "nav", surface: "idlelock" }
     ]
 
     Column {
@@ -128,6 +127,7 @@ SettingsSurface {
             icon: "lock"
             name: "Idle / Lock"
             sub: "Auto-lock, screen off, suspend"
+            last: true
 
             GlyphIcon {
                 width: 16 * root.s
@@ -138,22 +138,5 @@ SettingsSurface {
             }
         }
 
-        SettingsRow {
-            id: updatesRow
-            surface: root
-            captionOnFocus: true
-            icon: "download"
-            name: "Updates"
-            sub: "Version and check for updates"
-            last: true
-
-            GlyphIcon {
-                width: 16 * root.s
-                height: 16 * root.s
-                name: "chevron-right"
-                color: root.focusRowItem === updatesRow ? Theme.cream : Theme.iconDim
-                stroke: 2.2
-            }
-        }
     }
 }

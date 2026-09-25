@@ -62,13 +62,12 @@ Item {
     readonly property bool recorderOpen: surface === "recorder"
     readonly property bool sysmonOpen: surface === "sysmon"
     readonly property bool appearanceOpen: surface === "appearance"
-    readonly property bool updatesOpen: surface === "updates"
     readonly property bool displayOpen: surface === "display"
     readonly property bool inputOpen: surface === "input"
     readonly property bool lookOpen: surface === "look"
     readonly property bool idlelockOpen: surface === "idlelock"
     readonly property bool fontpickerOpen: surface === "fontpicker"
-    readonly property bool settingsLike: settingsOpen || appearanceOpen || updatesOpen
+    readonly property bool settingsLike: settingsOpen || appearanceOpen
         || lookOpen || inputOpen || displayOpen || idlelockOpen || fontpickerOpen
     readonly property bool hasMedia: Players.list.length > 0
 
@@ -99,14 +98,6 @@ Item {
     }
 
     readonly property bool expanded: surfaceOpen || held || hoverLatch
-
-    /**
-     * True while the open surface is waiting on an external auth dialog (the
-     * updater's pkexec password prompt). The shell drops its modal grab for this
-     * so the polkit window underneath is clickable and typeable, instead of the
-     * backdrop swallowing the reach for it and dismissing the whole pill.
-     */
-    readonly property bool authPending: updatesOpen && ldUpdates.item !== null && ldUpdates.item.applying
 
     readonly property bool toastActive: Notifs.popups.length > 0
     readonly property bool osdActive: osd.flashing
@@ -144,7 +135,6 @@ Item {
     readonly property real recorderW: 384 * s
     readonly property real sysmonW: 392 * s
     readonly property real appearanceW: 392 * s
-    readonly property real updatesW: 360 * s
     readonly property real displayW: 392 * s
     readonly property real inputW: 392 * s
     readonly property real lookW: 392 * s
@@ -200,7 +190,6 @@ Item {
         recorder:  { size: () => Qt.size(recorderW, surfaceItem(ldRecorder).implicitHeight + 33 * s), ame: () => surfaceItem(ldRecorder) },
         sysmon:    { size: () => Qt.size(sysmonW, surfaceItem(ldSysmon).implicitHeight + 33 * s), ame: () => surfaceItem(ldSysmon) },
         appearance: { size: () => Qt.size(appearanceW, surfaceItem(ldAppearance).implicitHeight + 29 * s), ame: () => surfaceItem(ldAppearance) },
-        updates:    { size: () => Qt.size(updatesW, surfaceItem(ldUpdates).implicitHeight + 29 * s), ame: () => surfaceItem(ldUpdates) },
         display:    { size: () => Qt.size(displayW, surfaceItem(ldDisplay).implicitHeight + 29 * s), ame: () => surfaceItem(ldDisplay) },
         input:      { size: () => Qt.size(inputW, surfaceItem(ldInput).implicitHeight + 29 * s), ame: () => surfaceItem(ldInput) },
         look:       { size: () => Qt.size(lookW, surfaceItem(ldLook).implicitHeight + 29 * s), ame: () => surfaceItem(ldLook) },
@@ -374,7 +363,7 @@ Item {
             pill.requestSurface("appearance");
             return;
         }
-        if (pill.appearanceOpen || pill.updatesOpen || pill.displayOpen || pill.inputOpen || pill.lookOpen || pill.idlelockOpen) {
+        if (pill.appearanceOpen || pill.displayOpen || pill.inputOpen || pill.lookOpen || pill.idlelockOpen) {
             pill.requestSurface("settings");
             return;
         }
@@ -1831,19 +1820,6 @@ Item {
         sourceComponent: Appearance {
             s: pill.s
             open: pill.appearanceOpen
-            morphCloseness: pill.morphCloseness
-            onRequestClose: pill.requestClose()
-            onRequestSurface: (name) => pill.requestSurface(name)
-        }
-    }
-
-    Loader {
-        id: ldUpdates
-        active: false
-        anchors.fill: parent
-        sourceComponent: Updates {
-            s: pill.s
-            open: pill.updatesOpen
             morphCloseness: pill.morphCloseness
             onRequestClose: pill.requestClose()
             onRequestSurface: (name) => pill.requestSurface(name)

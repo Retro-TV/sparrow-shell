@@ -24,10 +24,22 @@ candidate tree, including color-value semantics and KDL syntax.
 | `sparrow/generated-colors.kdl` | Sparrow-generated palette | Yes, ID `generated-colors` |
 | `sparrow/display-outputs.kdl` | Sparrow Display settings | Yes, ID `display-outputs` |
 | `sparrow/display-binds.kdl` | Sparrow-generated live output bindings | Yes, ID `display-binds` |
+| `sparrow/input.kdl` | Portable include for optional user input state | No |
+| `sparrow/user-input.kdl` | Sparrow Input settings | Yes, ID `user-input` |
 
 Adding future managed fragments requires an explicit entry in the helper's
 `MANAGED_FRAGMENTS` registry and an update to this table. The helper refuses
 unknown IDs, absolute paths, and caller-selected paths.
+
+`user-input.kdl` is the single owner of Sparrow-exposed Niri input properties.
+The root config includes the tracked `sparrow/input.kdl` bridge; that file
+includes `user-input.kdl` optionally. This lets the portable include be shipped
+while user values remain under the Niri config directory and outside Git. It contains
+complete keyboard and any configured device-class subtrees so a later block
+cannot accidentally replace another Sparrow setting. The transaction validator
+accepts only the keyboard, touchpad, mouse, touch, tablet, and focus-follows-mouse
+settings surfaced by Sparrow; output names and XKB layout codes are escaped as
+KDL strings and validated by the installed Niri parser before commit.
 
 ## Transaction contract
 

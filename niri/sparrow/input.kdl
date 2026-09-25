@@ -1,0 +1,2 @@
+// Portable Sparrow Input include. User overrides remain outside the repository.
+include optional=true "user-input.kdl"

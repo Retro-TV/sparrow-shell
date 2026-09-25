@@ -93,7 +93,7 @@ SettingsSurface {
             captionOnFocus: true
             icon: "mouse"
             name: "Input"
-            sub: "Pointer, keyboard, cursor"
+            sub: "Keyboard, touchpad, mouse"
 
             GlyphIcon {
                 width: 16 * root.s

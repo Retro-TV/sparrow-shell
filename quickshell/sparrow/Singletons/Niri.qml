@@ -65,7 +65,7 @@ Singleton {
      */
     function writeManagedFragment(fragmentId, content, confirm = false) {
         var requestId = ++configTransactionSerial;
-        var supported = ["generated-colors", "user-appearance", "display-outputs", "display-binds"];
+        var supported = ["generated-colors", "user-appearance", "display-outputs", "display-binds", "user-input"];
         if (supported.indexOf(fragmentId) < 0 || typeof content !== "string"
                 || (confirm && fragmentId !== "display-outputs")) {
             Qt.callLater(function() {

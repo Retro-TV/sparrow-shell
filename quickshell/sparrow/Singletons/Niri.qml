@@ -43,7 +43,7 @@ Singleton {
     property int focusedWindowId: -1
     property string focusedOutput: ""
     readonly property string configPath: Quickshell.env("NIRI_CONFIG") || ((Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")) + "/niri/config.kdl")
-    readonly property string transactionHelperPath: Quickshell.env("HOME") + "/Projects/sparrow-shell/quickshell/sparrow/scripts/niri-config-transaction.py"
+    readonly property string transactionHelperPath: Quickshell.shellPath("scripts/niri-config-transaction.py")
 
     function reloadConfig() {
         return enqueueAction(["niri", "msg", "action", "load-config-file"], "reload Niri config after Sparrow palette update");
@@ -65,7 +65,7 @@ Singleton {
      */
     function writeManagedFragment(fragmentId, content, confirm = false) {
         var requestId = ++configTransactionSerial;
-        var supported = ["generated-colors", "display-outputs", "display-binds"];
+        var supported = ["generated-colors", "user-appearance", "display-outputs", "display-binds"];
         if (supported.indexOf(fragmentId) < 0 || typeof content !== "string"
                 || (confirm && fragmentId !== "display-outputs")) {
             Qt.callLater(function() {

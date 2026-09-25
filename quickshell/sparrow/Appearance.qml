@@ -59,7 +59,7 @@ SettingsSurface {
 
     Process {
         id: paletteProc
-        command: ["bash", Quickshell.env("HOME") + "/Projects/sparrow-shell/quickshell/sparrow/scripts/wallpaper.sh", "manual", root.hueArg, root.modeArg, root.satArg]
+        command: ["bash", Quickshell.shellPath("scripts/wallpaper.sh"), "manual", root.hueArg, root.modeArg, root.satArg]
         stderr: StdioCollector {
             onStreamFinished: if (this.text.trim().length > 0) console.warn(this.text.trim())
         }
@@ -67,7 +67,7 @@ SettingsSurface {
 
     Process {
         id: dynamicProc
-        command: ["bash", Quickshell.env("HOME") + "/Projects/sparrow-shell/quickshell/sparrow/scripts/wallpaper.sh", "recolor"]
+        command: ["bash", Quickshell.shellPath("scripts/wallpaper.sh"), "recolor"]
         stderr: StdioCollector {
             onStreamFinished: if (this.text.trim().length > 0) console.warn(this.text.trim())
         }

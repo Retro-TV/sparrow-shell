@@ -30,6 +30,47 @@ ShellRoot {
     property string openMon: ""
     property string openSurface: ""
     property string peekMon: ""
+    property real niriLayoutGaps: 6
+    property real niriTopStrut: 0
+
+    readonly property string niriSparrowConfigPath: (Quickshell.env("XDG_CONFIG_HOME")
+        || (Quickshell.env("HOME") + "/.config")) + "/niri/sparrow/"
+
+    function refreshNiriSpacing() {
+        var gapsMatch = userAppearanceFile.text().match(/^    gaps (-?[0-9]+(?:\\.[0-9]+)?)$/m);
+        if (!gapsMatch)
+            gapsMatch = appearanceFile.text().match(/^    gaps (-?[0-9]+(?:\\.[0-9]+)?)$/m);
+        if (gapsMatch)
+            root.niriLayoutGaps = Number(gapsMatch[1]);
+
+        var strutMatch = userAppearanceFile.text().match(/^        top (-?[0-9]+(?:\\.[0-9]+)?)$/m);
+        if (!strutMatch)
+            strutMatch = appearanceFile.text().match(/^        top (-?[0-9]+(?:\\.[0-9]+)?)$/m);
+        if (strutMatch)
+            root.niriTopStrut = Number(strutMatch[1]);
+        else
+            root.niriTopStrut = 0;
+    }
+
+    FileView {
+        id: appearanceFile
+        path: root.niriSparrowConfigPath + "appearance.kdl"
+        blockLoading: true
+        watchChanges: true
+        printErrors: false
+        onLoaded: root.refreshNiriSpacing()
+        onFileChanged: reload()
+    }
+
+    FileView {
+        id: userAppearanceFile
+        path: root.niriSparrowConfigPath + "user-appearance.kdl"
+        blockLoading: true
+        watchChanges: true
+        printErrors: false
+        onLoaded: root.refreshNiriSpacing()
+        onFileChanged: reload()
+    }
 
     function refresh() {
     }
@@ -202,9 +243,11 @@ ShellRoot {
             readonly property real s: modelData ? (modelData.height / 1080) * Flags.uiScale : 1
             readonly property real topGap: 8 * Flags.topGap * s
             readonly property real restHeight: 38 * s
+            readonly property real appGap: 8 * Flags.appGap * s
 
-            /** Trimming the reserved band below the pill's bottom lets windows climb, so App gap sets the pill-to-window air without touching the desktop gaps_out. */
-            readonly property real reservedH: Math.max(0, restHeight + topGap - 12 * (1 - Flags.appGap) * s)
+            /** Niri adds layout struts and its regular outer gap after a layer's exclusive zone. Subtract those configured values so the visible app gap stays exactly appGap. */
+            readonly property real reservedH: Math.max(0,
+                restHeight + topGap + appGap - root.niriTopStrut - root.niriLayoutGaps)
 
             screen: modelData
             color: "transparent"

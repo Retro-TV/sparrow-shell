@@ -32,6 +32,8 @@ SettingsSurface {
     property var pendingPositions: ({})
     property var editsByName: ({})
     property string outputFragmentText: ""
+    property var nightTempControl: null
+    property var nightLightBase: ({ temp: 4000, onMin: 1260, offMin: 450 })
 
     readonly property var selMon: monitorByName(selName)
     readonly property var orderedMonitors: Niri.numberedOutputs || []
@@ -53,8 +55,20 @@ SettingsSurface {
         { label: "3.0", value: 3 }
     ]
 
+    readonly property var nightModeOptions: [
+        { label: "Off", value: "off" },
+        { label: "On", value: "on" },
+        { label: "Scheduled", value: "scheduled" }
+    ]
+
     onActiveChanged: {
         if (active) {
+            NightLight.probe();
+            root.nightLightBase = {
+                temp: Flags.nightLightTemp,
+                onMin: Flags.nightLightOnMin,
+                offMin: Flags.nightLightOffMin
+            };
             Niri.refreshOutputs();
             outputFile.reload();
             root.outputFragmentText = outputFile.text();
@@ -100,7 +114,21 @@ SettingsSurface {
             { item: numberRow, kind: "seg", vals: root.numberOptions(), get: function () { return root.displayNumber(root.selName); }, set: function (v) { root.assignDisplayNumber(v); } },
             { item: startupFocusRow, kind: "toggle", get: function () { return card.pickFocusAtStartup; }, set: function (v) { card.setFocusAtStartup(v); } }
         ];
+        e.push({ item: nightModeRow, kind: "seg", vals: ["off", "on", "scheduled"],
+            get: function () { return Flags.nightLightMode; }, set: function (v) { NightLight.setMode(v); } });
+        if (Flags.nightLightMode !== "off")
+            e.push({ item: nightTempRow, kind: "scrub", bump: function (d) { if (root.nightTempControl) root.nightTempControl.bump(d); } });
+        if (Flags.nightLightMode === "scheduled") {
+            e.push({ item: nightOnRow, kind: "scrub", bump: function (d) { nightOnScrub.bump(d); } });
+            e.push({ item: nightOffRow, kind: "scrub", bump: function (d) { nightOffScrub.bump(d); } });
+        }
         return e;
+    }
+
+    function fmtNightClock(value) {
+        var hour = Math.floor(value / 60);
+        var minute = value % 60;
+        return hour + ":" + (minute < 10 ? "0" + minute : minute);
     }
 
     /** Group Niri's exact milli-Hz modes without rounding away near-duplicates. */
@@ -1096,6 +1124,90 @@ SettingsSurface {
                 font.weight: Font.DemiBold
                 wrapMode: Text.WordWrap
                 lineHeight: 1.25
+            }
+
+            Text {
+                width: parent.width
+                topPadding: 5 * root.s
+                text: "NIGHT LIGHT"
+                color: Theme.faint
+                font.family: Theme.font
+                font.pixelSize: 8.5 * root.s
+                font.weight: Font.Bold
+                font.capitalization: Font.AllUppercase
+                font.letterSpacing: 1.2 * root.s
+            }
+
+            SettingsRow {
+                id: nightModeRow
+                surface: root
+                icon: "sun"
+                name: "Mode"
+                sub: NightLight.available ? "Off, always warm, or scheduled" : NightLight.unavailableReason
+                captionOnFocus: true
+                SettingsSeg {
+                    s: root.s
+                    options: root.nightModeOptions
+                    value: Flags.nightLightMode
+                    onPicked: value => NightLight.setMode(value)
+                }
+            }
+
+            SettingsRow {
+                id: nightTempRow
+                surface: root
+                visible: Flags.nightLightMode !== "off"
+                icon: "sun"
+                name: "Temperature"
+                sub: "Lower is warmer"
+                captionOnFocus: true
+                ScrubValue {
+                    s: root.s
+                    value: Flags.nightLightTemp
+                    openValue: root.nightLightBase.temp
+                    from: 2200; to: 6000; step: 100; unit: "K"
+                    Component.onCompleted: root.nightTempControl = this
+                    onEdited: value => NightLight.setTemp(value)
+                }
+            }
+
+            SettingsRow {
+                id: nightOnRow
+                surface: root
+                visible: Flags.nightLightMode === "scheduled"
+                icon: "sun"
+                name: "On at"
+                sub: "Warm tint starts"
+                captionOnFocus: true
+                ScrubValue {
+                    id: nightOnScrub
+                    s: root.s
+                    value: Flags.nightLightOnMin
+                    openValue: root.nightLightBase.onMin
+                    from: 0; to: 1425; step: 15
+                    fmt: root.fmtNightClock
+                    onEdited: value => NightLight.setOnMin(value)
+                }
+            }
+
+            SettingsRow {
+                id: nightOffRow
+                surface: root
+                visible: Flags.nightLightMode === "scheduled"
+                icon: "sun"
+                name: "Off at"
+                sub: "Back to neutral"
+                captionOnFocus: true
+                last: true
+                ScrubValue {
+                    id: nightOffScrub
+                    s: root.s
+                    value: Flags.nightLightOffMin
+                    openValue: root.nightLightBase.offMin
+                    from: 0; to: 1425; step: 15
+                    fmt: root.fmtNightClock
+                    onEdited: value => NightLight.setOffMin(value)
+                }
             }
 
             Text {

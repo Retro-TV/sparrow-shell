@@ -38,7 +38,7 @@ import Quickshell.Io
  *
  * The recent list carries a cover thumbnail per clip: `refreshRecent()` first
  * runs the thumb script (ffmpeg extracts a single frame into a cache dir under
- * `$XDG_CACHE_HOME/ricelin/rec-thumbs`, skipping clips already cached) and only
+ * `$XDG_CACHE_HOME/sparrow-shell/rec-thumbs`, skipping clips already cached) and only
  * then re-reads the list, so each entry's `thumb` path is on disk by the time
  * the filmstrip binds to it. Entries are `{ path, name, mtime, sizeLabel,
  * thumb }`.
@@ -48,9 +48,9 @@ Singleton {
 
     readonly property string home: Quickshell.env("HOME")
     readonly property string defaultDir: home + "/Videos/Recordings"
-    readonly property string thumbDir: (Quickshell.env("XDG_CACHE_HOME") || (home + "/.cache")) + "/ricelin/rec-thumbs/"
-    readonly property string thumbScript: home + "/Projects/sparrow-shell/quickshell/sparrow/scripts/rec-thumbs.sh"
-    readonly property string windowPickerScript: home + "/Projects/sparrow-shell/quickshell/sparrow/scripts/niri-record-window-pick.py"
+    readonly property string thumbDir: (Quickshell.env("XDG_CACHE_HOME") || (home + "/.cache")) + "/sparrow-shell/rec-thumbs/"
+    readonly property string thumbScript: Quickshell.shellPath("scripts/rec-thumbs.sh")
+    readonly property string windowPickerScript: Quickshell.shellPath("scripts/niri-record-window-pick.py")
     readonly property string outDir: {
         var d = Flags.recordDir;
         return d && d.length > 0 ? d : defaultDir;
@@ -77,7 +77,7 @@ Singleton {
 
     /**
      * Pre-roll countdown, owned here rather than in the surface so the quick-record
-     * keybind flow gets it for free with no surface open. `beginCountdown(token)`
+     * IPC flow works with no surface open. `beginCountdown(token)`
      * runs after any target resolves; at zero the recorder starts. `pendingTarget`
      * holds the resolved capture token across the tick-down. `counting` gates the
      * countdown UI in both the surface action bar and the standalone top toast.
@@ -365,7 +365,14 @@ Singleton {
         id: mkdirProc
         property string pendingToken: ""
         property string pendingFile: ""
-        onExited: {
+        onExited: function(exitCode) {
+            if (exitCode !== 0) {
+                failProc.command = ["notify-send", "-a", "Sparrow", "-u", "critical",
+                    "Recording failed", "Could not create the recording directory: " + root.outDir];
+                failProc.running = true;
+                return;
+            }
+
             root.currentFile = pendingFile;
             recProc.command = root.buildArgs(pendingToken, pendingFile);
             recProc.running = true;

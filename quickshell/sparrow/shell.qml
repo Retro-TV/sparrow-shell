@@ -176,7 +176,7 @@ ShellRoot {
         function record(mon: string): void { root.toggleSurface(mon, "recorder"); }
 
         /**
-         * Quick-record keybind (SUPER+D): one button cycles the whole flow with no
+         * Quick-record IPC flow: one call cycles the whole flow with no
          * surface. Recording → stop. Counting down → cancel. A chooser already up
          * on this monitor → dismiss. Otherwise open the standalone source chooser on
          * the focused monitor `mon`, so only that pill renders it.

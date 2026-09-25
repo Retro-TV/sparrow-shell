@@ -16,6 +16,17 @@ Singleton {
     property var expireAt: ({})
     property var hookedIds: ({})
 
+    readonly property double nextExpiry: {
+        var next = 0;
+        var deadlines = expireAt;
+        for (var id in deadlines) {
+            var deadline = deadlines[id];
+            if (deadline > 0 && (!next || deadline < next))
+                next = deadline;
+        }
+        return next;
+    }
+
     readonly property var tracked: server.trackedNotifications.values
     readonly property int count: tracked.length + history.length
 
@@ -168,7 +179,62 @@ Singleton {
     }
 
     function removePopup(n) {
+        if (!n) return;
         root.popups = root.popups.filter(function(p) { return p !== n; });
+    }
+
+    /**
+     * The Quickshell 0.3.1 property is documented in seconds, but that release
+     * stores the raw D-Bus expire_timeout value without converting it. Keep
+     * the protocol's millisecond unit here. Honor explicit timeouts, treat 0
+     * as persistent, and retain Sparrow's urgency defaults for -1.
+     */
+    function notificationDeadline(n, now) {
+        var timeout = Number(n.expireTimeout);
+        if (timeout > 0)
+            return now + timeout;
+        if (timeout === 0)
+            return 0;
+        if (n.urgency === NotificationUrgency.Critical)
+            return 0;
+        return now + (n.urgency === NotificationUrgency.Low ? 4000 : 6000);
+    }
+
+    function updateLifetime(n, resetArrival) {
+        if (!n) return;
+        var now = Date.now();
+        if (resetArrival) {
+            var a = Object.assign({}, root.arrivalMs);
+            a[n.id] = now;
+            root.arrivalMs = a;
+        }
+        var e = Object.assign({}, root.expireAt);
+        var deadline = notificationDeadline(n, now);
+        if (deadline > 0)
+            e[n.id] = deadline;
+        else
+            delete e[n.id];
+        root.expireAt = e;
+    }
+
+    function expireDue() {
+        var now = Date.now();
+        var due = tracked.filter(function(n) {
+            var deadline = root.expireAt[n.id];
+            return deadline > 0 && deadline <= now;
+        });
+        for (var i = 0; i < due.length; i++)
+            due[i].expire();
+    }
+
+    function refreshReplaced(n) {
+        if (!n) return;
+        root.updateLifetime(n, true);
+        var critical = n.urgency === NotificationUrgency.Critical;
+        if (!Flags.dnd || critical) {
+            var updated = root.popups.filter(function(p) { return p.id !== n.id; });
+            root.popups = updated.concat([n]).slice(-3);
+        }
     }
 
     function toggleExpanded(app) {
@@ -220,6 +286,17 @@ Singleton {
             delete h[n.id];
             root.hookedIds = h;
         });
+
+        var refresh = function() { root.refreshReplaced(n); };
+        n.expireTimeoutChanged.connect(refresh);
+        n.appNameChanged.connect(refresh);
+        n.appIconChanged.connect(refresh);
+        n.summaryChanged.connect(refresh);
+        n.bodyChanged.connect(refresh);
+        n.urgencyChanged.connect(refresh);
+        n.actionsChanged.connect(refresh);
+        n.imageChanged.connect(refresh);
+        n.hintsChanged.connect(refresh);
     }
 
     function ageLabel(n) {
@@ -239,6 +316,17 @@ Singleton {
         onTriggered: root.tick++
     }
 
+    Timer {
+        interval: Math.max(1, root.nextExpiry - Date.now())
+        running: root.nextExpiry > 0
+        repeat: false
+        onTriggered: {
+            root.expireDue();
+            if (root.nextExpiry > 0)
+                restart();
+        }
+    }
+
     NotificationServer {
         id: server
         keepOnReload: true
@@ -252,17 +340,14 @@ Singleton {
             for (var i = 0; i < l.length; i++) {
                 if (!a[l[i].id]) a[l[i].id] = Date.now();
                 root.hookClosed(l[i]);
+                if (root.expireAt[l[i].id] === undefined)
+                    root.updateLifetime(l[i], false);
             }
             root.arrivalMs = a;
         }
 
         onNotification: function(n) {
-            var a = Object.assign({}, root.arrivalMs);
-            a[n.id] = Date.now();
-            root.arrivalMs = a;
-            var e = Object.assign({}, root.expireAt);
-            e[n.id] = Date.now() + (n.urgency === NotificationUrgency.Low ? 4000 : 6000);
-            root.expireAt = e;
+            root.updateLifetime(n, true);
             n.tracked = true;
             root.hookClosed(n);
             var critical = n.urgency === NotificationUrgency.Critical;

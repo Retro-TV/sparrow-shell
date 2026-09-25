@@ -5,7 +5,7 @@ var groups = [
         { id: "firefox", label: "Open Firefox", key: "Super+F" }
     ]},
     { name: "Sparrow", items: [
-        { id: "lock", label: "Lock session", key: "Super+Alt+L" },
+        { id: "lock", label: "Lock session", key: "Super+L" },
         { id: "screenshot", label: "Screenshot", key: "Super+Shift+S" },
         { id: "recorder", label: "Open Recorder", key: "Super+D" },
         { id: "launcher", label: "Open Launcher", key: "Super+Space" },

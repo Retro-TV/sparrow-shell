@@ -390,7 +390,7 @@ Singleton {
             root.recording = false;
             if (exitCode !== 0) {
                 var msg = recErr.text.trim();
-                failProc.command = ["notify-send", "-a", "Ricelin", "-u", "critical",
+                failProc.command = ["notify-send", "-a", "Sparrow", "-u", "critical",
                     "Recording failed", msg.length > 0 ? msg : "gpu-screen-recorder exited " + exitCode];
                 failProc.running = true;
             } else {
@@ -410,7 +410,7 @@ Singleton {
 
     Process {
         id: savedProc
-        command: ["notify-send", "-a", "Ricelin", "Recording saved",
+        command: ["notify-send", "-a", "Sparrow", "Recording saved",
             root.currentFile.substring(root.currentFile.lastIndexOf("/") + 1)]
     }
 

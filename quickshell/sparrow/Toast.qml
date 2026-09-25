@@ -12,8 +12,7 @@ import "Singletons"
  * dismiss and action pills consume their clicks. Dragging the body up, left
  * or right drags the whole host pill along 1:1 into the mask wall; past half
  * the width (0.6 height going up) or on a quick flick it flings out, shorter
- * pulls spring back. Auto-expires via Notifs.expireAt unless the notification is
- * critical.
+ * pulls spring back. Notification lifetime is managed centrally by Notifs.
  */
 Item {
     id: root
@@ -23,25 +22,12 @@ Item {
     required property var notif
     required property Item host
 
-    readonly property bool critical: notif.urgency === NotificationUrgency.Critical
-    readonly property var acts: notif.actions.filter(function(a) { return a.text.length > 0; })
+    readonly property bool hasNotif: notif !== null && notif !== undefined
+    readonly property bool critical: hasNotif && notif.urgency === NotificationUrgency.Critical
+    readonly property var acts: hasNotif && notif.actions
+        ? notif.actions.filter(function(a) { return a && a.text && a.text.length > 0; }) : []
 
     implicitHeight: Math.max(iconTile.height, col.implicitHeight)
-
-    /**
-     * Deadline is snapshotted once: binding the interval to Notifs.expireAt
-     * restarts the timer (and drifts the lifetime) every time an unrelated
-     * notification replaces the map.
-     */
-    property double deadline: 0
-    function armDeadline() { deadline = notif ? (Notifs.expireAt[notif.id] || (Date.now() + 6000)) : 0; }
-    Component.onCompleted: armDeadline()
-
-    Timer {
-        interval: Math.max(300, root.deadline - Date.now())
-        running: root.deadline > 0 && root.live && !swipe.pressed && root.notif.urgency !== NotificationUrgency.Critical
-        onTriggered: Notifs.removePopup(root.notif)
-    }
 
     /**
      * Same Toast instance keeps showing the stack after a swipe, so the next
@@ -50,9 +36,8 @@ Item {
     property real enterX: 0
     property real enterY: 0
     onNotifChanged: {
-        if (!notif)
+        if (!hasNotif)
             return;
-        armDeadline();
         if (enterX === 0 && enterY === 0)
             return;
         host.swipeX = enterX;
@@ -93,6 +78,7 @@ Item {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
         preventStealing: true
+        enabled: root.hasNotif
 
         property real px: 0
         property real py: 0
@@ -129,6 +115,7 @@ Item {
         }
         onReleased: function(m) {
             if (axis === "") {
+                if (!root.hasNotif) return;
                 Notifs.activateNotif(root.notif);
                 Notifs.removePopup(root.notif);
                 return;
@@ -161,7 +148,7 @@ Item {
         Image {
             id: toastImg
             anchors.fill: parent
-            anchors.margins: root.notif.image ? 0 : 6 * root.s
+            anchors.margins: root.hasNotif && root.notif.image ? 0 : 6 * root.s
             source: Notifs.iconFor(root.notif)
             sourceSize.width: 56
             sourceSize.height: 56
@@ -200,6 +187,7 @@ Item {
             anchors.margins: -6 * root.s
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
+            enabled: root.hasNotif
             onClicked: Notifs.removePopup(root.notif)
         }
     }
@@ -215,7 +203,7 @@ Item {
 
         Text {
             width: parent.width
-            text: (root.notif.appName && root.notif.appName.length) ? root.notif.appName : "System"
+            text: root.hasNotif && root.notif.appName && root.notif.appName.length ? root.notif.appName : "System"
             color: Theme.dim
             font.family: Theme.font
             font.pixelSize: 8.5 * root.s
@@ -223,6 +211,7 @@ Item {
             font.capitalization: Font.AllUppercase
             font.letterSpacing: 1.4 * root.s
             elide: Text.ElideRight
+            textFormat: Text.PlainText
         }
 
         Row {
@@ -254,20 +243,21 @@ Item {
 
             Text {
                 width: parent.width - (root.critical ? 13 * root.s : 0)
-                text: root.notif.summary
+                text: root.hasNotif ? root.notif.summary : ""
                 color: Theme.cream
                 font.family: Theme.font
                 font.pixelSize: 11.5 * root.s
                 font.weight: Font.DemiBold
                 maximumLineCount: 1
                 elide: Text.ElideRight
+                textFormat: Text.PlainText
             }
         }
 
         Text {
             width: parent.width
-            visible: root.notif.body.length > 0
-            text: root.notif.body
+            visible: root.hasNotif && root.notif.body.length > 0
+            text: root.hasNotif ? root.notif.body : ""
             color: Theme.dim
             font.family: Theme.font
             font.pixelSize: 10.5 * root.s
@@ -305,11 +295,13 @@ Item {
                         font.family: Theme.font
                         font.pixelSize: 9.5 * root.s
                         font.weight: Font.DemiBold
+                        textFormat: Text.PlainText
                     }
 
                     MouseArea {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
+                        enabled: root.hasNotif
                         onClicked: {
                             actPill.modelData.invoke();
                             if (actPill.modelData.identifier === "default")

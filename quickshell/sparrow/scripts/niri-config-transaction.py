@@ -49,7 +49,7 @@ KDL_STRING_RE = r'"(?:\\.|[^"\\])*"'
 # the UI. User input is only a map from these IDs to a validated key chord.
 KEYBIND_DEFAULTS = {
     "kitty": "Super+T", "thunar": "Super+E", "firefox": "Super+F",
-    "lock": "Super+Alt+L", "screenshot": "Super+Shift+S", "recorder": "Super+D",
+    "lock": "Super+L", "screenshot": "Super+Shift+S", "recorder": "Super+D",
     "launcher": "Super+Space", "wallpaper-picker": "Super+C", "wallpaper-next": "Super+B",
     "close": "Super+Q", "floating": "Super+W",
     "volume-up": "XF86AudioRaiseVolume", "volume-down": "XF86AudioLowerVolume",

@@ -175,7 +175,10 @@ palette() {
     fi
     python3 "$helper/wallcolors.py" "$pic"
 }
-list_media() { find "$wall_dir" -type f -print | while IFS= read -r f; do is_media "$f" && printf '%s\n' "$f"; done; }
+list_media() {
+    [[ -d "$wall_dir" ]] || return 0
+    find "$wall_dir" -type f -print | while IFS= read -r f; do is_media "$f" && printf '%s\n' "$f"; done
+}
 refill_bag() {
     local current=""; [[ -r "$state" ]] && read -r current < "$state" || true
     mapfile -t shuffled < <(list_media | shuf)

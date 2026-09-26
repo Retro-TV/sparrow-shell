@@ -110,6 +110,7 @@ def main() -> int:
     cache_home = xdg_dir("XDG_CACHE_HOME", ".cache")
     state_root = state_home / "sparrow-shell"
     state_root.mkdir(parents=True, exist_ok=True, mode=0o755)
+    (cache_home / "sparrow-shell").mkdir(parents=True, exist_ok=True, mode=0o755)
     backup_root = state_root / "migration-backups" / "ricelin-before-migration-1"
     backup_root.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.chmod(backup_root.parent, 0o700)

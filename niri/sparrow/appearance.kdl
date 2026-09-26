@@ -1,0 +1,68 @@
+// Portable Niri-native layout and appearance defaults for Sparrow.
+
+layout {
+    // Keep wallpaper stationary behind workspaces in Overview.
+    background-color "transparent"
+
+    gaps 6
+    struts {
+        left 12
+        right 12
+        bottom 12
+    }
+
+    center-focused-column "never"
+
+    preset-column-widths {
+        proportion 0.33333
+        proportion 0.5
+        proportion 0.66667
+    }
+
+    preset-window-heights {
+        proportion 0.33333
+        proportion 0.5
+        proportion 0.66667
+    }
+
+    default-column-width { proportion 0.5; }
+
+    focus-ring {
+        off
+    }
+
+    border {
+        on
+        width 2
+        active-color "#e0563b"
+        inactive-color "#313a4d"
+        urgent-color "#e0563b"
+    }
+
+    shadow {
+        on
+        softness 12
+        spread 0
+        offset x=0 y=0
+        color "#14110faa"
+    }
+}
+
+layer-rule {
+    match namespace="^awww-daemon$"
+    place-within-backdrop true
+}
+
+layer-rule {
+    match namespace="^mpvpaper$"
+    place-within-backdrop true
+}
+
+overview {
+    workspace-shadow {
+        off
+    }
+}
+
+// Sparrow Look writes user overrides here; never track that generated file.
+include optional=true "user-appearance.kdl"

@@ -83,9 +83,9 @@ Item {
     property bool hoverLatch: false
 
     /**
-     * False for the first seconds after the shell maps. Hyprland hands pointer
-     * focus to a freshly mapped layer surface at the cursor's position, which
-     * the window-level HoverHandler reads as a pill hover and latches the pill
+     * False for the first seconds after the shell maps. A freshly mapped
+     * layer surface may report a pointer position immediately, which the
+     * window-level HoverHandler reads as a pill hover and latches the pill
      * open (issue #20). Latching only after boot settles filters that spurious
      * enter; a real hover during the window just expands late, harmlessly.
      */

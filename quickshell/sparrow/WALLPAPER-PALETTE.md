@@ -32,3 +32,25 @@ palette. Colors are CSS-style
 fragment consumes `primary` and `outline_variant` for active and inactive
 window borders; it does not replace hand-maintained geometry, shadows, or other
 appearance settings.
+
+The same successful Matugen result also feeds Kitty. `palette.json` contains a
+`terminal` object with its background/foreground, cursor and selection colors,
+tab colors, ANSI 0–15 palette, and extended xterm slots used by the copied
+Starship prompt. ANSI text colors use Matugen's primary, secondary, tertiary,
+and error roles, so Fish syntax colors follow the wallpaper instead of fixed
+hues. Neutral, cursor, selection, tab, and prompt-pill roles also come directly
+from Sparrow's Matugen surfaces and accents. This prevents Starship's
+235/240/243–255 style references from falling back to Kitty's default
+grayscale. No second wallpaper sample or Matugen invocation is used.
+
+`wallcolors.py` writes the Kitty include atomically to
+`$XDG_CONFIG_HOME/kitty/sparrow-colors.conf` (default
+`~/.config/kitty/sparrow-colors.conf`). The portable static defaults are in
+`kitty/kitty.conf`; when installed as `$XDG_CONFIG_HOME/kitty/kitty.conf`, its
+`globinclude` consumes the generated sibling file. Kitty's config watcher
+tracks the primary config paths, not the file expanded through `globinclude`,
+so after the generated colors actually change Sparrow sends Kitty's documented
+`SIGUSR1` config-reload signal to existing Kitty instances. This is silent if
+Kitty is not running and does not restart it. Kitty is an optional app:
+failure to write its color include is reported as a warning but does not fail
+Sparrow's wallpaper or palette update.

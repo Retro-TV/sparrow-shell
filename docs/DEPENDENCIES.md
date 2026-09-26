@@ -53,6 +53,8 @@ components. Sparrow's video preview additionally uses `qt6-multimedia` and
 | `ddcutil` | Optional external DDC/CI display brightness controls in Mixer. Not installed on the audited host. |
 | `nvibrant` | Optional NVIDIA vibrance backend; Sparrow checks its executable and NVIDIA device before exposing it. Not installed on the audited host. |
 | `kitty`, `thunar`, `firefox` | Current default Niri app bindings. These are replaceable user app choices, not intrinsic Sparrow runtime dependencies. |
+| `fish`, `starship` | Required for Sparrow's reference Kitty shell and Fish/Starship prompt, including the directory pill. `zoxide` is optional and is initialized only when installed. |
+| `ttf-jetbrains-mono-nerd` | Required for Sparrow's default Kitty profile: supplies the configured JetBrains Mono Nerd Font. The future installer should install it with the default Kitty setup. |
 | `bibata-cursor-theme-bin` (AUR) | Supplies the configured `Bibata-Modern-Ice` XCursor theme. The config sets theme and size but does not bundle cursor files. |
 
 ## Separate screenshot application

@@ -5,7 +5,7 @@ import Quickshell.Io
 
 /**
  * Shared session flags persisted to a small JSON file and watched for external
- * change, so every Ricelin daemon (pill, lock) reads and writes the same
+ * change, so every Sparrow daemon (pill, idle) reads and writes the same
  * Do-Not-Disturb and Keep-Awake state live without a second notification server
  * or idle inhibitor. Toggling in one surface updates the others on the next file
  * event, and the state survives a daemon restart.
@@ -50,7 +50,7 @@ Singleton {
 
     FileView {
         id: file
-        path: (Quickshell.env("XDG_STATE_HOME") || (Quickshell.env("HOME") + "/.local/state")) + "/ricelin/flags.json"
+        path: (Quickshell.env("XDG_STATE_HOME") || (Quickshell.env("HOME") + "/.local/state")) + "/sparrow-shell/flags.json"
         blockLoading: true
         watchChanges: true
         printErrors: false

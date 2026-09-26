@@ -2,7 +2,7 @@
 set -euo pipefail
 
 state_root="${XDG_STATE_HOME:-$HOME/.local/state}/sparrow-shell"
-flags_file="${XDG_STATE_HOME:-$HOME/.local/state}/ricelin/flags.json"
+flags_file="${XDG_STATE_HOME:-$HOME/.local/state}/sparrow-shell/flags.json"
 configured_dir="$(jq -r '.wallpaperDir // ""' "$flags_file" 2>/dev/null || true)"
 wall_dir="${SPARROW_WALLPAPER_DIR:-${configured_dir:-$HOME/Pictures/wallpapers}}"
 state="$state_root/wallpaper"

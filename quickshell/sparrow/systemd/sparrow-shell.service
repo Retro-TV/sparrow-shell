@@ -6,6 +6,7 @@ ConditionEnvironment=XDG_CURRENT_DESKTOP=niri
 
 [Service]
 Type=simple
+ExecStartPre=/usr/bin/python3 %h/.config/quickshell/sparrow/scripts/migrate-state.py
 ExecStart=/usr/bin/qs --no-duplicate --path %h/.config/quickshell/sparrow
 Restart=on-failure
 RestartSec=2

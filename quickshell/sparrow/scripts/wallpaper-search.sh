@@ -40,7 +40,7 @@ PY
 }
 
 download() {
-    local url="${1:-}" flags="${XDG_STATE_HOME:-$HOME/.local/state}/ricelin/flags.json" dir
+    local url="${1:-}" flags="${XDG_STATE_HOME:-$HOME/.local/state}/sparrow-shell/flags.json" dir
     dir=$(jq -r '.wallpaperDir // ""' "$flags" 2>/dev/null || true)
     [[ -n "$dir" ]] || dir="${SPARROW_WALLPAPER_DIR:-$HOME/Pictures/wallpapers}"
     dir="$dir/downloads"; mkdir -p "$dir"

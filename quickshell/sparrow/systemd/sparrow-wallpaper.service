@@ -7,6 +7,7 @@ ConditionEnvironment=XDG_CURRENT_DESKTOP=niri
 
 [Service]
 Type=simple
+ExecStartPre=/usr/bin/python3 %h/.config/quickshell/sparrow/scripts/migrate-state.py
 ExecStart=/usr/bin/awww-daemon
 ExecStartPost=/usr/bin/env SPARROW_AWWW_DAEMON_MANAGED=1 /usr/bin/bash %h/.config/quickshell/sparrow/scripts/wallpaper.sh init
 ExecStop=/usr/bin/awww kill

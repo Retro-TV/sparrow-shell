@@ -29,6 +29,7 @@ try:
 except Exception: print('[]')
 PY
         return
+    fi
     local enc vqd raw filter=',,,'
     [[ "$kind" == still ]] && filter='type:photo'
     enc=$(jq -rn --arg q "$query" '$q|@uri')

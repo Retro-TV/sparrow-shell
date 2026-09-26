@@ -250,7 +250,8 @@ ShellRoot {
             readonly property real topGap: 8 * Flags.topGap * s
             readonly property string surface: root.openMon === modelData.name ? root.openSurface : ""
             readonly property bool surfaceOpen: surface.length > 0
-            readonly property bool modal: surfaceOpen || pill.held || pill.quickChoosing
+            readonly property bool modal: !ScreenRec.folderPickerOpen
+                && (surfaceOpen || pill.held || pill.quickChoosing)
 
             /**
              * True while this monitor's active workspace reports a fullscreen
@@ -269,10 +270,12 @@ ShellRoot {
             }
 
             screen: modelData
+            visible: !ScreenRec.folderPickerOpen
             color: "transparent"
             exclusionMode: ExclusionMode.Ignore
             WlrLayershell.layer: WlrLayer.Overlay
-            WlrLayershell.keyboardFocus: (surfaceOpen || pill.quickChoosing) ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+            WlrLayershell.keyboardFocus: !ScreenRec.folderPickerOpen
+                && (surfaceOpen || pill.quickChoosing) ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
             WlrLayershell.namespace: "pill"
 
             anchors { top: true; left: true; right: true; bottom: true }

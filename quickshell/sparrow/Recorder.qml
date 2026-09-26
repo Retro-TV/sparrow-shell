@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Shapes
+import Quickshell
 import Quickshell.Io
 import Quickshell.Widgets
 import Quickshell.Services.Pipewire
@@ -54,6 +55,22 @@ PillSurface {
     property bool drawerOpen: false
     property bool chooserOpen: false
     property bool screenChooserOpen: false
+
+    Process {
+        id: folderPickerProc
+        stdout: StdioCollector { id: folderPickerOutput }
+        stderr: StdioCollector { id: folderPickerError }
+        onExited: function(exitCode) {
+            ScreenRec.folderPickerOpen = false;
+            if (exitCode === 0) {
+                ScreenRec.setOutputDirectory(folderPickerOutput.text.replace(/\r?\n$/, ""));
+            } else if (exitCode !== 1) {
+                var reason = folderPickerError.text.trim();
+                Quickshell.execDetached(["notify-send", "-a", "Sparrow",
+                    "Folder picker unavailable", reason.length > 0 ? reason : "The desktop folder chooser could not be opened."]);
+            }
+        }
+    }
 
     /**
      * Audio-fader keyboard focus index: 0 mic, 1 desktop, -1 none. Only an
@@ -1073,7 +1090,15 @@ PillSurface {
                         anchors.margins: -5 * root.s
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: ScreenRec.pickDir()
+                        onClicked: {
+                            if (folderPickerProc.running)
+                                return;
+                            ScreenRec.folderPickerOpen = true;
+                            folderPickerProc.command = ["python3",
+                                Quickshell.shellPath("scripts/choose-recording-dir.py"),
+                                ScreenRec.outDir];
+                            folderPickerProc.running = true;
+                        }
                     }
                 }
                 Text {

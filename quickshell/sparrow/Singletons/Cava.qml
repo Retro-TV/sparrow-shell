@@ -13,9 +13,9 @@ import Quickshell.Io
  * Silence arrives as an all-zero frame every tick, which `active` debounces into
  * a clean play/stop signal so the glyph morph does not flap between tracks.
  *
- * cava is an optional dependency: when it is unavailable, Sparrow degrades
- * cleanly. We probe for the binary once and only ever spawn it when
- * it is actually present, which keeps the plain clock on those machines.
+ * cava is optional. Sparrow probes on startup and whenever the Appearance
+ * surface is opened, so installing it during a session is picked up without
+ * polling or requiring a shell restart.
  */
 Singleton {
     id: root
@@ -25,6 +25,8 @@ Singleton {
     property bool active: false
 
     property bool available: false
+    property bool checking: false
+    property bool enableAfterProbe: false
     readonly property bool wanted: Flags.musicViz && available
 
     /**
@@ -41,13 +43,37 @@ Singleton {
         + "channels = mono\nmono_option = average\n"
         + "[smoothing]\nnoise_reduction = 0.77\n"
 
+    function probe() {
+        if (root.checking)
+            return;
+        root.checking = true;
+    }
+
+    function toggle() {
+        if (root.available) {
+            Flags.musicViz = !Flags.musicViz;
+        } else if (Flags.musicViz) {
+            Flags.musicViz = false;
+            root.probe();
+        } else {
+            root.enableAfterProbe = true;
+            root.probe();
+        }
+    }
+
     onWantedChanged: cavaProc.running = wanted
-    Component.onCompleted: cavaProc.running = wanted
+    Component.onCompleted: root.probe()
 
     Process {
-        running: true
+        running: root.checking
         command: ["sh", "-c", "command -v cava >/dev/null 2>&1"]
-        onExited: (code) => root.available = (code === 0)
+        onExited: (code) => {
+            root.available = code === 0;
+            if (root.enableAfterProbe && root.available)
+                Flags.musicViz = true;
+            root.enableAfterProbe = false;
+            root.checking = false;
+        }
     }
 
     Process {

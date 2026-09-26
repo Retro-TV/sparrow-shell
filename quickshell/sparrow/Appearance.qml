@@ -24,6 +24,8 @@ SettingsSurface {
     backSurface: "settings"
     implicitHeight: content.implicitHeight
 
+    onActiveChanged: if (active) Cava.probe()
+
     property string hueArg: String(Math.round(Flags.manualHue))
     property string modeArg: Flags.manualDark ? "dark" : "light"
     property string satArg: String(Flags.manualSat)
@@ -89,7 +91,7 @@ SettingsSurface {
         { item: timeRow, kind: "seg", vals: [false, true], get: function () { return Flags.time12h; }, set: function (v) { Flags.time12h = v; } },
         { item: secRow, kind: "toggle", get: function () { return Flags.clockSeconds; }, set: function (v) { Flags.clockSeconds = v; } },
         { item: glyphRow, kind: "toggle", get: function () { return Flags.showGlyphs; }, set: function (v) { Flags.showGlyphs = v; } },
-        { item: vizRow, kind: "toggle", get: function () { return Flags.musicViz; }, set: function (v) { Flags.musicViz = v; } },
+        { item: vizRow, kind: "toggle", get: function () { return Flags.musicViz; }, set: function (v) { if (v !== Flags.musicViz) Cava.toggle(); } },
         { item: paletteRow, kind: "seg", vals: ["static", "dynamic", "manual"], get: function () { return Flags.paletteMode; }, set: function (v) { root.applyMode(v); } },
         { item: randomRow, kind: "seg", vals: ["all", "cursor"], get: function () { return Flags.randomScope; }, set: function (v) { Flags.randomScope = v; } },
         { item: scaleRow, kind: "seg", vals: [0.9, 1.0, 1.1, 1.25], get: function () { return Flags.uiScale; }, set: function (v) { Flags.uiScale = v; } },
@@ -157,12 +159,14 @@ SettingsSurface {
             id: vizRow
             surface: root
             name: "Music visualizer"
+            sub: Cava.available ? "Visualizes audio on the resting pill"
+                : (Cava.checking ? "Checking for Cava…" : "Unavailable — install Cava to enable")
             icon: "music"
 
             LinkToggle {
                 s: root.s
                 on: Flags.musicViz
-                onToggled: Flags.musicViz = !Flags.musicViz
+                onToggled: Cava.toggle()
             }
         }
 

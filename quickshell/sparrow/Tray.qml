@@ -26,7 +26,7 @@ Item {
     implicitHeight: 24 * tray.s
 
     function showMenu(item, anchorItem) {
-        if (!item.hasMenu)
+        if (!item || !item.hasMenu)
             return;
         card.expandedIdx = -1;
         opener.menu = item.menu;
@@ -51,6 +51,14 @@ Item {
                 id: slot
 
                 required property var modelData
+                readonly property var itemData: modelData !== null && modelData !== undefined
+                    && typeof modelData === "object" ? modelData : null
+                readonly property var safeItemData: itemData || ({
+                    icon: "",
+                    tooltipTitle: "",
+                    title: "",
+                    id: ""
+                })
 
                 Layout.preferredWidth: 24 * tray.s
                 Layout.preferredHeight: 24 * tray.s
@@ -67,7 +75,7 @@ Item {
 
                 Image {
                     anchors.centerIn: parent
-                    source: slot.modelData.icon
+                    source: slot.safeItemData.icon
                     sourceSize.width: 32
                     sourceSize.height: 32
                     width: 16 * tray.s
@@ -85,25 +93,30 @@ Item {
                     cursorShape: Qt.PointingHandCursor
                     acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
                     onClicked: (mouse) => {
+                        const item = slot.itemData;
+                        if (!item)
+                            return;
                         if (mouse.button === Qt.MiddleButton) {
-                            slot.modelData.secondaryActivate();
+                            item.secondaryActivate();
                         } else if (mouse.button === Qt.RightButton) {
-                            tray.showMenu(slot.modelData, slot);
-                        } else if (slot.modelData.onlyMenu) {
-                            tray.showMenu(slot.modelData, slot);
+                            tray.showMenu(item, slot);
+                        } else if (item.onlyMenu) {
+                            tray.showMenu(item, slot);
                         } else {
-                            slot.modelData.activate();
+                            item.activate();
                         }
                     }
                     onWheel: (wheel) => {
-                        slot.modelData.scroll(wheel.angleDelta.y, false);
+                        const item = slot.itemData;
+                        if (item)
+                            item.scroll(wheel.angleDelta.y, false);
                     }
                 }
 
                 Tooltip {
                     s: tray.s
                     placement: "below"
-                    title: slot.modelData.tooltipTitle || slot.modelData.title || slot.modelData.id
+                    title: slot.safeItemData.tooltipTitle || slot.safeItemData.title || slot.safeItemData.id
                     show: area.containsMouse && !menu.open
                 }
             }
@@ -128,7 +141,9 @@ Item {
             icon: "",
             text: "",
             enabled: false,
-            hasChildren: false
+            hasChildren: false,
+            buttonType: QsMenuButtonType.None,
+            checkState: Qt.Unchecked
         })
         signal activated()
 
@@ -162,7 +177,7 @@ Item {
                 height: parent.height * 0.46
                 radius: width / 2
                 color: Theme.vermLit
-                opacity: mrowArea.containsMouse && mrow.entryData.enabled ? 1 : 0
+                opacity: mrowArea.containsMouse && mrow.safeEntryData.enabled ? 1 : 0
                 Behavior on opacity { NumberAnimation { duration: Motion.fast } }
             }
 

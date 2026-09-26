@@ -31,9 +31,9 @@ import Quickshell.Io
  * started/stopped state, so the start is not also pushed as a notification.
  *
  * The output directory is the Flags-persisted `recordDir`, falling back to
- * `$HOME/Videos/Recordings`; `pickDir()` runs a native folder picker (kdialog
- * or zenity) and writes the chosen path back to Flags so the displayed path,
- * Open action and recent list all follow it. A `recording` poll reconciles an
+ * `$HOME/Videos/Recordings`; Recorder's XDG desktop portal chooser writes the
+ * chosen path back to Flags so the displayed path, Open action and recent list
+ * all follow it. A `recording` poll reconciles an
  * externally started or stopped recorder so the state is never stale.
  *
  * The recent list carries a cover thumbnail per clip: `refreshRecent()` first
@@ -71,6 +71,8 @@ Singleton {
 
     property bool recording: false
     property bool recorderOpen: false
+    /** True while the external XDG folder chooser owns focus, so the Pill layer releases its full-screen input grab. */
+    property bool folderPickerOpen: false
     property string currentFile: ""
     property var recent: []
     readonly property int recentCount: recent.length
@@ -310,32 +312,14 @@ Singleton {
         openProc.running = true;
     }
 
-    /**
-     * Run a native folder picker (kdialog, else zenity) seeded at the current
-     * directory and write the chosen path to Flags so the surface, Open action
-     * and recent list all follow it. A cancelled pick prints nothing and leaves
-     * the directory unchanged.
-     */
-    function pickDir() {
-        pickProc.command = ["sh", "-c",
-            "d=\"$1\"; if command -v kdialog >/dev/null 2>&1; then kdialog --getexistingdirectory \"$d\"; else zenity --file-selection --directory --filename=\"$d/\"; fi",
-            "_", outDir];
-        pickProc.running = true;
+    /** Store a folder accepted by Recorder's XDG desktop portal chooser. */
+    function setOutputDirectory(path) {
+        if (path && path.length > 0)
+            Flags.recordDir = path;
     }
 
     Process {
         id: openProc
-    }
-
-    Process {
-        id: pickProc
-        stdout: StdioCollector {
-            onStreamFinished: {
-                var dir = this.text.trim();
-                if (dir.length > 0)
-                    Flags.recordDir = dir;
-            }
-        }
     }
 
     /**
@@ -346,6 +330,7 @@ Singleton {
     Process {
         id: windowProc
         command: ["python3", root.windowPickerScript]
+        stderr: StdioCollector {}
         stdout: StdioCollector {
             onStreamFinished: {
                 var geom = this.text.trim();
@@ -356,8 +341,14 @@ Singleton {
             }
         }
         onExited: function(exitCode) {
-            if (exitCode !== 0)
+            if (exitCode !== 0) {
+                if (exitCode === 127) {
+                    failProc.command = ["notify-send", "-a", "Sparrow",
+                        "Window picker unavailable", "Window / Region selection requires slurp."];
+                    failProc.running = true;
+                }
                 root.targetAborted();
+            }
         }
     }
 

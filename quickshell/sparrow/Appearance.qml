@@ -29,6 +29,32 @@ SettingsSurface {
     property string hueArg: String(Math.round(Flags.manualHue))
     property string modeArg: Flags.manualDark ? "dark" : "light"
     property string satArg: String(Flags.manualSat)
+    // Capture the selected palette style at the control boundary and pass that
+    // exact value to the recolor process when the debounce fires.
+    property string pendingScheme: canonicalPaletteStyle(Flags.paletteVariant)
+
+    function canonicalPaletteStyle(value) {
+        switch (String(value || "tonal").toLowerCase()) {
+        case "scheme-tonal-spot":
+        case "scheme-neutral":
+        case "scheme-fidelity":
+        case "neutral":
+        case "fidelity":
+        case "tonal":
+            return "tonal";
+        case "scheme-expressive":
+        case "scheme-vibrant":
+        case "expressive":
+        case "vibrant":
+            return "vibrant";
+        case "scheme-fruit-salad":
+        case "fruit":
+        case "alternate":
+            return "alternate";
+        default:
+            return "tonal";
+        }
+    }
 
     readonly property color accentColor: Qt.hsla(Flags.manualHue / 360, Flags.manualSat, Flags.manualDark ? 0.5 : 0.62, 1)
     readonly property string currentHex: {
@@ -44,24 +70,46 @@ SettingsSurface {
         applyTimer.restart();
     }
 
+    function applyPaletteStyle(variant) {
+        pendingScheme = canonicalPaletteStyle(variant || Flags.paletteVariant);
+        Flags.paletteVariant = pendingScheme;
+        if (Flags.paletteMode === "dynamic")
+            applyTimer.restart();
+        else if (Flags.paletteMode === "manual")
+            applyManual();
+    }
+
+    Component.onCompleted: {
+        var normalized = canonicalPaletteStyle(Flags.paletteVariant);
+        if (Flags.paletteVariant !== normalized) {
+            Flags.paletteVariant = normalized;
+            applyPaletteStyle(normalized);
+        }
+    }
+
     function applyMode(v) {
         Flags.paletteMode = v;
         if (v === "manual")
             applyManual();
         else if (v === "dynamic")
-            dynamicProc.running = true;
+            applyPaletteStyle(Flags.paletteVariant);
     }
 
     Timer {
         id: applyTimer
         interval: 260
         repeat: false
-        onTriggered: paletteProc.running = true
+        onTriggered: {
+            if (Flags.paletteMode === "manual") {
+                paletteProc.exec(["bash", Quickshell.shellPath("scripts/wallpaper.sh"), "manual", root.hueArg, root.modeArg, root.satArg, root.pendingScheme]);
+            } else if (Flags.paletteMode === "dynamic") {
+                dynamicProc.exec(["bash", Quickshell.shellPath("scripts/wallpaper.sh"), "recolor", root.pendingScheme]);
+            }
+        }
     }
 
     Process {
         id: paletteProc
-        command: ["bash", Quickshell.shellPath("scripts/wallpaper.sh"), "manual", root.hueArg, root.modeArg, root.satArg]
         stderr: StdioCollector {
             onStreamFinished: if (this.text.trim().length > 0) console.warn(this.text.trim())
         }
@@ -69,7 +117,6 @@ SettingsSurface {
 
     Process {
         id: dynamicProc
-        command: ["bash", Quickshell.shellPath("scripts/wallpaper.sh"), "recolor"]
         stderr: StdioCollector {
             onStreamFinished: if (this.text.trim().length > 0) console.warn(this.text.trim())
         }
@@ -87,12 +134,24 @@ SettingsSurface {
         }
     }
 
+    Connections {
+        target: Dyn
+        function onPaletteStyleChanged() {
+            // A wallpaper may not contain a genuinely distinct alternate hue.
+            // Follow the effective generated style so the persisted selector
+            // never claims to use a choice that the image cannot provide.
+            if (Dyn.paletteStyle && Flags.paletteVariant !== Dyn.paletteStyle)
+                Flags.paletteVariant = Dyn.paletteStyle;
+        }
+    }
+
     rows: [
         { item: timeRow, kind: "seg", vals: [false, true], get: function () { return Flags.time12h; }, set: function (v) { Flags.time12h = v; } },
         { item: secRow, kind: "toggle", get: function () { return Flags.clockSeconds; }, set: function (v) { Flags.clockSeconds = v; } },
         { item: glyphRow, kind: "toggle", get: function () { return Flags.showGlyphs; }, set: function (v) { Flags.showGlyphs = v; } },
         { item: vizRow, kind: "toggle", get: function () { return Flags.musicViz; }, set: function (v) { if (v !== Flags.musicViz) Cava.toggle(); } },
         { item: paletteRow, kind: "seg", vals: ["static", "dynamic", "manual"], get: function () { return Flags.paletteMode; }, set: function (v) { root.applyMode(v); } },
+        { item: paletteStyleRow, kind: "seg", vals: Dyn.availableStyles, get: function () { return root.canonicalPaletteStyle(Flags.paletteVariant); }, set: function (v) { root.applyPaletteStyle(v); } },
         { item: randomRow, kind: "seg", vals: ["all", "cursor"], get: function () { return Flags.randomScope; }, set: function (v) { Flags.randomScope = v; } },
         { item: scaleRow, kind: "seg", vals: [0.9, 1.0, 1.1, 1.25], get: function () { return Flags.uiScale; }, set: function (v) { Flags.uiScale = v; } },
         { item: motionRow, kind: "toggle", get: function () { return Flags.reduceMotion; }, set: function (v) { Flags.reduceMotion = v; } },
@@ -181,6 +240,28 @@ SettingsSurface {
                 options: [{ label: "Static", value: "static" }, { label: "Dynamic", value: "dynamic" }, { label: "Manual", value: "manual" }]
                 value: Flags.paletteMode
                 onPicked: (v) => root.applyMode(v)
+            }
+        }
+
+        SettingsRow {
+            id: paletteStyleRow
+            surface: root
+            name: "Color style"
+            sub: Dyn.availableStyles.indexOf("alternate") < 0
+                ? "Alternate unavailable — no distinct second color in this wallpaper"
+                : "Uses colors found in the wallpaper"
+            icon: "droplet"
+
+            SettingsSeg {
+                s: root.s
+                options: Dyn.availableStyles.map(function (style) {
+                    return { label: style === "tonal" ? "Tonal"
+                        : style === "vibrant" ? "Vibrant" : "Alternate", value: style };
+                })
+                value: root.canonicalPaletteStyle(Flags.paletteVariant)
+                onPicked: (v) => {
+                    root.applyPaletteStyle(v);
+                }
             }
         }
 

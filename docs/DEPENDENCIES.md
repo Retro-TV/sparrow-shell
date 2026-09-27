@@ -24,6 +24,7 @@ shell to start.
 | `xdg-utils` | Generic `xdg-open` integration where used. |
 | `gtk3` | `gtk-launch` starts selected `.desktop` entries in Sparrow Launcher. Ordinary desktop-entry discovery is not a package manager. |
 | `thunar` | Sparrow's default graphical file manager, opened by Super+E and for `inode/directory`; its Sparrow theme is an app-scoped GTK3 theme. |
+| `tumbler` | Required for Thunar image thumbnails; it provides the D-Bus thumbnail service used by Thunar. |
 | `adw-gtk-theme` | Arch package providing the maintained `adw-gtk3` GTK3 widget/state theme used as Sparrow's wallpaper-colored Thunar base. |
 | `libnotify` | `notify-send` for Sparrow recorder/peripheral notifications. |
 | `systemd` | User units, idle/power actions and graphical session target. |
@@ -83,8 +84,8 @@ is a KDE/KWin capture path and is not required for Niri.
 - `ddcutil`, `nvibrant`, `wlsunset`, `cava`, `mpvpaper`, cursor assets and
   Rishot are optional or feature-specific as described above.
 - `gvfs` is recommended for Thunar's removable-volume and remote-location
-  integration; `tumbler` is optional for file thumbnails. Neither is required
-  for opening local folders or basic file operations.
+  integration; it is not required for opening local folders or basic file
+  operations. `tumbler` is required for the intended image-thumbnail feature.
 - Sparrow does not install packages, manage pacman/AUR, bundle a browser,
   terminal, file manager, personal wallpapers, monitor setup, generated theme
   files, personal Hyprlock configuration or Rishot source.

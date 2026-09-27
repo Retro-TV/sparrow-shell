@@ -4,9 +4,34 @@ The canonical generated palette is JSON at
 `$XDG_CACHE_HOME/sparrow-shell/palette.json` (or
 `~/.cache/sparrow-shell/palette.json`). `scripts/wallcolors.py` writes it
 atomically after a successful Matugen run. Dynamic mode is always dark: source
-wallpaper luminance never selects a light scheme. Matugen's wallpaper-seeded
-Material tonal palette supplies the chromatic dark surface ramp, while its
-dark semantic scheme supplies readable foregrounds and accent roles.
+wallpaper luminance never selects a light scheme. Matugen supplies image color
+candidates using Material Color Utilities' Celebi quantizer and Score ranking.
+Sparrow measures those candidates' actual image coverage in OKLab, discounts
+neutral/extreme-lightness pixels, and rejects tiny accents, so a small colored
+object cannot outweigh a mostly neutral image. Dark Sparrow surfaces are
+generated from the selected image seed's Material tonal palette, rather than
+the stock near-black surface roles.
+
+Appearance offers image-derived choices: **Tonal** uses the strongest useful
+wallpaper color with Matugen's restrained `scheme-tonal-spot` treatment;
+**Vibrant** uses a high-chroma, adequately represented wallpaper color with
+Matugen's source-faithful `scheme-content` treatment and a stronger accent/surface
+ramp; **Alternate** uses a second significant color only when it is perceptually
+distinct from the dominant color. Alternate is disabled when no real second hue
+exists; it is never replaced by an invented harmony color. Grayscale or nearly
+neutral images expose only Tonal. The choice is saved in Sparrow's user flags
+and applies to subsequent wallpaper changes. Matugen never rotates the seed to
+an unrelated harmony hue. Its native `scheme-monochrome` is used when the image
+has too little significant chroma. The generated JSON records the effective
+style and which choices are available; Appearance follows a safe fallback if a
+new wallpaper lacks the previously selected Alternate.
+
+Legacy values (`scheme-tonal-spot`, `scheme-neutral`, and `scheme-fidelity` →
+Tonal; `scheme-expressive` and `scheme-vibrant` → Vibrant;
+`scheme-fruit-salad` → Alternate, with equivalent short names such as
+`expressive`, `fruit`, and `fidelity`) are accepted and normalized when
+Appearance loads. The generation script also accepts them for wallpaper
+changes before Appearance has been opened.
 The separate explicit manual `--hue ... light` path remains light when chosen;
 it is not used by wallpaper-driven dynamic mode.
 Quickshell's `Dyn` singleton watches
@@ -59,9 +84,17 @@ The same palette also produces generated color definitions for Sparrow's
 app-scoped GTK3 theme at
 `$XDG_DATA_HOME/themes/Sparrow/gtk-3.0/sparrow-colors.css`. The Sparrow Files
 launcher sets `GTK_THEME=Sparrow` only for Thunar, leaving the user's global
-GTK theme unchanged. GTK3 loads theme CSS at process startup, so an already-
-running Thunar may need to be reopened to show colors from a newly selected
-wallpaper.
+GTK theme unchanged. GTK3 loads theme CSS into the application when its theme
+provider is initialized; changing the generated CSS file does not refresh
+already-open Thunar windows. Thunar serves its windows from one running app
+instance, so all of its windows use that instance's loaded palette. Applying a
+new palette to an existing instance requires an app-supported theme reload;
+Thunar does not expose one for re-reading these generated theme files. For now,
+the new palette appears the next time Thunar is fully closed and launched
+again. Sparrow deliberately does not close user windows to force a refresh.
+
+Thunar's “Always” thumbnail preference also requires the D-Bus thumbnail
+service `tumbler`; Sparrow lists it as a required dependency for image previews.
 
 It also updates Sparrow's lightweight icon-theme overlay under
 `$XDG_DATA_HOME/icons/Sparrow/`, which inherits Adwaita for all other icons

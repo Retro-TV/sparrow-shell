@@ -10,6 +10,7 @@ map="$state_root/wallpaper-map"
 bag="$state_root/wallpaper-bag"
 still="$state_root/wallpaper-still.png"
 helper="$(cd -- "$(dirname -- "$0")" && pwd)"
+default_wallpaper="$helper/../wallpapers/default.png"
 focused_output_name=""
 outputs_csv=""
 mkdir -p "$state_root"
@@ -168,12 +169,15 @@ apply_visual() {
     fi
 }
 palette() {
-    local pic="$1"
+    local pic="$1" variant="${2:-}"
+    if [[ -z "$variant" ]]; then
+        variant="$(jq -r '.paletteVariant // "tonal"' "$flags_file" 2>/dev/null || echo tonal)"
+    fi
     if is_video "$pic" || [[ "${pic,,}" == *.gif ]]; then
         make_still "$pic" "$still" || return 1
         pic="$still"
     fi
-    python3 "$helper/wallcolors.py" "$pic"
+    python3 "$helper/wallcolors.py" "$pic" --style "$variant"
 }
 list_media() {
     [[ -d "$wall_dir" ]] || return 0
@@ -216,7 +220,7 @@ case "$cmd" in
     resolve) printf '%s\n' "$wall_dir" > "$state_root/wallpaper-dir.tmp"; mv -f "$state_root/wallpaper-dir.tmp" "$state_root/wallpaper-dir"; exit 0 ;;
     list-dir) printf '%s\n' "$wall_dir"; exit 0 ;;
     manual)
-        python3 "$helper/wallcolors.py" --hue "${1:-30}" "${2:-dark}" "${3:-0.5}"
+        python3 "$helper/wallcolors.py" --hue "${1:-30}" "${2:-dark}" "${3:-0.5}" --style "${4:-tonal}"
         exit 0 ;;
     init)
         focused_output_name="${1:-}"; outputs_csv="${2:-}"
@@ -231,6 +235,7 @@ case "$cmd" in
         while IFS= read -r out; do
             [[ -n "$out" ]] || continue
             pic="$(map_get "$out")"; [[ -f "$pic" ]] || pic="$saved"
+            [[ -f "$pic" ]] || pic="$default_wallpaper"
             [[ -f "$pic" ]] || pic="$(next_pic || true)"
             [[ -n "$pic" && -f "$pic" ]] || continue
             if is_video "$pic" && ! command -v mpvpaper >/dev/null; then
@@ -260,8 +265,9 @@ case "$cmd" in
         fi
         exit 0 ;;
     recolor)
-        focused_output_name="${1:-}"; outputs_csv="${2:-}"
-        [[ -s "$state" ]] || exit 0; palette "$(cat "$state")"; exit 0 ;;
+        variant="${1:-}"
+        focused_output_name="${2:-}"; outputs_csv="${3:-}"
+        [[ -s "$state" ]] || exit 0; palette "$(cat "$state")" "$variant"; exit 0 ;;
     set)
         pic="${1:-}"; out="${2:-}"; focused_output_name="${3:-}"; outputs_csv="${4:-}"
         [[ "$out" == all ]] && out="" ;;

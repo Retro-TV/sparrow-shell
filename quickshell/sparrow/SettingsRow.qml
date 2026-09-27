@@ -4,7 +4,7 @@ import QtQuick
 import "Singletons"
 
 /**
- * One settings line: an optional leading kanji, a name and an optional faint sub
+ * One settings line: an optional leading kanji, a name and an optional secondary
  * caption on the left, and a control slot on the right, capped by a single bottom
  * hairline. `control` is the default slot for the toggle, segmented control or
  * chevron. `surface` wires hover and activation back to the owning settings
@@ -93,7 +93,7 @@ Item {
             width: parent.width
             visible: srow.sub.length > 0 && (!srow.captionOnFocus || srow.focused || srowHover.hovered)
             text: srow.sub
-            color: Theme.faint
+            color: Theme.subtle
             font.family: Theme.font
             font.pixelSize: 10.5 * srow.s
             wrapMode: Text.WordWrap

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Generate Sparrow's Ricelin-derived palette and Niri border color fragment."""
+"""Generate Sparrow's image-derived Material palette and Niri border colors."""
 import colorsys
 import json
+import math
 import os
 import re
 import subprocess
@@ -9,10 +10,230 @@ import sys
 import tempfile
 from pathlib import Path
 
-from PIL import Image, ImageStat
+from PIL import Image, ImageOps
 
 HOME = Path.home()
 CACHE = Path(os.environ.get("XDG_CACHE_HOME", HOME / ".cache")) / "sparrow-shell"
+
+PALETTE_STYLES = ("tonal", "vibrant", "alternate")
+LEGACY_PALETTE_STYLES = {
+    "scheme-tonal-spot": "tonal",
+    "scheme-neutral": "tonal",
+    "scheme-fidelity": "tonal",
+    "neutral": "tonal",
+    "fidelity": "tonal",
+    "scheme-expressive": "vibrant",
+    "scheme-vibrant": "vibrant",
+    "expressive": "vibrant",
+    "vibrant": "vibrant",
+    "scheme-fruit-salad": "alternate",
+    "fruit": "alternate",
+}
+
+
+def canonical_style(value):
+    value = str(value or "tonal").strip().lower()
+    value = LEGACY_PALETTE_STYLES.get(value, value)
+    if value not in PALETTE_STYLES:
+        raise ValueError(f"unsupported Sparrow palette style: {value}")
+    return value
+
+
+def _linear_channel(value):
+    value /= 255
+    return value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4
+
+
+def rgb_to_oklab(rgb):
+    """Convert 8-bit sRGB to OKLab for perceptual palette grouping."""
+    r, g, b = (_linear_channel(value) for value in rgb)
+    l = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b
+    m = 0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b
+    s = 0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b
+    l, m, s = (value ** (1 / 3) for value in (l, m, s))
+    return (
+        0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s,
+        1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s,
+        0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s,
+    )
+
+
+def oklab_to_rgb(lab):
+    l, a, b = lab
+    l_ = l + 0.3963377774 * a + 0.2158037573 * b
+    m_ = l - 0.1055613458 * a - 0.0638541728 * b
+    s_ = l - 0.0894841775 * a - 1.2914855480 * b
+    l, m, s = (value ** 3 for value in (l_, m_, s_))
+    channels = (
+        4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+        -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+        -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s,
+    )
+    result = []
+    for channel in channels:
+        channel = max(0.0, min(1.0, channel))
+        srgb = 12.92 * channel if channel <= 0.0031308 else 1.055 * channel ** (1 / 2.4) - 0.055
+        result.append(round(srgb * 255))
+    return tuple(result)
+
+
+def _lab_hex(lab):
+    return "#%02x%02x%02x" % oklab_to_rgb(lab)
+
+
+def _lab_chroma(lab):
+    return math.hypot(lab[1], lab[2])
+
+
+def _lab_hue(lab):
+    return math.degrees(math.atan2(lab[2], lab[1])) % 360
+
+
+def _hue_distance(first, second):
+    distance = abs(first - second) % 360
+    return min(distance, 360 - distance)
+
+
+def _matugen_image_colors(path):
+    """Ask Matugen's Material Color Utilities image pipeline for ranked seeds."""
+    result = subprocess.run(
+        ["matugen", "image", str(path), "--show-source-colors", "--dry-run"],
+        check=True, capture_output=True, text=True,
+    )
+    return list(dict.fromkeys(re.findall(r"#[0-9a-fA-F]{6}", result.stdout)))
+
+
+def candidates_from_colors(path, source_colors, max_dimension=160):
+    """Measure Matugen-ranked seeds against the wallpaper in perceptual space.
+
+    Matugen uses Material Color Utilities' Celebi quantizer and Score ranking.
+    Coverage here keeps a tiny accent from becoming a whole-desktop theme and
+    lets Sparrow require a genuinely present alternate hue.
+    """
+    with Image.open(path) as source:
+        image = ImageOps.exif_transpose(source).convert("RGB")
+        image.thumbnail((max_dimension, max_dimension), Image.Resampling.BOX)
+        image = image.quantize(colors=96, method=Image.Quantize.MEDIANCUT).convert("RGB")
+        histogram = image.getcolors(max_dimension * max_dimension) or []
+
+    total = sum(count for count, _ in histogram)
+    source_labs = []
+    for color in source_colors:
+        rgb = tuple(int(color[i:i + 2], 16) for i in (1, 3, 5))
+        source_labs.append((color.upper(), rgb_to_oklab(rgb)))
+
+    chromatic_count = 0
+    coverage = [0] * len(source_labs)
+    for count, rgb in histogram:
+        lab = rgb_to_oklab(rgb)
+        chroma = _lab_chroma(lab)
+        if lab[0] < 0.08 or lab[0] > 0.96 or chroma < 0.045:
+            continue
+        chromatic_count += count
+        if not source_labs:
+            continue
+        nearest_index, nearest_source = min(
+            enumerate(source_labs),
+            key=lambda entry: math.dist(lab, entry[1][1]),
+        )
+        nearest_distance = math.dist(lab, nearest_source[1])
+        if nearest_distance <= 0.14:
+            coverage[nearest_index] += count
+
+    chromatic_coverage = chromatic_count / max(total, 1)
+    candidates = []
+    if chromatic_coverage >= 0.05:
+        for index, ((color, lab), count) in enumerate(zip(source_labs, coverage)):
+            candidate_coverage = count / max(total, 1)
+            if candidate_coverage < 0.018:
+                continue
+            chroma = _lab_chroma(lab)
+            chroma_weight = 0.65 + 0.35 * min(chroma / 0.22, 1.0)
+            light_weight = 0.7 + 0.3 * max(0.0, 1.0 - abs(lab[0] - 0.58) / 0.58)
+            candidates.append({
+                "color": color,
+                "coverage": candidate_coverage,
+                "chroma": chroma,
+                "hue": _lab_hue(lab),
+                "lab": lab,
+                # Keep Material's ranking as a tie-breaker, but let actual
+                # image coverage prevent a high-score speck from taking over.
+                "score": candidate_coverage * chroma_weight * light_weight
+                         + (len(source_labs) - index) * 1e-6,
+            })
+    candidates.sort(key=lambda item: item["score"], reverse=True)
+    return {"candidates": candidates, "chromatic_coverage": chromatic_coverage}
+
+
+def extract_candidates(path, max_dimension=160):
+    return candidates_from_colors(path, _matugen_image_colors(path), max_dimension)
+
+
+def _scale_lab_chroma(lab, factor):
+    return (lab[0], lab[1] * factor, lab[2] * factor)
+
+
+def choose_seed(extraction, style):
+    """Select only image-derived seeds; fall back to neutral for near-gray art."""
+    style = canonical_style(style)
+    candidates = extraction["candidates"]
+    if not candidates:
+        return {"seed": "#787878", "chromatic": False, "candidate": None,
+                "used_alternate": False, "style": "tonal"}
+
+    dominant = candidates[0]
+    alternate = next((candidate for candidate in candidates[1:]
+                      if candidate["coverage"] >= 0.05
+                      and _hue_distance(candidate["hue"], dominant["hue"]) >= 28
+                      and math.dist(candidate["lab"], dominant["lab"]) >= 0.10), None)
+    vibrant = max(
+        (candidate for candidate in candidates
+         if candidate["coverage"] >= max(0.03, extraction["chromatic_coverage"] * 0.10)),
+        key=lambda candidate: candidate["chroma"] * math.sqrt(candidate["coverage"]),
+        default=dominant,
+    )
+
+    if style == "tonal":
+        selected, chroma_factor, used_alternate = dominant, 0.86, False
+    elif style == "vibrant":
+        selected, chroma_factor, used_alternate = vibrant, 1.0, False
+    elif alternate is not None:
+        selected, chroma_factor, used_alternate = alternate, 1.0, True
+    else:
+        # No distinct secondary hue: use the image's vivid treatment rather
+        # than pretending that a slightly desaturated copy is an alternate.
+        selected, chroma_factor, used_alternate = vibrant, 1.0, False
+
+    seed = _lab_hex(_scale_lab_chroma(selected["lab"], chroma_factor))
+    effective_style = style if (style != "alternate" or used_alternate) else "vibrant"
+    return {"seed": seed, "chromatic": True, "candidate": selected,
+            "used_alternate": used_alternate, "style": effective_style}
+
+
+def available_styles(extraction):
+    styles = ["tonal"]
+    if extraction["candidates"]:
+        styles.append("vibrant")
+        dominant = extraction["candidates"][0]
+        if any(candidate["coverage"] >= 0.05
+               and _hue_distance(candidate["hue"], dominant["hue"]) >= 28
+               and math.dist(candidate["lab"], dominant["lab"]) >= 0.10
+               for candidate in extraction["candidates"][1:]):
+            styles.append("alternate")
+    return styles
+
+
+def surface_tones(style):
+    """Sparrow dark-surface ramps, expressed as Material tone levels."""
+    if style == "tonal":
+        return (5, 10, 15, 20, 25, 30)
+    return (10, 15, 20, 30, 35, 40)
+
+
+def material_scheme(style, chromatic):
+    if not chromatic:
+        return "scheme-monochrome"
+    return "scheme-tonal-spot" if style == "tonal" else "scheme-content"
 def tint(h, s, l):
     r, g, b = colorsys.hls_to_rgb(h % 1, max(0, min(1, l)), max(0, min(1, s)))
     return "#%02x%02x%02x" % (round(r * 255), round(g * 255), round(b * 255))
@@ -271,42 +492,77 @@ def render_text_icon(palette):
 
 
 def main():
-    if len(sys.argv) < 2:
-        raise SystemExit("usage: wallcolors.py IMAGE | --hue DEGREES dark|light SATURATION")
+    args = sys.argv[1:]
+    palette_style = "tonal"
+    style_flag = "--style" if "--style" in args else "--scheme" if "--scheme" in args else None
+    if style_flag:
+        index = args.index(style_flag)
+        if index + 1 >= len(args):
+            raise SystemExit(f"wallcolors: {style_flag} needs a Sparrow palette style")
+        palette_style = canonical_style(args[index + 1])
+        del args[index:index + 2]
+    if not args:
+        raise SystemExit("usage: wallcolors.py IMAGE [--style tonal|vibrant|alternate] | --hue DEGREES dark|light SATURATION [--style STYLE]")
     mode = "dark"
-    if sys.argv[1] == "--hue":
-        hue = float(sys.argv[2]) % 360 / 360
-        mode = "light" if len(sys.argv) >= 4 and sys.argv[3] == "light" else "dark"
-        sat = max(0, min(1, float(sys.argv[4]) if len(sys.argv) > 4 else .5))
+    if args[0] == "--hue":
+        if len(args) < 2:
+            raise SystemExit("wallcolors: --hue needs a hue value")
+        hue = float(args[1]) % 360 / 360
+        mode = "light" if len(args) >= 3 and args[2] == "light" else "dark"
+        sat = max(0, min(1, float(args[3]) if len(args) > 3 else .5))
         chromatic = sat > .02
+        manual_seed = tint(hue, sat, .45)
+        manual_lab = rgb_to_oklab(tuple(int(manual_seed[i:i + 2], 16) for i in (1, 3, 5)))
+        factor = {"tonal": 0.86, "vibrant": 1.0, "alternate": 1.0}[palette_style]
+        seed = _lab_hex(_scale_lab_chroma(manual_lab, factor)) if chromatic else "#787878"
+        if palette_style == "alternate":
+            palette_style = "vibrant"
+        style_options = ["tonal", "vibrant"] if chromatic else ["tonal"]
     else:
-        wallpaper = Path(sys.argv[1])
+        wallpaper = Path(args[0])
         if not wallpaper.is_file():
             raise SystemExit(f"wallcolors: image not found: {wallpaper}")
-        hue, sat, mean_l, chromatic = analyze(wallpaper)
-    # Brightness never selects a light scheme.  Matugen's wallpaper-seeded
-    # Material tonal palettes provide a perceptual, hue-preserving dark ramp.
-    seed = tint(hue, sat, .45) if chromatic else "#787878"
-    command = ["matugen", "color", "hex", seed, "-m", mode if sys.argv[1] == "--hue" else "dark", "-j", "hex"]
-    if not chromatic:
-        # Matugen's default tonal-spot scheme invents a blue-green hue for an
-        # achromatic seed; its native monochrome scheme preserves grayscale.
-        command.extend(["-t", "scheme-monochrome"])
+        extraction = extract_candidates(wallpaper)
+        selection = choose_seed(extraction, palette_style)
+        seed, chromatic = selection["seed"], selection["chromatic"]
+        palette_style = selection["style"]
+        style_options = available_styles(extraction)
+    # Wallpaper brightness never selects a light scheme automatically; dynamic
+    # wallpaper palettes always use Matugen's dark Material roles.
+    # Tonal uses Material's restrained Tonal Spot scheme; stronger choices use
+    # Content, which preserves the selected image color instead of rotating to
+    # a hue-harmony color.
+    effective_scheme = material_scheme(palette_style, chromatic)
+    command = ["matugen", "color", "hex", seed, "-m", mode if args[0] == "--hue" else "dark", "-t", effective_scheme, "-j", "hex"]
     matugen = subprocess.run(command,
                              check=True, capture_output=True, text=True)
     generated = json.loads(matugen.stdout)
     material = generated["colors"]
-    scheme = mode if sys.argv[1] == "--hue" else "dark"
+    scheme = mode if args[0] == "--hue" else "dark"
     role = lambda name: material[name][scheme]["color"]
     surfaces = {"source_color": seed}
     if scheme == "dark":
-        tones = generated["palettes"]["primary" if chromatic else "neutral"]
+        if not chromatic and effective_scheme == "scheme-monochrome":
+            # Preserve a truly neutral palette for grayscale wallpapers.
+            tones = generated["palettes"]["neutral"]
+        else:
+            # Material's stock dark surface roles are intentionally almost
+            # neutral black. Derive Sparrow's surface ramp directly from the
+            # chosen image seed, not the standardized surface roles.
+            surface_seed = seed
+            ramp_result = subprocess.run(
+                ["matugen", "color", "hex", surface_seed, "-m", "dark",
+                 "-t", effective_scheme, "--dry-run", "-j", "hex"],
+                check=True, capture_output=True, text=True,
+            )
+            tones = json.loads(ramp_result.stdout)["palettes"]["primary"]
         tone = lambda value: tones[str(value)]["color"]
-        surfaces.update(background=tone(5), surface=tone(10),
-                         surface_container_lowest=tone(5), surface_container_low=tone(15),
-                         surface_container=tone(20), surface_container_high=tone(25),
-                         surface_container_highest=tone(30), surface_bright=tone(40),
-                         outline_variant=tone(35), outline=tone(60))
+        t_background, t_low, t_container, t_high, t_highest, t_bright = surface_tones(palette_style)
+        surfaces.update(background=tone(t_background), surface=tone(t_low),
+                        surface_container_lowest=tone(t_background), surface_container_low=tone(t_low),
+                        surface_container=tone(t_container), surface_container_high=tone(t_high),
+                        surface_container_highest=tone(t_highest), surface_bright=tone(t_bright),
+                        outline_variant=tone(t_highest), outline=tone(60))
     else:
         # Manual light mode remains opt-in; only wallpaper-driven dynamic mode
         # is subject to Sparrow's forced-dark policy.
@@ -319,10 +575,21 @@ def main():
                  "tertiary", "on_tertiary", "tertiary_container", "on_tertiary_container",
                  "error", "on_error", "on_surface", "on_background", "on_surface_variant"):
         surfaces[name] = role(name)
-    if scheme == "dark" and not chromatic:
-        # The Material monochrome scheme can inherit a default blue-green hue
-        # when the source has no defined hue. Use its neutral tonal palette for
-        # wallpaper UI roles instead of letting that fallback invent a color.
+    if scheme == "dark" and chromatic and palette_style != "tonal":
+        # Keep Tonal's soft accent, but make the stronger styles use an
+        # image-derived Material tone with its matching foreground tone.
+        surfaces["primary"] = tone(70)
+        surfaces["on_primary"] = tone(10)
+    if scheme == "dark" and chromatic and palette_style != "tonal":
+        # Tonal keeps Material's soft, high-contrast accent. Vibrant/Alternate
+        # use a stronger source-derived accent tone rather than rotating hue.
+        surfaces["primary"] = tone(70)
+        surfaces["on_primary"] = tone(10)
+    if scheme == "dark" and not chromatic and effective_scheme == "scheme-monochrome":
+        # Monochrome can inherit a default chromatic hue for undefined gray
+        # seeds. Keep Sparrow's established neutral fallback for this case.
+        tones = generated["palettes"]["neutral"]
+        tone = lambda value: tones[str(value)]["color"]
         surfaces.update(primary=tone(80), on_primary=tone(20), primary_container=tone(30),
                         on_primary_container=tone(90), secondary=tone(70), on_secondary=tone(20),
                         secondary_container=tone(30), on_secondary_container=tone(90),
@@ -330,12 +597,14 @@ def main():
                         on_tertiary_container=tone(90), outline=tone(60), outline_variant=tone(35))
     surfaces.update(cream=surfaces["on_surface"], bright=surfaces["on_surface"],
                     subtle=surfaces["on_surface_variant"],
-                    dim=tone(80) if scheme == "dark" else role("on_surface_variant"),
-                    faint=tone(70) if scheme == "dark" else role("on_surface_variant"),
-                    icon_dim=tone(90) if scheme == "dark" else role("on_surface"),
-                    tick_rest=tone(80) if scheme == "dark" else role("on_surface_variant"))
+                    dim=surfaces["outline"],
+                    faint=surfaces["outline_variant"],
+                    icon_dim=surfaces["on_surface_variant"],
+                    tick_rest=surfaces["outline"])
     kitty = terminal_colors(surfaces)
     surfaces["terminal"] = kitty
+    surfaces["available_styles"] = style_options
+    surfaces["palette_style"] = palette_style
     palette = json.dumps(surfaces, indent=2) + "\n"
     kdl = ("// Generated by Sparrow wallpaper palette; do not edit.\n"
            "layout {\n    border {\n"

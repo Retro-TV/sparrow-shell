@@ -45,19 +45,20 @@ Rectangle {
                 id: opt
                 required property var modelData
                 readonly property bool current: seg.value === modelData.value
+                readonly property bool optionEnabled: modelData.enabled !== false
                 property bool hovered: false
 
                 width: optLabel.implicitWidth + 18 * seg.s
                 height: optLabel.implicitHeight + 12 * seg.s
                 radius: 8 * seg.s
-                color: opt.current ? Qt.alpha(Theme.onGlow, 0.16) : (opt.hovered ? Theme.frameBg : "transparent")
+                color: opt.current ? Qt.alpha(Theme.onGlow, 0.16) : (opt.hovered && opt.optionEnabled ? Theme.frameBg : "transparent")
                 Behavior on color { ColorAnimation { duration: Motion.fast } }
 
                 Text {
                     id: optLabel
                     anchors.centerIn: parent
                     text: opt.modelData.label
-                    color: opt.current ? Theme.cream : Theme.subtle
+                    color: !opt.optionEnabled ? Theme.faint : (opt.current ? Theme.cream : Theme.subtle)
                     font.family: Theme.font
                     font.pixelSize: 10.5 * seg.s
                     font.weight: Font.Bold
@@ -67,7 +68,8 @@ Rectangle {
                 MouseArea {
                     anchors.fill: parent
                     hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
+                    enabled: opt.optionEnabled
+                    cursorShape: opt.optionEnabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                     onEntered: opt.hovered = true
                     onExited: opt.hovered = false
                     onClicked: seg.picked(opt.modelData.value)

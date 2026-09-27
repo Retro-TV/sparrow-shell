@@ -6,7 +6,7 @@ binds {
     Super+E hotkey-overlay-title="Open Sparrow Files" { spawn "env" "GTK_THEME=Sparrow" "thunar"; }
     Super+F hotkey-overlay-title="Open Firefox" { spawn "firefox"; }
     Super+L hotkey-overlay-title="Lock session" { spawn-sh "\"$HOME/.config/quickshell/sparrow/scripts/sparrow-lock\""; }
-    Super+Shift+S hotkey-overlay-title="Screenshot with Rishot" { spawn-sh "\"$HOME/.local/bin/rishot\""; }
+    Super+Shift+S hotkey-overlay-title="Screenshot with Rishot" { spawn "rishot"; }
     Super+D hotkey-overlay-title="Open Sparrow Recorder" { spawn-sh "qs ipc --path \"$HOME/.config/quickshell/sparrow\" call pill recorder ''"; }
     Super+Space hotkey-overlay-title="Open Sparrow Launcher" { spawn-sh "qs ipc --path \"$HOME/.config/quickshell/sparrow\" call pill launcher ''"; }
     Super+C hotkey-overlay-title="Open Sparrow Wallpaper Picker" { spawn-sh "qs ipc --path \"$HOME/.config/quickshell/sparrow\" call pill wallpaper ''"; }

@@ -72,9 +72,10 @@ Font Awesome, or Nerd Font icon-font dependency.
 
 ## Separate screenshot application
 
-Rishot is upstream software, separately installed as `rishot-git` from AUR or
-through its upstream standalone install route; it is not part of Sparrow's
-source tree. Its documented required runtime dependencies are `quickshell`,
+Rishot is upstream software, separately installed and not part of Sparrow's
+source tree. Its current upstream repository documents the standalone install
+route; that installer places the app under `~/.local/share/rishot` and links
+`rishot` into `~/.local/bin`. Its documented required runtime dependencies are `quickshell`,
 `qt6-declarative`, `qt6-svg`, `qt6-5compat`, `qt6-wayland`, and
 `wl-clipboard` (Rishot's own screenshot workflow; Sparrow does not provide a
 Quickshell clipboard feature). On Niri, `grim` is the screenshot grabber. Optional: `imagemagick`
@@ -114,8 +115,8 @@ The only browser-related runtime work is optional wallpaper search/download.
 
 ## Not core / not included
 
-- `ddcutil`, `nvibrant`, `wlsunset`, `cava`, and `mpvpaper` are optional;
-  Rishot is separately installed as described above. The cursor package is a
+- `ddcutil`, `nvibrant`, `wlsunset`, `cava`, `mpvpaper`, and Rishot are optional;
+  it is separately installed as described above. The cursor package is a
   recommended default, but users may select a different installed cursor.
 - `gvfs` is recommended for Thunar's removable-volume and remote-location
   integration; it is not required for opening local folders or basic file

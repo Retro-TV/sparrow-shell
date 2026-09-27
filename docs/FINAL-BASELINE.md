@@ -77,7 +77,7 @@ The visible/runtime feature set is:
 | Calendar / weather / battery / devices | Events/calendar state, optional weather lookup, UPower battery/peripheral data, NetworkManager Wi-Fi, BlueZ Bluetooth. | Mixed core/optional service integrations; availability depends on the relevant host daemon/device/network. |
 | Power / idle / Keep Awake | Pill power actions, dedicated idle monitor, lock/screen-off/suspend policy, Niri output power and idle inhibitor. | Intended core; destructive power actions are never part of static validation. |
 | Lock screen | Quickshell `WlSessionLock`, Quickshell PAM, Qylock Last of Us composition, per-output selected wallpaper, and Auto/Light/Dark foreground based on wallpaper metadata. | Intended primary lock. This pass added a null-screen guard; live lock was not invoked to test it. |
-| Screenshot | Niri binding invokes separately installed Rishot from `~/.local/bin`. | Optional external application; not vendored. |
+| Screenshot | Niri binding invokes separately installed Rishot as `rishot` through `PATH`. | Optional external application; not vendored. |
 | File drop | Pill's accepted local media files are routed to wallpaper selection/application. No generic software installer remains. | Wallpaper-only behavior; do not restore package install UI. |
 | Sysmon / Cava | System monitor surface and optional Cava visualizer. | Optional and independent of removed Game Mode. |
 
@@ -270,9 +270,11 @@ online wallpaper functions, zoxide/Fastfetch, imagemagick conveniences, and
 Hyprlock fallback. Missing optional controls should remain absent/adaptive, not
 fail the main shell.
 
-**Separate app:** Rishot is installed at `~/.local/bin/rishot` on this host and
-is not vendored. Niri's screenshot binding therefore depends on that separate
-install (and grim). Decide/install it separately from Sparrow core.
+**Separate app:** Rishot is installed on this host via a user-local launcher
+and is not vendored. Niri's screenshot binding resolves `rishot` through
+`PATH`, so the installer must ensure its separate installation provides that
+command (and its Niri capture dependency, grim). Decide/install it separately
+from Sparrow core.
 
 **Development/test:** git, QML lint/Qt tools, Python unittest, Node for the
 monitor helper test, and Niri validation. They need not all be runtime
@@ -335,8 +337,8 @@ and caches were excluded from active-source classification.
 - Missing optional service/device/executable means its surface/control is
   omitted or reports unavailable; package installation is not managed by
   Sparrow.
-- Rishot and the absolute live wallpaper-unit symlink prevent a fully
-  checkout-independent installation today.
+- The absolute live wallpaper-unit symlink prevents a fully checkout-independent
+  installation today. Rishot is a separate PATH dependency.
 - Live user Niri config contains host-specific output settings and user edits
   absent from repository defaults; the current machine is not a clean-install
   test.

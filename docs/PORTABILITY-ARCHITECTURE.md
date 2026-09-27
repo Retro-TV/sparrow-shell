@@ -123,12 +123,12 @@ The wrapper does not prepare avatars, wallpaper links, or generated color
 includes for Hyprlock. The Quickshell lock reads Sparrow's selected wallpaper
 and palette directly.
 
-Rishot remains upstream software. On Arch it is available as an AUR package
-(`rishot-git`) and also documents a standalone installer; prefer the package
-or a reviewed manual installation rather than vendoring the app. Sparrow's
-Niri shortcut invokes the `~/.local/bin/rishot` user-local install through a
-home-relative shell command, and `~/.local/bin` is present in the current Niri
-PATH. Rishot's required Arch dependencies are `quickshell`, Qt 6 declarative,
+Rishot remains upstream software. Its current upstream repository documents a
+standalone installer and describes the AUR package as its primary route; do
+not vendor its source into Sparrow. The installer places its runtime under
+`~/.local/share/rishot` and links the launcher to `~/.local/bin/rishot`.
+Sparrow's Niri shortcut invokes `rishot` through `PATH`, without assuming a
+specific install directory. Rishot's required Arch dependencies are `quickshell`, Qt 6 declarative,
 SVG, 5compat and Wayland components, and `wl-clipboard`; on Niri, `grim` is the
 capture tool. Its optional conveniences include ImageMagick, cliphist, curl,
 kdialog and libnotify.

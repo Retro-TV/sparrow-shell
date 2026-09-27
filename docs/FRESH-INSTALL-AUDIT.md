@@ -134,8 +134,8 @@ name is required; generated output arrangement must be per-install.
 Bindings cover Kitty, Thunar, Firefox, Sparrow lock, separate Rishot screenshot,
 Recorder, Launcher, Wallpaper picker/next, normal Niri workspace 1–9, Overview,
 window/layout controls, and hardware media/brightness. App binds require the
-named app or user changes. Rishot at `~/.local/bin/rishot` is separate, not
-bundled. Recorder needs GPU Screen Recorder; window/region pick additionally
+named app or user changes. Rishot is separate, not bundled, and is invoked by
+its PATH command. Recorder needs GPU Screen Recorder; window/region pick additionally
 needs slurp.
 
 ### Kitty/Fish/Starship
@@ -258,8 +258,9 @@ surface.
   daemon owner.
 - Merge Niri includes, validate staged config, then reload only after success;
   generate monitor configuration on target hardware.
-- Offer app config/bind integration and check named commands. Rishot stays a
-  separate install. Do not add a package manager.
+- Offer app config/bind integration and check named commands, including the
+  PATH-resolved `rishot` command. Rishot stays a separate install. Do not add a
+  package manager.
 - Back up before any changes to Niri root/fragments, units, runtime symlink,
   Kitty/Fish/Starship, GTK settings, desktop entries, Hyprlock config or
   existing theme/icon directories.

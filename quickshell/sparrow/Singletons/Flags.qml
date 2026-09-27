@@ -57,14 +57,12 @@ Singleton {
     property alias showGlyphs: adapter.showGlyphs
     property alias paletteMode: adapter.paletteMode
     property alias paletteVariant: adapter.paletteVariant
+    property alias appearanceMode: adapter.appearanceMode
     property alias lockForegroundMode: adapter.lockForegroundMode
     property alias wallpaperDir: adapter.wallpaperDir
     property alias randomScope: adapter.randomScope
     property alias uiScale: adapter.uiScale
     property alias reduceMotion: adapter.reduceMotion
-    property alias manualHue: adapter.manualHue
-    property alias manualDark: adapter.manualDark
-    property alias manualSat: adapter.manualSat
     property alias uiFont: adapter.uiFont
     property alias pillOpacity: adapter.pillOpacity
     property alias topGap: adapter.topGap
@@ -118,8 +116,11 @@ Singleton {
             property bool clockSeconds: false
             property bool showGlyphs: true
             property string paletteMode: "dynamic"
-            /** Sparrow palette treatment: tonal, vibrant or alternate. */
-            property string paletteVariant: "tonal"
+            /** Matugen scheme selection: auto, tonal, content, or monochrome. */
+            property string paletteVariant: "auto"
+            /** Dynamic mode only; auto delegates light/dark selection to Matugen. */
+            property string appearanceMode: "auto"
+            property int paletteSettingsVersion: 1
             property string lockForegroundMode: "auto"
             /** Explicit wallpaper folder override. Empty means autodetect: wallpaper.sh's last resolved directory in sparrow-shell/wallpaper-dir, then $HOME/Pictures/wallpapers. Lives in user state, independently of the portable shell configuration. */
             property string wallpaperDir: ""
@@ -127,9 +128,6 @@ Singleton {
             property string randomScope: "all"
             property real uiScale: 1.0
             property bool reduceMotion: false
-            property int manualHue: 30
-            property bool manualDark: true
-            property real manualSat: 0.5
             property string uiFont: ""
             property real pillOpacity: 1.0
             /** Screen-edge gap as a fraction of the 8px scaled spacing unit. 0 sits the pill flush to the screen edge. */

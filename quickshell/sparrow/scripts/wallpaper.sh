@@ -169,15 +169,17 @@ apply_visual() {
     fi
 }
 palette() {
-    local pic="$1" variant="${2:-}"
-    if [[ -z "$variant" ]]; then
-        variant="$(jq -r '.paletteVariant // "tonal"' "$flags_file" 2>/dev/null || echo tonal)"
-    fi
+    local pic="$1" variant="${2:-}" source_mode mode
+    source_mode="$(jq -r '.paletteMode // "dynamic"' "$flags_file" 2>/dev/null || echo dynamic)"
+    [[ "$source_mode" == manual ]] && source_mode=dynamic
+    [[ "$source_mode" == static ]] || source_mode=dynamic
+    [[ -n "$variant" ]] || variant="$(jq -r '.paletteVariant // "auto"' "$flags_file" 2>/dev/null || echo auto)"
+    mode="$(jq -r '.appearanceMode // (if .paletteMode == "manual" then (if .manualDark == false then "light" else "dark" end) else "dark" end)' "$flags_file" 2>/dev/null || echo dark)"
     if is_video "$pic" || [[ "${pic,,}" == *.gif ]]; then
         make_still "$pic" "$still" || return 1
         pic="$still"
     fi
-    python3 "$helper/wallcolors.py" "$pic" --style "$variant"
+    python3 "$helper/wallcolors.py" "$pic" --source-mode "$source_mode" --style "$variant" --mode "$mode"
 }
 list_media() {
     [[ -d "$wall_dir" ]] || return 0
@@ -219,9 +221,6 @@ shift || true
 case "$cmd" in
     resolve) printf '%s\n' "$wall_dir" > "$state_root/wallpaper-dir.tmp"; mv -f "$state_root/wallpaper-dir.tmp" "$state_root/wallpaper-dir"; exit 0 ;;
     list-dir) printf '%s\n' "$wall_dir"; exit 0 ;;
-    manual)
-        python3 "$helper/wallcolors.py" --hue "${1:-30}" "${2:-dark}" "${3:-0.5}" --style "${4:-tonal}"
-        exit 0 ;;
     init)
         focused_output_name="${1:-}"; outputs_csv="${2:-}"
         if [[ -z "$outputs_csv" ]]; then
@@ -260,9 +259,18 @@ case "$cmd" in
                 printf '%s\n' "$active" > "$state.tmp"
                 mv -f "$state.tmp" "$state"
                 palette_file="${XDG_CACHE_HOME:-$HOME/.cache}/sparrow-shell/palette.json"
+                source_mode="$(jq -r '.paletteMode // "dynamic"' "$flags_file" 2>/dev/null || echo dynamic)"
+                [[ "$source_mode" == manual ]] && source_mode=dynamic
+                [[ "$source_mode" == static ]] || source_mode=dynamic
+                style="$(jq -r '.paletteVariant // "auto"' "$flags_file" 2>/dev/null || echo auto)"
+                mode="$(jq -r '.appearanceMode // (if .paletteMode == "manual" then (if .manualDark == false then "light" else "dark" end) else "dark" end)' "$flags_file" 2>/dev/null || echo dark)"
                 if [[ "$active" != "$saved" || ! -s "$palette_file" ]] \
-                        || ! jq -e '(.wallpaper_luminance | type == "number") and
-                            (.recommended_lock_foreground == "light" or .recommended_lock_foreground == "dark")' \
+                        || ! jq -e --arg source "$source_mode" --arg style "$style" --arg mode "$mode" '
+                            (.wallpaper_luminance | type == "number") and
+                            (.recommended_lock_foreground == "light" or .recommended_lock_foreground == "dark") and
+                            .theme_source == $source and
+                            (.palette_style == $style or $source == "static") and
+                            (.appearance_mode == $mode or $source == "static")' \
                             "$palette_file" >/dev/null 2>&1; then
                     palette "$active" || true
                 fi
@@ -270,9 +278,8 @@ case "$cmd" in
         fi
         exit 0 ;;
     recolor)
-        variant="${1:-}"
-        focused_output_name="${2:-}"; outputs_csv="${3:-}"
-        [[ -s "$state" ]] || exit 0; palette "$(cat "$state")" "$variant"; exit 0 ;;
+        focused_output_name="${1:-}"; outputs_csv="${2:-}"
+        [[ -s "$state" ]] || exit 0; palette "$(cat "$state")"; exit 0 ;;
     set)
         pic="${1:-}"; out="${2:-}"; focused_output_name="${3:-}"; outputs_csv="${4:-}"
         [[ "$out" == all ]] && out="" ;;

@@ -29,7 +29,7 @@ shell to start.
 | `libnotify` | `notify-send` for Sparrow recorder/peripheral notifications. |
 | `systemd` | User units, idle/power actions and graphical session target. |
 | `dbus` and `upower` | User/session services consumed by Quickshell's notifications, tray, Bluetooth and UPower battery services; actual daemons/session bus must be available. |
-| `xdg-desktop-portal` plus a compatible session backend | Portal-based recording directory/file selection and desktop integration. Select a backend suitable for the installed session; this host has GNOME/GTK portal backends. |
+| `xdg-desktop-portal`, `xdg-desktop-portal-gtk`, plus a compatible session backend | Portal-based recording directory/file selection and desktop integration. Niri selects GTK for FileChooser; Sparrow scopes its generated GTK theme to this backend with a user-service drop-in. |
 
 Quickshell's Arch package depends on Qt 6 base/declarative/SVG/Wayland
 components. Sparrow's video preview additionally uses `qt6-multimedia` and

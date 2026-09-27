@@ -145,6 +145,63 @@ def initialize_onboarding_state(state_root: Path) -> bool:
     return True
 
 
+def migrate_palette_preferences(flags_path: Path) -> bool:
+    """Translate the experimental palette controls without touching other flags."""
+    if not flags_path.is_file():
+        return False
+    try:
+        flags = json.loads(flags_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise RuntimeError(f"could not read Sparrow flags for palette migration: {error}") from error
+    if not isinstance(flags, dict) or int(flags.get("paletteSettingsVersion", 0) or 0) >= 1:
+        return False
+
+    old_source = str(flags.get("paletteMode", "dynamic")).lower()
+    old_style = str(flags.get("paletteVariant", "tonal")).strip().lower()
+    styles = {
+        "auto": "auto", "monochrome": "monochrome",
+        "tonal": "tonal", "scheme-tonal-spot": "tonal", "neutral": "tonal",
+        "scheme-neutral": "tonal", "fidelity": "tonal", "scheme-fidelity": "tonal",
+        "vibrant": "content", "scheme-vibrant": "content", "content": "content",
+        "scheme-content": "content", "alternate": "auto", "fruit": "auto",
+        "scheme-fruit-salad": "auto", "expressive": "auto", "scheme-expressive": "auto",
+    }
+    flags["paletteVariant"] = styles.get(old_style, "auto")
+    if old_source not in ("static", "dynamic"):
+        flags["paletteMode"] = "dynamic"
+    old_mode = str(flags.get("appearanceMode", "")).lower()
+    if old_mode not in ("auto", "dark", "light"):
+        # Legacy wallpaper-driven palettes were always Matugen dark. Manual
+        # hue users retain their explicit tone choice when possible.
+        old_mode = "light" if old_source == "manual" and flags.get("manualDark") is False else "dark"
+    flags["appearanceMode"] = old_mode
+    for obsolete in ("manualHue", "manualDark", "manualSat"):
+        flags.pop(obsolete, None)
+    flags["paletteSettingsVersion"] = 1
+
+    source_stat = flags_path.stat()
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{flags_path.name}.", suffix=".tmp", dir=flags_path.parent
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            json.dump(flags, stream, indent=2, ensure_ascii=False)
+            stream.write("\n")
+            stream.flush()
+            os.fchmod(stream.fileno(), stat.S_IMODE(source_stat.st_mode))
+            os.fsync(stream.fileno())
+        os.replace(temporary, flags_path)
+        fsync_directory(flags_path.parent)
+    finally:
+        temporary.unlink(missing_ok=True)
+    print(
+        f"migrated palette preferences: source={flags['paletteMode']} "
+        f"style={flags['paletteVariant']} mode={flags['appearanceMode']}"
+    )
+    return True
+
+
 def main() -> int:
     state_home = xdg_dir("XDG_STATE_HOME", ".local/state")
     cache_home = xdg_dir("XDG_CACHE_HOME", ".cache")
@@ -186,6 +243,7 @@ def main() -> int:
             fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
             for source, destination, backup in migrations:
                 migrate(source, destination, backup)
+            migrate_palette_preferences(state_root / "flags.json")
             initialize_onboarding_state(state_root)
     except (OSError, RuntimeError) as error:
         print(f"state migration failed: {error}", file=sys.stderr)

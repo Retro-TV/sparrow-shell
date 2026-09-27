@@ -45,7 +45,7 @@ components. Sparrow's video preview additionally uses `qt6-multimedia` and
 | `mpvpaper` | Optional; enables video wallpaper playback while awww still supplies the still frame/backdrop. |
 | `ffmpeg` | Required by wallpaper thumbnail/still generation and recording thumbnail work; used for video wallpaper extraction and supported preview formats. |
 | `imagemagick` | Optional wallpaper-search image format identification and Rishot multi-monitor stitching/metadata handling. |
-| `hyprlock` | Required for Sparrow's selected lock backend; Niri-independent session-lock client. The Sparrow wrapper fails clearly if it is absent. |
+| `hyprlock` | Optional fallback only. The primary lock is Sparrow's Quickshell `WlSessionLock` + PAM flow; `sparrow-lock` invokes Hyprlock only when Sparrow lock IPC is unavailable. |
 | `gpu-screen-recorder` | Required for Sparrow's Recorder capture/record operation. |
 | `slurp` | Used for Niri's recorder region/window selection helper. |
 | `python-gobject` | Used by the recording folder-selection helper (`gi.repository.Gio/GLib`). |

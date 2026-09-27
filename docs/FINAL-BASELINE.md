@@ -45,6 +45,8 @@ Wayland/Niri environment into the user service manager. Most major pill
 surfaces are lazy-loaded. IPC routes to surfaces and one-shot actions; normal
 Niri workspaces are consumed from Sparrow's Niri event-stream singleton, not
 from a Hyprland compatibility layer.
+For a genuinely fresh state, the Pill opens Getting Started once after its
+startup-settling period. It remains reopenable from Settings.
 
 The visible/runtime feature set is:
 
@@ -52,7 +54,7 @@ The visible/runtime feature set is:
 | --- | --- | --- |
 | Rest pill / morph | Multi-output Quickshell layer-shell surfaces, Niri spacing/struts, flags-driven scale and opacity; opens surfaces through Sparrow IPC. | Intended core; visually tested, still a high-coupling QML area. |
 | Launcher | Discovers ordinary `.desktop` entries and launches with `gtk-launch`; independent of AppImage/package management. | Intended core. |
-| Settings | Navigation for Appearance, Look, Display, Input, Keybinds, and Idle/Lock. | Intended core; configuration writes use Niri transaction helper where applicable. |
+| Settings | Navigation for Appearance, Look, Display, Input, Keybinds, Idle/Lock, and Getting Started. | Intended core; configuration writes use Niri transaction helper where applicable. |
 | Appearance / palette | Sparrow palette mode/style, palette-derived colors and lock foreground selection; state persisted by `Flags`. | Intended core. |
 | Look | Niri-managed gaps, struts, border/shadow/radius/animation preferences as supported by current Niri schema; writes a Sparrow user fragment and validates/reloads transactionally. | Intended core; Niri-version-sensitive. |
 | Display | Queries Niri outputs and transactionally applies output arrangement/numbering. Generated output KDL is machine-specific. | Intended core; preserve host state. |

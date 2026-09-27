@@ -67,6 +67,7 @@ Item {
     readonly property bool lookOpen: surface === "look"
     readonly property bool idlelockOpen: surface === "idlelock"
     readonly property bool fontpickerOpen: surface === "fontpicker"
+    readonly property bool gettingStartedOpen: surface === "getting-started"
     readonly property bool settingsLike: settingsOpen || appearanceOpen
         || lookOpen || inputOpen || displayOpen || idlelockOpen || fontpickerOpen
     readonly property bool hasMedia: Players.list.length > 0
@@ -90,11 +91,15 @@ Item {
      * enter; a real hover during the window just expands late, harmlessly.
      */
     property bool bootSettled: false
+    signal onboardingReady(string screenName)
 
     Timer {
         interval: 3000
         running: true
-        onTriggered: pill.bootSettled = true
+        onTriggered: {
+            pill.bootSettled = true;
+            pill.onboardingReady(pill.screenName);
+        }
     }
 
     readonly property bool expanded: surfaceOpen || held || hoverLatch
@@ -140,6 +145,7 @@ Item {
     readonly property real lookW: 392 * s
     readonly property real idlelockW: 392 * s
     readonly property real fontpickerW: 360 * s
+    readonly property real gettingStartedW: 472 * s
     readonly property real toastW: 342 * s
     readonly property real quickChooseW: 344 * s
     readonly property real quickChooseH: 76 * s
@@ -194,7 +200,8 @@ Item {
         input:      { size: () => Qt.size(inputW, surfaceItem(ldInput).implicitHeight + 29 * s), ame: () => surfaceItem(ldInput) },
         look:       { size: () => Qt.size(lookW, surfaceItem(ldLook).implicitHeight + 29 * s), ame: () => surfaceItem(ldLook) },
         idlelock:   { size: () => Qt.size(idlelockW, surfaceItem(ldIdlelock).implicitHeight + 29 * s), ame: () => surfaceItem(ldIdlelock) },
-        fontpicker: { size: () => Qt.size(fontpickerW, surfaceItem(ldFontpicker).implicitHeight + 29 * s), ame: () => surfaceItem(ldFontpicker) }
+        fontpicker: { size: () => Qt.size(fontpickerW, surfaceItem(ldFontpicker).implicitHeight + 29 * s), ame: () => surfaceItem(ldFontpicker) },
+        "getting-started": { size: () => Qt.size(gettingStartedW, surfaceItem(ldGettingStarted).implicitHeight + 29 * s), ame: () => surfaceItem(ldGettingStarted) }
     })
 
     readonly property string mode: dragActive ? "dragOver"
@@ -1827,6 +1834,19 @@ Item {
         sourceComponent: FontPicker {
             s: pill.s
             open: pill.fontpickerOpen
+            morphCloseness: pill.morphCloseness
+            onRequestClose: pill.requestClose()
+            onRequestSurface: (name) => pill.requestSurface(name)
+        }
+    }
+
+    Loader {
+        id: ldGettingStarted
+        active: false
+        anchors.fill: parent
+        sourceComponent: GettingStarted {
+            s: pill.s
+            open: pill.gettingStartedOpen
             morphCloseness: pill.morphCloseness
             onRequestClose: pill.requestClose()
             onRequestSurface: (name) => pill.requestSurface(name)

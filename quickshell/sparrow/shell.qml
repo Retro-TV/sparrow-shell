@@ -30,6 +30,8 @@ ShellRoot {
     property string openMon: ""
     property string openSurface: ""
     property string peekMon: ""
+    property var readyPillScreens: ({})
+    property bool autoOnboardingOpened: false
     property real niriLayoutGaps: 6
     property real niriTopStrut: 0
 
@@ -149,14 +151,40 @@ ShellRoot {
             root.close();
             return;
         }
+        if (root.openSurface === "getting-started" && surface !== "getting-started")
+            Flags.completeOnboarding();
         root.openMon = mon;
         root.openSurface = surface;
     }
 
     function close() {
+        if (root.openSurface === "getting-started")
+            Flags.completeOnboarding();
         root.openMon = "";
         root.openSurface = "";
+        root.tryAutoOpenOnboarding();
     }
+
+    function notePillReady(screenName) {
+        var ready = Object.assign({}, root.readyPillScreens);
+        ready[screenName] = true;
+        root.readyPillScreens = ready;
+        root.tryAutoOpenOnboarding();
+    }
+
+    function tryAutoOpenOnboarding() {
+        if (root.autoOnboardingOpened || !Flags.onboardingStateReady || root.openSurface.length > 0)
+            return;
+        var screenName = root.focusedScreenName();
+        if (!screenName || !root.readyPillScreens[screenName])
+            return;
+        if (!Flags.claimOnboardingAutoShow())
+            return;
+        root.autoOnboardingOpened = true;
+        root.toggleSurface(screenName, "getting-started");
+    }
+
+    onOpenSurfaceChanged: root.tryAutoOpenOnboarding()
 
     function peek(mon) {
         root.peekMon = root.peekMon === mon ? "" : mon;
@@ -210,6 +238,16 @@ ShellRoot {
         /** Opens any surface by name, settings sub-pages included; dev and scripting door. */
         function page(mon: string, name: string): void { root.toggleSurface(mon, name); }
 
+    }
+
+    Connections {
+        target: Flags
+        function onOnboardingStateReadyChanged() { root.tryAutoOpenOnboarding(); }
+    }
+
+    Connections {
+        target: Niri
+        function onFocusedOutputChanged() { root.tryAutoOpenOnboarding(); }
     }
 
     Variants {
@@ -488,6 +526,7 @@ ShellRoot {
 
                     onRequestSurface: (name) => root.toggleSurface(overlay.modelData.name, name)
                     onRequestClose: root.close()
+                    onOnboardingReady: (screenName) => root.notePillReady(screenName)
                 }
                 }
             }

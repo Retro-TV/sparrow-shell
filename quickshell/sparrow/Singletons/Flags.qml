@@ -13,6 +13,43 @@ import Quickshell.Io
 Singleton {
     id: root
 
+    property bool flagsStateReady: false
+    property bool flagsFileExisted: false
+    property bool onboardingFileMissing: false
+    property bool onboardingStateReady: false
+
+    readonly property bool onboardingCompleted: onboardingAdapter.completed
+    readonly property bool onboardingAutoPending: onboardingStateReady
+        && !onboardingAdapter.completed && !onboardingAdapter.autoShown
+
+    function initializeOnboardingState() {
+        if (!flagsStateReady || !onboardingFileMissing || onboardingStateReady)
+            return;
+
+        // A pre-onboarding Sparrow flags file (or migrated legacy state) means
+        // this is an upgrade, not a new user. Keep flags.json untouched.
+        onboardingAdapter.completed = flagsFileExisted;
+        onboardingAdapter.autoShown = flagsFileExisted;
+        onboardingStateReady = true;
+        onboardingFile.writeAdapter();
+    }
+
+    function claimOnboardingAutoShow() {
+        if (!onboardingAutoPending)
+            return false;
+        onboardingAdapter.autoShown = true;
+        onboardingFile.writeAdapter();
+        return true;
+    }
+
+    function completeOnboarding() {
+        if (!onboardingStateReady)
+            return;
+        onboardingAdapter.completed = true;
+        onboardingAdapter.autoShown = true;
+        onboardingFile.writeAdapter();
+    }
+
     property alias dnd: adapter.dnd
     property alias keepAwake: adapter.keepAwake
     property alias time12h: adapter.time12h
@@ -58,10 +95,19 @@ Singleton {
         printErrors: false
 
         onFileChanged: reload()
+        onLoaded: {
+            root.flagsStateReady = true;
+            root.flagsFileExisted = true;
+            root.initializeOnboardingState();
+        }
         onAdapterUpdated: writeAdapter()
         onLoadFailed: function(error) {
-            if (error === FileViewError.FileNotFound)
+            if (error === FileViewError.FileNotFound) {
+                root.flagsStateReady = true;
+                root.flagsFileExisted = false;
+                root.initializeOnboardingState();
                 writeAdapter();
+            }
         }
 
         JsonAdapter {
@@ -107,6 +153,30 @@ Singleton {
             property int nightLightTemp: 4000
             property int nightLightOnMin: 1260
             property int nightLightOffMin: 450
+        }
+    }
+
+    FileView {
+        id: onboardingFile
+        path: (Quickshell.env("XDG_STATE_HOME") || (Quickshell.env("HOME") + "/.local/state")) + "/sparrow-shell/onboarding.json"
+        blockLoading: true
+        watchChanges: true
+        printErrors: false
+
+        onFileChanged: reload()
+        onLoaded: root.onboardingStateReady = true
+        onAdapterUpdated: writeAdapter()
+        onLoadFailed: function(error) {
+            if (error === FileViewError.FileNotFound) {
+                root.onboardingFileMissing = true;
+                root.initializeOnboardingState();
+            }
+        }
+
+        JsonAdapter {
+            id: onboardingAdapter
+            property bool completed: false
+            property bool autoShown: false
         }
     }
 }

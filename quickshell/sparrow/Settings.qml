@@ -19,7 +19,8 @@ SettingsSurface {
         { item: displayRow, kind: "nav", surface: "display" },
         { item: inputRow, kind: "nav", surface: "input" },
         { item: keybindsRow, kind: "nav", surface: "keybinds" },
-        { item: idleRow, kind: "nav", surface: "idlelock" }
+        { item: idleRow, kind: "nav", surface: "idlelock" },
+        { item: gettingStartedRow, kind: "nav", surface: "getting-started" }
     ]
 
     Column {
@@ -127,13 +128,29 @@ SettingsSurface {
             icon: "lock"
             name: "Idle / Lock"
             sub: "Auto-lock, screen off, suspend"
+            GlyphIcon {
+                width: 16 * root.s
+                height: 16 * root.s
+                name: "chevron-right"
+                color: root.focusRowItem === idleRow ? Theme.cream : Theme.iconDim
+                stroke: 2.2
+            }
+        }
+
+        SettingsRow {
+            id: gettingStartedRow
+            surface: root
+            captionOnFocus: true
+            icon: "sparkles"
+            name: "Getting Started"
+            sub: "Shortcuts and a quick tour"
             last: true
 
             GlyphIcon {
                 width: 16 * root.s
                 height: 16 * root.s
                 name: "chevron-right"
-                color: root.focusRowItem === idleRow ? Theme.cream : Theme.iconDim
+                color: root.focusRowItem === gettingStartedRow ? Theme.cream : Theme.iconDim
                 stroke: 2.2
             }
         }

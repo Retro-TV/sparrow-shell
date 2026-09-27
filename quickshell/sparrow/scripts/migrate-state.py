@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import fcntl
 import hashlib
+import json
 import os
 from pathlib import Path
 import stat
@@ -105,6 +106,45 @@ def migrate(source: Path, destination: Path, backup: Path) -> bool:
     return True
 
 
+def initialize_onboarding_state(state_root: Path) -> bool:
+    """Create the one-time onboarding marker without touching flags.json."""
+    destination = state_root / "onboarding.json"
+    existing_state_files = (
+        "flags.json",
+        "events.json",
+        "launcher-usage.json",
+        "nvibrant-value",
+        "wallpaper",
+        "wallpaper-map",
+        "wallpaper-dir",
+        "wallpaper-bag",
+        "wallpaper-still.png",
+    )
+    established = any((state_root / name).exists() for name in existing_state_files)
+    established = established or any(state_root.glob("mpvpaper-*.log"))
+    transaction_root = state_root / "niri-config-transactions"
+    if transaction_root.exists():
+        established = established or any(path.is_file() for path in transaction_root.iterdir())
+
+    payload = json.dumps(
+        {"completed": established, "autoShown": established},
+        indent=2,
+        sort_keys=True,
+    ) + "\n"
+    try:
+        descriptor = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        return False
+
+    with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+        stream.write(payload)
+        stream.flush()
+        os.fsync(stream.fileno())
+    fsync_directory(state_root)
+    print(f"initialized Getting Started state: {destination} (existing={established})")
+    return True
+
+
 def main() -> int:
     state_home = xdg_dir("XDG_STATE_HOME", ".local/state")
     cache_home = xdg_dir("XDG_CACHE_HOME", ".cache")
@@ -146,6 +186,7 @@ def main() -> int:
             fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
             for source, destination, backup in migrations:
                 migrate(source, destination, backup)
+            initialize_onboarding_state(state_root)
     except (OSError, RuntimeError) as error:
         print(f"state migration failed: {error}", file=sys.stderr)
         return 1

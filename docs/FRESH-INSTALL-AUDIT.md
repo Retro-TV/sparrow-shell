@@ -21,7 +21,9 @@ coherent: runtime creates state/cache roots, then the wallpaper unit restores
 the bundled image and generates palette outputs before the shell service
 starts. This was verified with isolated migration and palette-generation
 checks, not by starting a second Niri/awww session. A genuine graphical
-zero-state first login remains untested.
+zero-state first login now opens the compact Getting Started Pill surface once
+after the existing Pill startup-settling period. It can be reopened from
+Settings at any time.
 
 Fresh installations default to Dynamic palette mode. Explicit palette choices
 already saved in `flags.json` remain unchanged because the JsonAdapter default
@@ -35,8 +37,10 @@ longer an unresolved release blocker.
 
 1. `sparrow-wallpaper.service` runs `migrate-state.py` as `ExecStartPre`. It
    creates `$XDG_STATE_HOME/sparrow-shell`, a protected migration-backup root,
-   and `$XDG_CACHE_HOME/sparrow-shell`; there is no legacy data to copy for a
-   new user.
+   and `$XDG_CACHE_HOME/sparrow-shell`. It creates `onboarding.json` without
+   touching `flags.json`: existing Sparrow/legacy state is marked completed,
+   while a genuinely empty state is marked eligible for its one automatic
+   Getting Started display.
 2. It starts awww. `ExecStartPost` runs `wallpaper.sh init` with the
    systemd-managed-daemon marker. It queries Niri outputs and resolves each
    output from saved output selection, saved global selection, then
@@ -54,7 +58,11 @@ longer an unresolved release blocker.
    Wayland/Niri environment into the user service manager, and starts the
    separate idle service. It does not need to open Wallpaper or Mixer UI to
    initialize those startup paths.
-6. Most surfaces are lazy. Launcher usage and UI-specific preference files are
+6. After the Pill's existing boot-settled event, the main shell opens Getting
+   Started only when `onboarding.json` is fresh and its automatic display has
+   not already been claimed. Explicit dismissal or Done persists completion;
+   Settings can reopen the surface without clearing that state.
+7. Most surfaces are lazy. Launcher usage and UI-specific preference files are
    read/written when first used. The wallpaper picker shows the bundled default
    separately from discovered images in the selected personal folder.
 
@@ -72,6 +80,7 @@ until a later successful generation.
 | --- | --- | --- | --- |
 | State/cache roots | Migration pre-start on each unit | Created even with no legacy state. Legacy copies are copy-if-destination-absent and backed up. | Runtime creates; don't seed synthetic state. |
 | `flags.json` | `Flags.qml` JsonAdapter after FileNotFound; parent exists from migration | Defaults include Auto lock text, Dynamic palette mode, tonal palette style, Night Light off, empty wallpaper override, and default record/idle preferences. Missing keys use declarations; explicit saved choices remain. An isolated JsonAdapter fixture confirmed malformed JSON leaves defaults in memory without rewriting the file; the complete Sparrow singleton was not tested with corrupted state. | Runtime creates. Never ship a user's flags. |
+| `onboarding.json` | `migrate-state.py` before session services, or the `Flags` singleton if launched outside systemd | Created once. Existing Sparrow or migrated legacy state starts `completed=true, autoShown=true`; empty state starts both false. Auto-show claims `autoShown` before opening; Done, Escape, backdrop dismissal, or choosing an action persists `completed=true`. `flags.json` is not rewritten for this migration. | Runtime creates. Never ship a user's onboarding choice. |
 | `launcher-usage.json` | Launcher reads missing/invalid as `{}`; writes after a launch selection | No usage history is a normal state. | Runtime creates on use. |
 | `events.json` | Events singleton; missing file writes `[]` | Invalid JSON is treated as empty in memory; event changes persist the new list. | Runtime creates when instantiated. |
 | `weather-loc.json` | Weather after successful lookup/geocode | Invalid/missing cache falls through to network lookup. Failed lookup leaves weather unready, not fabricated. | Runtime creates; no installer location. |
@@ -90,10 +99,9 @@ until a later successful generation.
 | Display/user fragments | Display/Look/Input/Keybind settings after user saves changes | Optional includes permit absence; Niri defaults apply. | Runtime creates; never copy this machine's output/user fragments. |
 | Hyprlock user config | Not needed by primary Quickshell lock | Fallback requires Hyprlock and readable `~/.config/sparrow/hyprlock.conf`. | Seed fallback only if chosen and absent; never overwrite. |
 
-The clean migration harness succeeded in a temporary HOME/XDG tree. It created
-the state/cache/migration-backup roots without fabricating `flags.json` or
-copying legacy data. This verifies the normal systemd pre-start path, not
-arbitrary manual QML launch without migration.
+The migration harness succeeds in temporary HOME/XDG trees. For onboarding,
+fresh state is marked eligible; existing Sparrow flags and migrated legacy
+flags are marked complete, and the existing `flags.json` bytes remain intact.
 
 ## Bundled wallpaper / palette test
 
@@ -194,16 +202,16 @@ queried. Other missing-service scenarios were not forced by removing packages.
 Installed-host check found no `ddcutil` or `nvibrant`; absence is quiet in
 the Mixer detection design. Other absent-device cases need the VM matrix below.
 
-## Minimal welcome page recommendation
+## Getting Started surface
 
-Keep a single compact first-run card, not a tutorial: three actions (Launcher,
-Wallpaper, Settings), a short Pill interaction hint, a compact reference for
-Launcher/wallpaper/terminal/files/lock/screenshot with a link to Keybind
-Settings, and one sentence explaining personal wallpaper folder plus Dynamic
-palette mode. Show optional features only when their backend is missing; do not
-list internal paths or present a package-install prompt. Store `welcomeShown`
-in Sparrow Flags and provide a reopen route in Settings. The installer should
-not own this preference. Page not implemented.
+One compact morphing Pill surface describes the Pill, Launcher, Wallpaper,
+Dynamic palette, Settings, Lock, and Recorder. Shortcut labels come from the
+Keybind catalog plus Sparrow's generated per-user override fragment. Launcher,
+Wallpaper, and Keybinds are direct actions; Settings provides the persistent
+reopen entry. Completion/automatic-display state is isolated in
+`$XDG_STATE_HOME/sparrow-shell/onboarding.json`, not installer defaults or the
+existing `flags.json` contents. Optional Recorder dependencies do not gate the
+surface.
 
 ## Future installer inventory — no code
 

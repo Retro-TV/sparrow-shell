@@ -22,6 +22,7 @@ Singleton {
     readonly property string primary: adapter.primary
     readonly property string primaryContainer: adapter.primary_container
     readonly property string onPrimaryContainer: adapter.on_primary_container
+    readonly property string error: adapter.error
     readonly property string outline: adapter.outline
     readonly property string outlineVariant: adapter.outline_variant
     readonly property string cream: adapter.cream
@@ -34,6 +35,8 @@ Singleton {
     readonly property var terminal: adapter.terminal
     readonly property var availableStyles: adapter.available_styles
     readonly property string paletteStyle: adapter.palette_style
+    readonly property real wallpaperLuminance: adapter.wallpaper_luminance
+    readonly property string recommendedLockForeground: adapter.recommended_lock_foreground
 
     FileView {
         id: file
@@ -54,6 +57,7 @@ Singleton {
             property string primary: "#f5bd6f"
             property string primary_container: "#633f00"
             property string on_primary_container: "#ffddb3"
+            property string error: "#ffb4ab"
             property string outline: "#9c8f80"
             property string outline_variant: "#4f4539"
             property string cream: "#e6d6cb"
@@ -66,6 +70,8 @@ Singleton {
             property var terminal: ({})
             property var available_styles: ["tonal", "vibrant", "alternate"]
             property string palette_style: ""
+            property real wallpaper_luminance: 0
+            property string recommended_lock_foreground: "unknown"
         }
     }
 }

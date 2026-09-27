@@ -152,6 +152,7 @@ SettingsSurface {
         { item: vizRow, kind: "toggle", get: function () { return Flags.musicViz; }, set: function (v) { if (v !== Flags.musicViz) Cava.toggle(); } },
         { item: paletteRow, kind: "seg", vals: ["static", "dynamic", "manual"], get: function () { return Flags.paletteMode; }, set: function (v) { root.applyMode(v); } },
         { item: paletteStyleRow, kind: "seg", vals: Dyn.availableStyles, get: function () { return root.canonicalPaletteStyle(Flags.paletteVariant); }, set: function (v) { root.applyPaletteStyle(v); } },
+        { item: lockTextRow, kind: "seg", vals: ["auto", "light", "dark"], get: function () { return Flags.lockForegroundMode; }, set: function (v) { Flags.lockForegroundMode = v; } },
         { item: randomRow, kind: "seg", vals: ["all", "cursor"], get: function () { return Flags.randomScope; }, set: function (v) { Flags.randomScope = v; } },
         { item: scaleRow, kind: "seg", vals: [0.9, 1.0, 1.1, 1.25], get: function () { return Flags.uiScale; }, set: function (v) { Flags.uiScale = v; } },
         { item: motionRow, kind: "toggle", get: function () { return Flags.reduceMotion; }, set: function (v) { Flags.reduceMotion = v; } },
@@ -262,6 +263,21 @@ SettingsSurface {
                 onPicked: (v) => {
                     root.applyPaletteStyle(v);
                 }
+            }
+        }
+
+        SettingsRow {
+            id: lockTextRow
+            surface: root
+            name: "Lockscreen text"
+            sub: "Auto follows the selected wallpaper's brightness"
+            icon: "type"
+
+            SettingsSeg {
+                s: root.s
+                options: [{ label: "Auto", value: "auto" }, { label: "Light", value: "light" }, { label: "Dark", value: "dark" }]
+                value: Flags.lockForegroundMode
+                onPicked: (v) => Flags.lockForegroundMode = v
             }
         }
 

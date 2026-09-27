@@ -28,6 +28,7 @@ Singleton {
     readonly property int count: entries.length
     property string current: ""
     property bool pending: false
+    property var outputWallpapers: ({})
 
     property string resolvedDir: ""
     readonly property string wpDir: Flags.wallpaperDir.length > 0 ? Flags.wallpaperDir
@@ -36,9 +37,36 @@ Singleton {
     readonly property string thumbScript: Quickshell.shellPath("scripts/wallpaper-thumbs.sh")
     readonly property string setScript: Quickshell.shellPath("scripts/wallpaper.sh")
     readonly property string stateFile: (Quickshell.env("XDG_STATE_HOME") || (Quickshell.env("HOME") + "/.local/state")) + "/sparrow-shell/wallpaper"
+    readonly property string outputMapFile: (Quickshell.env("XDG_STATE_HOME") || (Quickshell.env("HOME") + "/.local/state")) + "/sparrow-shell/wallpaper-map"
     readonly property string dirStateFile: (Quickshell.env("XDG_STATE_HOME") || (Quickshell.env("HOME") + "/.local/state")) + "/sparrow-shell/wallpaper-dir"
 
     onWpDirChanged: refresh()
+
+    function loadOutputWallpapers(text) {
+        var next = {};
+        var lines = text.split("\n");
+        for (var i = 0; i < lines.length; i++) {
+            var tab = lines[i].indexOf("\t");
+            if (tab > 0 && tab < lines[i].length - 1)
+                next[lines[i].slice(0, tab)] = lines[i].slice(tab + 1).trim();
+        }
+        outputWallpapers = next;
+    }
+
+    function wallpaperForOutput(outputName) {
+        return outputWallpapers[outputName] || current;
+    }
+
+    FileView {
+        id: outputMapFile
+        path: root.outputMapFile
+        blockLoading: true
+        watchChanges: true
+        printErrors: false
+        onLoaded: root.loadOutputWallpapers(outputMapFile.text())
+        onFileChanged: reload()
+        onLoadFailed: root.outputWallpapers = ({})
+    }
 
     FileView {
         id: dirFile
@@ -176,6 +204,7 @@ Singleton {
         stdout: StdioCollector {
             onStreamFinished: {
                 root.current = this.text.trim();
+                outputMapFile.reload();
                 if (root.pending) {
                     root.pending = false;
                     Qt.callLater(root.refresh);
@@ -224,6 +253,7 @@ Singleton {
             onStreamFinished: if (this.text.trim().length > 0) console.warn(this.text.trim())
         }
         onExited: {
+            outputMapFile.reload();
             root.refresh();
             Qt.callLater(root.startSessionRestore);
         }

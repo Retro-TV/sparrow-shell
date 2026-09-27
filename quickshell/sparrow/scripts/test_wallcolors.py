@@ -63,6 +63,17 @@ class WallpaperPaletteSelectionTests(unittest.TestCase):
         for style in wallcolors.PALETTE_STYLES:
             self.assertEqual(wallcolors.choose_seed(extraction, style)["seed"], "#787878")
 
+    def test_lock_foreground_recommendation_tracks_sampled_wallpaper_luminance(self):
+        dark = self.make_image([("#101114", 1.0)])
+        bright = self.make_image([("#f4f3ef", 1.0)])
+        vivid_yellow = self.make_image([("#e8bd16", 1.0)])
+
+        self.assertLess(dark["mean_luminance"], wallcolors.LOCK_DARK_FOREGROUND_THRESHOLD)
+        self.assertEqual(wallcolors.recommended_lock_foreground(dark["mean_luminance"]), "light")
+        self.assertGreater(bright["mean_luminance"], wallcolors.LOCK_DARK_FOREGROUND_THRESHOLD)
+        self.assertEqual(wallcolors.recommended_lock_foreground(bright["mean_luminance"]), "dark")
+        self.assertEqual(wallcolors.recommended_lock_foreground(vivid_yellow["mean_luminance"]), "dark")
+
     def test_tiny_colored_object_does_not_recolor_black_wallpaper(self):
         extraction = self.make_image([("#080808", 0.985), ("#00e5ff", 0.015)])
         self.assertLess(extraction["chromatic_coverage"], 0.05)
@@ -183,6 +194,8 @@ class WallpaperPaletteSelectionTests(unittest.TestCase):
             gtk = (data_home / "themes/Sparrow/gtk-3.0/gtk-dark.css").read_text()
             icon = (data_home / "icons/Sparrow/scalable/places/folder.svg").read_text()
             self.assertIn("terminal", palette)
+            self.assertIn("wallpaper_luminance", palette)
+            self.assertEqual(palette["recommended_lock_foreground"], "light")
             self.assertIn(f"background {palette['terminal']['background']}", kitty)
             self.assertIn(f"color4 {palette['terminal']['ansi'][4]}", kitty)
             self.assertIn(f"@define-color window_bg_color {palette['background']};", gtk)

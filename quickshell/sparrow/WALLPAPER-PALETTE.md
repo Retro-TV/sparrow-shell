@@ -101,3 +101,7 @@ It also updates Sparrow's lightweight icon-theme overlay under
 and regenerates folder and file-manager glyphs from the same primary palette
 color. The desktop icon-theme preference selects this overlay so folders
 follow the wallpaper palette in GTK applications.
+
+The Quickshell session lock reads the same palette and wallpaper luminance
+metadata directly. It does not require a separate lock-specific color include
+or cached wallpaper symlink.

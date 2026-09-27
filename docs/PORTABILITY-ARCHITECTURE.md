@@ -15,7 +15,7 @@ copied into the repository.
 | `display-outputs.kdl`, `display-binds.kdl` | Sparrow Display's detected monitor arrangement and number bindings | Machine-specific generated configuration; never track or copy from this host. |
 | `user-appearance.kdl`, `user-input.kdl`, `user-binds.kdl` | Look, Input, and Keybinds user changes | Generated user configuration; never track. Niri defaults tolerate their absence. |
 | `~/.config/systemd/user/sparrow-{shell,idle,wallpaper}.service` | User services; source unit files are tracked in `quickshell/sparrow/systemd/` | Future installer should copy units to the canonical systemd user unit directory, then daemon-reload and enable them. Copying avoids a service continuing to depend on the checkout's location. |
-| `~/.config/sparrow/hyprlock.conf`, `mocha.conf` | Active personal Hyprlock look; references a personal wallpaper and an installed font/avatar, and its sourced palette does not define all referenced variables | Keep live user config untouched. The repository now supplies a self-contained default that an installer may copy only if no user config exists. |
+| `~/.config/sparrow/hyprlock.conf` | Simple screenshot-based fallback used only if Sparrow's Quickshell lock IPC is unavailable | An installer should preserve an existing user config and copy the portable fallback only when absent. This host's former Layout 9 config is backed up outside Git. |
 | `~/.local/bin/rishot` and `~/.local/share/rishot` | Separate upstream Rishot install, not Sparrow source | Install as a separate dependency. Sparrow should call `rishot` from `PATH`; do not vendor it. |
 | `~/.local/state/sparrow-shell/` | User preferences, selected wallpaper/output map, transaction journals, migrated flags/events and migration backups | Persistent machine/user state; never track. |
 | `~/.cache/sparrow-shell/` | Palette, thumbnails, weather location, recording thumbnails and transient outputs | Regenerable cache; never track. Startup migration now creates its root for clean first run. |
@@ -76,14 +76,35 @@ Quickshell process while the service is active. The installed Niri session
 must expose `XDG_CURRENT_DESKTOP=niri` and `graphical-session.target` as in the
 tested current session.
 
-## Lock and screenshot defaults
+## Wallpaper and lock defaults
 
-The repository Hyprlock default uses its native `screenshot` background with
-a solid color fallback, so it needs neither a selected Sparrow wallpaper nor
-a profile image. The user label is dynamic and uses `$USER`; a user can add an
-avatar by overriding their own config. The active personal config is not
-replaced. An installer should copy the default only if the destination does
-not exist.
+`quickshell/sparrow/wallpapers/default.png` is a source-controlled, read-only
+first-run fallback. On startup `wallpaper.sh init` chooses each output's saved
+selection, then the saved global selection, then this bundled file. It records
+the choice in user state and runs the existing color pipeline once if the
+palette is absent or the selected image changed. It does not copy the default
+into the user's wallpaper folder or overwrite an existing selection. The
+picker continues to list the user's selected wallpaper directory; the bundled
+fallback is a startup default, not an extra user-library entry.
+
+The primary lockscreen is Sparrow's Quickshell `WlSessionLock` with PAM
+authentication, using the adapted Qylock Last of Us composition. It obtains the
+selected wallpaper for each output directly from Sparrow's existing wallpaper
+state, so image and muted looping video wallpapers need no separate
+lock-wallpaper symlink. Its Auto/Light/Dark foreground choice uses luminance
+metadata already written by Sparrow's wallpaper palette pipeline; no
+Hyprlock-specific generated palette is needed.
+
+The shell lock has no account-avatar subsystem; its appearance follows the
+upstream Qylock theme without adding a Sparrow profile-image requirement.
+
+`sparrow-lock` requests the Quickshell lock through Sparrow IPC first. Only if
+that IPC path is unavailable does it launch Hyprlock using the user's existing
+`~/.config/sparrow/hyprlock.conf`. The repository's tracked Hyprlock file is a
+plain screenshot-based fallback; it is not the Sparrow visual lock design.
+The wrapper does not prepare avatars, wallpaper links, or generated color
+includes for Hyprlock. The Quickshell lock reads Sparrow's selected wallpaper
+and palette directly.
 
 Rishot remains upstream software. On Arch it is available as an AUR package
 (`rishot-git`) and also documents a standalone installer; prefer the package
@@ -104,9 +125,9 @@ kdialog and libnotify.
 - With no generated Niri files, optional includes let static Niri defaults
   validate; Display and wallpaper/Look generate their own fragments later.
 - With no wallpaper directory or saved selection, wallpaper initialization
-  finds no media and leaves awww's default background instead of emitting a
-  missing-directory `find` error. No blank demo wallpaper or personal asset
-  is added to Git.
+  uses the bundled `default.png`, creates the normal per-output/global state,
+  and initializes the palette through the existing pipeline. It leaves the
+  missing personal wallpaper directory alone.
 - With no recording directory, recording-history thumbnail indexing exits
   without error; recordings are user output and are not installed.
 - No repository file is copied from the live generated/state/cache trees.

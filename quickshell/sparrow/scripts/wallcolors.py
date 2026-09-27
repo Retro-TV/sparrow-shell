@@ -16,6 +16,7 @@ HOME = Path.home()
 CACHE = Path(os.environ.get("XDG_CACHE_HOME", HOME / ".cache")) / "sparrow-shell"
 
 PALETTE_STYLES = ("tonal", "vibrant", "alternate")
+LOCK_DARK_FOREGROUND_THRESHOLD = 0.22
 LEGACY_PALETTE_STYLES = {
     "scheme-tonal-spot": "tonal",
     "scheme-neutral": "tonal",
@@ -42,6 +43,17 @@ def canonical_style(value):
 def _linear_channel(value):
     value /= 255
     return value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4
+
+
+def relative_luminance(rgb):
+    """WCAG relative luminance for one sRGB color."""
+    r, g, b = (_linear_channel(value) for value in rgb)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def recommended_lock_foreground(luminance):
+    """Choose the higher-contrast Qylock text family for the wallpaper average."""
+    return "dark" if luminance >= LOCK_DARK_FOREGROUND_THRESHOLD else "light"
 
 
 def rgb_to_oklab(rgb):
@@ -117,6 +129,7 @@ def candidates_from_colors(path, source_colors, max_dimension=160):
         histogram = image.getcolors(max_dimension * max_dimension) or []
 
     total = sum(count for count, _ in histogram)
+    mean_luminance = sum(count * relative_luminance(rgb) for count, rgb in histogram) / max(total, 1)
     source_labs = []
     for color in source_colors:
         rgb = tuple(int(color[i:i + 2], 16) for i in (1, 3, 5))
@@ -162,7 +175,8 @@ def candidates_from_colors(path, source_colors, max_dimension=160):
                          + (len(source_labs) - index) * 1e-6,
             })
     candidates.sort(key=lambda item: item["score"], reverse=True)
-    return {"candidates": candidates, "chromatic_coverage": chromatic_coverage}
+    return {"candidates": candidates, "chromatic_coverage": chromatic_coverage,
+            "mean_luminance": mean_luminance}
 
 
 def extract_candidates(path, max_dimension=160):
@@ -504,6 +518,7 @@ def main():
     if not args:
         raise SystemExit("usage: wallcolors.py IMAGE [--style tonal|vibrant|alternate] | --hue DEGREES dark|light SATURATION [--style STYLE]")
     mode = "dark"
+    wallpaper_luminance = None
     if args[0] == "--hue":
         if len(args) < 2:
             raise SystemExit("wallcolors: --hue needs a hue value")
@@ -515,6 +530,16 @@ def main():
         manual_lab = rgb_to_oklab(tuple(int(manual_seed[i:i + 2], 16) for i in (1, 3, 5)))
         factor = {"tonal": 0.86, "vibrant": 1.0, "alternate": 1.0}[palette_style]
         seed = _lab_hex(_scale_lab_chroma(manual_lab, factor)) if chromatic else "#787878"
+        try:
+            previous_palette = json.loads((CACHE / "palette.json").read_text())
+            previous_luminance = previous_palette.get("wallpaper_luminance")
+            if isinstance(previous_luminance, (int, float)):
+                wallpaper_luminance = float(previous_luminance)
+        except (OSError, json.JSONDecodeError):
+            pass
+        if wallpaper_luminance is None:
+            wallpaper_luminance = relative_luminance(tuple(
+                int(seed[i:i + 2], 16) for i in (1, 3, 5)))
         if palette_style == "alternate":
             palette_style = "vibrant"
         style_options = ["tonal", "vibrant"] if chromatic else ["tonal"]
@@ -523,6 +548,7 @@ def main():
         if not wallpaper.is_file():
             raise SystemExit(f"wallcolors: image not found: {wallpaper}")
         extraction = extract_candidates(wallpaper)
+        wallpaper_luminance = extraction["mean_luminance"]
         selection = choose_seed(extraction, palette_style)
         seed, chromatic = selection["seed"], selection["chromatic"]
         palette_style = selection["style"]
@@ -540,7 +566,11 @@ def main():
     material = generated["colors"]
     scheme = mode if args[0] == "--hue" else "dark"
     role = lambda name: material[name][scheme]["color"]
-    surfaces = {"source_color": seed}
+    surfaces = {
+        "source_color": seed,
+        "wallpaper_luminance": round(wallpaper_luminance, 6),
+        "recommended_lock_foreground": recommended_lock_foreground(wallpaper_luminance),
+    }
     if scheme == "dark":
         if not chromatic and effective_scheme == "scheme-monochrome":
             # Preserve a truly neutral palette for grayscale wallpapers.

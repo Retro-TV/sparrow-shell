@@ -244,11 +244,13 @@ case "$cmd" in
             if { is_video "$pic" && video_is_current "$out" "$pic"; } \
                     || { ! is_video "$pic" && [[ "$(awww_image_for_output "$out")" == "$pic" ]]; }; then
                 map_put "$out" "$pic"; any=true
+                [[ -n "$active" ]] || active="$pic"
                 [[ "$out" == "$(focused_output)" ]] && active="$pic"
                 continue
             fi
             if apply_visual "$pic" "$out" true; then
                 map_put "$out" "$pic"; any=true
+                [[ -n "$active" ]] || active="$pic"
                 [[ "$out" == "$(focused_output)" ]] && active="$pic"
             fi
         done < <(outputs)
@@ -258,7 +260,10 @@ case "$cmd" in
                 printf '%s\n' "$active" > "$state.tmp"
                 mv -f "$state.tmp" "$state"
                 palette_file="${XDG_CACHE_HOME:-$HOME/.cache}/sparrow-shell/palette.json"
-                if [[ "$active" != "$saved" || ! -s "$palette_file" ]]; then
+                if [[ "$active" != "$saved" || ! -s "$palette_file" ]] \
+                        || ! jq -e '(.wallpaper_luminance | type == "number") and
+                            (.recommended_lock_foreground == "light" or .recommended_lock_foreground == "dark")' \
+                            "$palette_file" >/dev/null 2>&1; then
                     palette "$active" || true
                 fi
             fi

@@ -14,5 +14,6 @@ singleton Events Events.qml
 singleton Cava Cava.qml
 singleton Players Players.qml
 singleton NightLight NightLight.qml
+singleton ScreenLock ScreenLock.qml
 singleton Peripherals Peripherals.qml
 singleton Niri 1.0 Niri.qml

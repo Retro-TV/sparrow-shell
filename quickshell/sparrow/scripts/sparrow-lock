@@ -3,21 +3,33 @@ set -euo pipefail
 
 operation="${1:-lock}"
 lock_config="${HOME}/.config/sparrow/hyprlock.conf"
+qs_bin="$(command -v qs || true)"
 hyprlock_bin="$(command -v hyprlock || true)"
+runtime_root="$(cd -- "$(dirname -- "$0")/.." && pwd)"
 
-if [[ -z "$hyprlock_bin" ]]; then
-    printf 'sparrow-lock: hyprlock is not installed or not on PATH\n' >&2
-    exit 127
-fi
-if [[ ! -r "$lock_config" ]]; then
-    printf 'sparrow-lock: cannot read Hyprlock config: %s\n' "$lock_config" >&2
-    exit 1
-fi
+request_quickshell_lock() {
+    local function="$1"
+    [[ -n "$qs_bin" ]] || return 127
+    "$qs_bin" --path "$runtime_root" ipc call screenlock "$function"
+}
+
+fallback_to_hyprlock() {
+    if [[ -z "$hyprlock_bin" ]]; then
+        printf 'sparrow-lock: Sparrow lock IPC unavailable and Hyprlock is not installed\n' >&2
+        exit 127
+    fi
+    if [[ ! -r "$lock_config" ]]; then
+        printf 'sparrow-lock: cannot read fallback Hyprlock config: %s\n' "$lock_config" >&2
+        exit 1
+    fi
+}
 
 start_lock_if_needed() {
     if pgrep -x hyprlock >/dev/null 2>&1; then
         return 0
     fi
+
+    fallback_to_hyprlock
 
     "$hyprlock_bin" --config "$lock_config" --grace 0 >/dev/null 2>&1 &
     local locker_pid=$!
@@ -36,13 +48,23 @@ start_lock_if_needed() {
 
 case "$operation" in
     lock)
+        if request_quickshell_lock lock; then
+            exit 0
+        fi
+        fallback_to_hyprlock
         exec "$hyprlock_bin" --config "$lock_config" --grace 0
         ;;
     power-off)
+        if request_quickshell_lock powerOff; then
+            exit 0
+        fi
         start_lock_if_needed
         exec niri msg action power-off-monitors
         ;;
     suspend)
+        if request_quickshell_lock suspend; then
+            exit 0
+        fi
         start_lock_if_needed
         exec systemctl suspend
         ;;

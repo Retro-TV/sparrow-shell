@@ -93,6 +93,7 @@ ShellRoot {
 
     Component.onCompleted: {
         refresh();
+        ScreenLock.initialize();
         Devices.restore();
         // Restore wallpapers independently of the lazily-created picker surface.
         Walls.startSessionRestore();

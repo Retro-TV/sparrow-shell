@@ -21,7 +21,8 @@ copied into the repository.
 | `~/.cache/sparrow-shell/` | Palette, thumbnails, weather location, recording thumbnails and transient outputs | Regenerable cache; never track. Startup migration now creates its root for clean first run. |
 | `~/Pictures/wallpapers/` | User-owned images and videos | Personal assets; not bundled. A missing directory is treated as an empty library. |
 | `~/Videos/Recordings/` | User recording destination | Personal output; not bundled. Recording selection/default path creates or handles it when used. |
-| Cursor theme files | Current Bibata theme is installed in the user's local icon directory | External asset, not vendored. The default Niri file records the chosen theme and size. |
+| `~/.config/environment.d/90-cursor.conf` | XCursor defaults for user-manager services and toolkit clients | Tracked as `environment.d/90-cursor.conf`; install only when absent or after preserving/confirming existing cursor preferences. |
+| `~/.local/share/icons/Bibata-Modern-Ice` | Unowned local copy of the current Bibata Modern Ice theme (metadata identifies v2.0.6) | External asset, not vendored. The recommended Arch source is `bibata-cursor-theme-bin` from AUR; the live Niri file selects the theme at size 24. |
 
 The live wallpaper unit is the exception among the current systemd links: its
 home-directory symlink is absolute and resolves into the current checkout,
@@ -56,6 +57,22 @@ The root also preserves the current cursor name/size, hotkey overlay startup
 choice, no-CSD preference, screenshot path, and Niri's default animation feel.
 App binds currently name Kitty, Thunar, and Firefox; those remain configurable
 user application choices and must be installed or changed by the user.
+
+Cursor defaults have two runtime paths because Sparrow itself is a
+systemd-launched Quickshell service: Niri's native `cursor` block selects the
+compositor cursor and sets `XCURSOR_THEME`/`XCURSOR_SIZE` for Niri-spawned
+clients, while `environment.d/90-cursor.conf` supplies those same values to
+user-manager services. GTK reads its cursor through GtkSettings/GSettings; the
+current GSettings values match Bibata Modern Ice at 24. This is independent of
+the `GTK_THEME=Sparrow` setting scoped to Thunar/the GTK portal for widget
+colors. A future installer should preserve non-default existing GSettings,
+environment, and Niri cursor choices rather than force these recommended
+fresh-install defaults over them. The GTK file chooser follows the same GTK
+cursor preference; Qt/Wayland clients use the standard XCursor environment.
+The portable default is Bibata Modern Ice at 24. Sparrow's UI uses Inter (this
+user's saved preference is Inter Black); Kitty uses JetBrains Mono Nerd Font.
+The Quickshell lockscreen uses its bundled Outfit Black font. No separate
+decorative-glyph font or CJK glyph setting is part of the runtime.
 
 ## Quickshell and systemd installation model
 

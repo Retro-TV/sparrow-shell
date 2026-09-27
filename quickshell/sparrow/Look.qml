@@ -265,7 +265,7 @@ SettingsSurface {
         height: root.height + root.mBottom * root.s
         clip: true
 
-        SettingsHeader { s: root.s; glyph: "飾"; title: "LOOK"; showBack: true }
+        SettingsHeader { s: root.s; title: "LOOK"; showBack: true }
 
         Column {
             anchors.left: parent.left

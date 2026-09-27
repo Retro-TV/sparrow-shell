@@ -54,7 +54,6 @@ Singleton {
     property alias keepAwake: adapter.keepAwake
     property alias time12h: adapter.time12h
     property alias clockSeconds: adapter.clockSeconds
-    property alias showGlyphs: adapter.showGlyphs
     property alias paletteMode: adapter.paletteMode
     property alias paletteVariant: adapter.paletteVariant
     property alias appearanceMode: adapter.appearanceMode
@@ -114,7 +113,6 @@ Singleton {
             property bool keepAwake: false
             property bool time12h: false
             property bool clockSeconds: false
-            property bool showGlyphs: true
             property string paletteMode: "dynamic"
             /** Matugen scheme selection: auto, tonal, content, or monochrome. */
             property string paletteVariant: "auto"

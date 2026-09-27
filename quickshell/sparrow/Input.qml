@@ -311,7 +311,7 @@ SettingsSurface {
         anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right
         spacing: 0; clip: true
 
-        SettingsHeader { s: root.s; glyph: "操"; title: "INPUT"; showBack: true }
+        SettingsHeader { s: root.s; title: "INPUT"; showBack: true }
         Column {
             anchors.left: parent.left; anchors.right: parent.right
             anchors.leftMargin: 12 * root.s; anchors.rightMargin: 12 * root.s

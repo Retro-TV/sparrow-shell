@@ -433,7 +433,6 @@ PillSurface {
         anchors.right: parent.right
         anchors.rightMargin: filterRow.width + 30 * root.s
         s: root.s
-        kanji: "探"
         placeholder: "Search wallpapers"
         visible: root.searching
         enabled: root.searching
@@ -611,20 +610,6 @@ PillSurface {
                 Qt.callLater(dirField.forceActiveFocus);
             }
         }
-    }
-
-    Text {
-        anchors.left: parent.left
-        anchors.leftMargin: 20 * root.s
-        anchors.verticalCenter: parent.verticalCenter
-        z: 0
-        visible: Flags.showGlyphs && !root.searching
-        text: "壁"
-        color: Theme.ghost
-        opacity: 0.55
-        font.family: Theme.fontJp
-        font.weight: Font.Medium
-        font.pixelSize: 30 * root.s
     }
 
     Repeater {

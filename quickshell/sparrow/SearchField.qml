@@ -6,7 +6,6 @@ Item {
     id: root
 
     property real s: 1
-    property string kanji: ""
     property string placeholder: ""
     property string counterText: ""
 
@@ -28,24 +27,11 @@ Item {
 
     height: 30 * s
 
-    Text {
-        id: glyph
-        anchors.verticalCenter: parent.verticalCenter
-        anchors.left: parent.left
-        visible: Flags.showGlyphs
-        width: Flags.showGlyphs ? implicitWidth : 0
-        text: root.kanji
-        color: Theme.dim
-        font.family: Theme.fontJp
-        font.weight: Font.Medium
-        font.pixelSize: 16 * root.s
-    }
-
     TextField {
         id: field
         anchors.verticalCenter: parent.verticalCenter
-        anchors.left: glyph.right
-        anchors.leftMargin: Flags.showGlyphs ? 10 * root.s : 0
+        anchors.left: parent.left
+        anchors.leftMargin: 0
         anchors.right: counter.left
         anchors.rightMargin: 10 * root.s
         background: null

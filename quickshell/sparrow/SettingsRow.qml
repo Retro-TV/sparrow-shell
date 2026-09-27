@@ -4,7 +4,7 @@ import QtQuick
 import "Singletons"
 
 /**
- * One settings line: an optional leading kanji, a name and an optional secondary
+ * One settings line: an optional leading icon, a name and an optional secondary
  * caption on the left, and a control slot on the right, capped by a single bottom
  * hairline. `control` is the default slot for the toggle, segmented control or
  * chevron. `surface` wires hover and activation back to the owning settings
@@ -14,7 +14,6 @@ Item {
     id: srow
 
     property var surface: null
-    property string glyph: ""
     property string icon: ""
     property string name: ""
     property string sub: ""
@@ -48,18 +47,6 @@ Item {
         onClicked: if (srow.surface) srow.surface.activateRow(srow)
     }
 
-    Text {
-        id: rk
-        anchors.left: parent.left
-        anchors.leftMargin: 12 * srow.s
-        anchors.verticalCenter: parent.verticalCenter
-        visible: srow.glyph.length > 0 && srow.icon.length === 0 && Flags.showGlyphs
-        text: srow.glyph
-        color: Theme.iconDim
-        font.family: Theme.fontJp
-        font.pixelSize: 15 * srow.s
-    }
-
     GlyphIcon {
         id: ri
         anchors.left: parent.left
@@ -75,8 +62,8 @@ Item {
 
     Column {
         id: textCol
-        anchors.left: ri.visible ? ri.right : (rk.visible ? rk.right : parent.left)
-        anchors.leftMargin: ri.visible ? 13 * srow.s : (rk.visible ? 11 * srow.s : 12 * srow.s)
+        anchors.left: ri.visible ? ri.right : parent.left
+        anchors.leftMargin: ri.visible ? 13 * srow.s : 12 * srow.s
         anchors.right: controlSlot.left
         anchors.rightMargin: 14 * srow.s
         anchors.verticalCenter: parent.verticalCenter

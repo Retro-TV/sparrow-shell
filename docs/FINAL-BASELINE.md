@@ -15,6 +15,12 @@ for outputs, workspaces, windows, layout and keybindings. A separate Quickshell
 instance implements idle policy. State and generated theme/configuration files
 live outside the source tree.
 
+The frozen presentation defaults are Inter for Sparrow's interface (the current
+user preference is Inter Black), JetBrains Mono Nerd Font for Kitty/Fish/
+Starship, Bibata Modern Ice at size 24 for the cursor, and bundled Outfit Black
+for the lockscreen. Decorative CJK glyphs are not part of Sparrow; no Zen Kaku
+font is required.
+
 The development checkout is `~/Projects/sparrow-shell`. The active runtime
 entry point is `~/.config/quickshell/sparrow`, currently a symlink into that
 checkout. The checkout is therefore not yet independently installed: moving or

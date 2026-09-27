@@ -9,8 +9,8 @@ import Quickshell.Services.Pipewire
 import "Singletons"
 
 /**
- * 録 RECORD surface: drives gpu-screen-recorder through the ScreenRec singleton,
- * built as a flat washi "capture card". The header carries the kanji, label and
+ * RECORD surface: drives gpu-screen-recorder through the ScreenRec singleton,
+ * built as a flat washi "capture card". The header carries its label and
  * a status slot (Idle / pulsing dot + elapsed m:ss / Get ready). A tappable
  * config stage shows the recording spec and folds open an options drawer (Frame
  * rate / Quality MiniSegs and a Capture-cursor toggle). A full-width flame action
@@ -398,17 +398,7 @@ PillSurface {
             Row {
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
-                spacing: 9 * root.s
-
-                Text {
-                    anchors.verticalCenter: parent.verticalCenter
-                    visible: Flags.showGlyphs
-                    text: "録"
-                    color: Theme.cream
-                    font.family: Theme.fontJp
-                    font.weight: Font.Medium
-                    font.pixelSize: 16 * root.s
-                }
+                spacing: 0
                 Text {
                     anchors.verticalCenter: parent.verticalCenter
                     text: "RECORD"
@@ -1158,17 +1148,7 @@ PillSurface {
             Row {
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
-                spacing: 6 * root.s
-
-                Text {
-                    visible: Flags.showGlyphs
-                    height: 16 * root.s
-                    verticalAlignment: Text.AlignVCenter
-                    text: "録"
-                    color: Theme.subtle
-                    font.family: Theme.fontJp
-                    font.pixelSize: 11 * root.s
-                }
+                spacing: 0
                 Text {
                     height: 16 * root.s
                     verticalAlignment: Text.AlignVCenter
@@ -1186,20 +1166,9 @@ PillSurface {
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 height: parent.height
-                width: clearTxt.width + (Flags.showGlyphs ? clearKanji.width + 5 * root.s : 0)
+                width: clearTxt.width
                 visible: ScreenRec.recentCount > 0
 
-                Text {
-                    id: clearKanji
-                    anchors.right: clearTxt.left
-                    anchors.rightMargin: 5 * root.s
-                    anchors.verticalCenter: parent.verticalCenter
-                    visible: Flags.showGlyphs
-                    text: "払"
-                    color: clearArea.containsMouse ? Theme.flameGlow : Theme.vermDeep
-                    font.family: Theme.fontJp
-                    font.pixelSize: 11 * root.s
-                }
                 Text {
                     id: clearTxt
                     anchors.right: parent.right

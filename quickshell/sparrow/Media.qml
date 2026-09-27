@@ -9,7 +9,7 @@ import "Singletons"
  * Now-playing card. Album art bleeds edge-to-edge on the left, faded into the
  * card; a blurred copy glows through a near-opaque warm wash behind everything.
  * Right of the cover: title, artist, a dim source/time line, the play/pause
- * seal (奏/休) flanked by 前/次 skips. Playback runs as a brush stroke along the
+ * play/pause seal flanked by previous/next controls. Playback runs as a brush stroke along the
  * bottom, its painted head the dock for the pill's soul bead. All now-playing
  * data comes from [[Players]]; when two or more players run, the source token
  * glows into a bubble that opens a picker.
@@ -103,33 +103,20 @@ PillSurface {
         NumberAnimation { target: root; property: "sealPulse"; to: 0; duration: Motion.standard; easing.type: Motion.easeStandard }
     }
 
-    component KanjiSkip: Item {
+    component IconSkip: Item {
         id: skip
 
         property bool can: false
-        property string kanjiText: ""
         property string icon: ""
         signal activated()
 
         anchors.verticalCenter: parent.verticalCenter
-        implicitWidth: Flags.showGlyphs ? kanjiLabel.implicitWidth : 15 * root.s
-        implicitHeight: Flags.showGlyphs ? kanjiLabel.implicitHeight : 15 * root.s
+        implicitWidth: 15 * root.s
+        implicitHeight: 15 * root.s
         opacity: skip.can ? 1 : 0.4
         Behavior on opacity { NumberAnimation { duration: Motion.fast } }
 
-        Text {
-            id: kanjiLabel
-            visible: Flags.showGlyphs
-            anchors.centerIn: parent
-            text: skip.kanjiText
-            font.family: Theme.fontJp
-            font.pixelSize: 13 * root.s
-            color: skipArea.containsMouse ? Theme.cream : Theme.dim
-            Behavior on color { ColorAnimation { duration: Motion.fast } }
-        }
-
         GlyphIcon {
-            visible: !Flags.showGlyphs
             anchors.centerIn: parent
             width: 15 * root.s
             height: 15 * root.s
@@ -479,8 +466,7 @@ PillSurface {
         enabled: !root.picking
         Behavior on opacity { NumberAnimation { duration: Motion.fast } }
 
-        KanjiSkip {
-            kanjiText: "前"
+        IconSkip {
             icon: "prev"
             can: root.hasPlayer && root.player.canGoPrevious
             onActivated: if (root.player) root.player.previous()
@@ -508,18 +494,7 @@ PillSurface {
                 GradientStop { position: 1.0; color: root.mix(Theme.vermDeep, Theme.tileBg, 0.55 - 0.27 * seal.sat) }
             }
 
-            Text {
-                visible: Flags.showGlyphs
-                anchors.centerIn: parent
-                text: root.playing ? "奏" : "休"
-                color: Theme.bright
-                font.family: Theme.fontJp
-                font.pixelSize: 16 * root.s
-                font.weight: Font.DemiBold
-            }
-
             GlyphIcon {
-                visible: !Flags.showGlyphs
                 anchors.centerIn: parent
                 width: 15 * root.s
                 height: 15 * root.s
@@ -538,8 +513,7 @@ PillSurface {
             }
         }
 
-        KanjiSkip {
-            kanjiText: "次"
+        IconSkip {
             icon: "next"
             can: root.hasPlayer && root.player.canGoNext
             onActivated: if (root.player) root.player.next()

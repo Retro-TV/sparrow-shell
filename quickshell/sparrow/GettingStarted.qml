@@ -61,7 +61,6 @@ PillSurface {
 
         SettingsHeader {
             s: root.s
-            glyph: ""
             title: "GETTING STARTED"
             showBack: true
         }

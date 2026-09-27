@@ -6,7 +6,7 @@ import Quickshell.Io
 import "Singletons"
 
 /**
- * 錠 IDLE / LOCK sub-surface: timeout values are watched by Sparrow's separate
+ * IDLE / LOCK sub-surface: timeout values are watched by Sparrow's separate
  * Quickshell IdleMonitor service. The service reads the shared flags directly;
  * settings changes therefore apply live without generating a daemon config or
  * restarting the pill. Reached from settings and morphs back on an empty click
@@ -119,7 +119,6 @@ SettingsSurface {
 
         SettingsHeader {
             s: root.s
-            glyph: "錠"
             title: "IDLE / LOCK"
             showBack: true
         }

@@ -17,9 +17,8 @@ import Quickshell.Io
  * is guarded: a partial body or network blip leaves the last good values in place
  * and `ready` simply stays false until the first clean fetch lands.
  *
- * Conditions render as on-brand kanji rather than icons — 晴 clear, 曇 cloud,
- * 雨 rain, 雪 snow, 霧 fog, 雷 thunder, 月 a clear night — keyed off the WMO weather
- * code via `glyphFor`, with `labelFor` giving the short english word.
+ * Conditions map to Sparrow's vector weather icons via `glyphFor`, with
+ * `labelFor` giving the short English word.
  */
 Singleton {
     id: root
@@ -39,11 +38,7 @@ Singleton {
     property real lon: 0
     property bool located: false
 
-    /**
-     * Maps a WMO weather code to its on-brand kanji. Clear skies show 月 at night
-     * so the glance reads day-versus-night at a glance; every other condition is
-     * the same glyph round the clock.
-     */
+    /** Map a WMO weather code to the matching vector weather icon. */
     function glyphFor(code, day) {
         if (code === 0)
             return day ? "sun" : "moon";

@@ -56,7 +56,6 @@ SettingsSurface {
         var result = [
             { item: timeRow, kind: "seg", vals: [false, true], get: function () { return Flags.time12h; }, set: function (v) { Flags.time12h = v; } },
             { item: secRow, kind: "toggle", get: function () { return Flags.clockSeconds; }, set: function (v) { Flags.clockSeconds = v; } },
-            { item: glyphRow, kind: "toggle", get: function () { return Flags.showGlyphs; }, set: function (v) { Flags.showGlyphs = v; } },
             { item: vizRow, kind: "toggle", get: function () { return Flags.musicViz; }, set: function (v) { if (v !== Flags.musicViz) Cava.toggle(); } },
             { item: paletteRow, kind: "seg", vals: ["static", "dynamic"], get: function () { return Flags.paletteMode; }, set: function (v) { root.applyPaletteSource(v); } }
         ];
@@ -113,7 +112,6 @@ SettingsSurface {
 
         SettingsHeader {
             s: root.s
-            glyph: "相"
             title: "APPEARANCE"
             showBack: true
         }
@@ -144,19 +142,6 @@ SettingsSurface {
                 s: root.s
                 on: Flags.clockSeconds
                 onToggled: Flags.clockSeconds = !Flags.clockSeconds
-            }
-        }
-
-        SettingsRow {
-            id: glyphRow
-            surface: root
-            name: "Japanese glyphs"
-            icon: "language"
-
-            LinkToggle {
-                s: root.s
-                on: Flags.showGlyphs
-                onToggled: Flags.showGlyphs = !Flags.showGlyphs
             }
         }
 

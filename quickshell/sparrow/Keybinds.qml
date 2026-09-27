@@ -226,14 +226,7 @@ PillSurface {
             Row {
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
-                spacing: 8 * root.s
-                Text {
-                    visible: Flags.showGlyphs
-                    text: "鍵"
-                    color: Theme.cream
-                    font.family: Theme.fontJp
-                    font.pixelSize: 16 * root.s
-                }
+                spacing: 0
                 Text {
                     anchors.verticalCenter: parent.verticalCenter
                     text: "KEYBINDS"

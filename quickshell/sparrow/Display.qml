@@ -478,7 +478,6 @@ SettingsSurface {
         id: crow
 
         property string icon: ""
-        property string glyphText: ""
         default property alias content: crowInner.data
 
         readonly property bool focused: root.focusRowItem === crow
@@ -523,15 +522,6 @@ SettingsSurface {
             stroke: 1.8
         }
 
-        Text {
-            anchors.centerIn: crowIcon
-            visible: crow.glyphText.length > 0
-            text: crow.glyphText
-            color: crow.focused ? Theme.cream : Theme.subtle
-            font.family: Theme.fontJp
-            font.pixelSize: 13 * root.s
-        }
-
         Item {
             id: crowInner
             anchors.left: crowIcon.right
@@ -554,7 +544,6 @@ SettingsSurface {
 
         SettingsHeader {
             s: root.s
-            glyph: "画"
             title: "DISPLAY"
             showBack: true
         }

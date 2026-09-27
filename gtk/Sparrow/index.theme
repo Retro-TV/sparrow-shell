@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=X-GNOME-Metatheme
+Name=Sparrow
+Comment=Sparrow wallpaper-aware GTK3 theme
+Encoding=UTF-8
+
+[X-GNOME-Metatheme]
+GtkTheme=Sparrow
+MetacityTheme=Adwaita
+IconTheme=Sparrow

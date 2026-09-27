@@ -1,7 +1,7 @@
 var groups = [
     { name: "Applications", items: [
         { id: "kitty", label: "Open Kitty", key: "Super+T" },
-        { id: "thunar", label: "Open Thunar", key: "Super+E" },
+        { id: "thunar", label: "Open Sparrow Files", key: "Super+E" },
         { id: "firefox", label: "Open Firefox", key: "Super+F" }
     ]},
     { name: "Sparrow", items: [

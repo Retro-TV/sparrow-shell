@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=Sparrow Files
+GenericName=File Manager
+Comment=Browse files with Sparrow
+Exec=env GTK_THEME=Sparrow thunar %U
+TryExec=thunar
+Icon=system-file-manager
+Terminal=false
+StartupNotify=true
+Categories=System;Core;GTK;FileTools;FileManager;
+MimeType=inode/directory;
+NoDisplay=true

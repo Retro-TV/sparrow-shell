@@ -54,3 +54,17 @@ so after the generated colors actually change Sparrow sends Kitty's documented
 Kitty is not running and does not restart it. Kitty is an optional app:
 failure to write its color include is reported as a warning but does not fail
 Sparrow's wallpaper or palette update.
+
+The same palette also produces generated color definitions for Sparrow's
+app-scoped GTK3 theme at
+`$XDG_DATA_HOME/themes/Sparrow/gtk-3.0/sparrow-colors.css`. The Sparrow Files
+launcher sets `GTK_THEME=Sparrow` only for Thunar, leaving the user's global
+GTK theme unchanged. GTK3 loads theme CSS at process startup, so an already-
+running Thunar may need to be reopened to show colors from a newly selected
+wallpaper.
+
+It also updates Sparrow's lightweight icon-theme overlay under
+`$XDG_DATA_HOME/icons/Sparrow/`, which inherits Adwaita for all other icons
+and regenerates folder and file-manager glyphs from the same primary palette
+color. The desktop icon-theme preference selects this overlay so folders
+follow the wallpaper palette in GTK applications.

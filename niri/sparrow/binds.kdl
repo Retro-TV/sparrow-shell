@@ -3,7 +3,7 @@
 binds {
     // Applications.
     Super+T hotkey-overlay-title="Open Kitty" { spawn "kitty"; }
-    Super+E hotkey-overlay-title="Open Thunar" { spawn "thunar"; }
+    Super+E hotkey-overlay-title="Open Sparrow Files" { spawn "env" "GTK_THEME=Sparrow" "thunar"; }
     Super+F hotkey-overlay-title="Open Firefox" { spawn "firefox"; }
     Super+L hotkey-overlay-title="Lock session" { spawn-sh "\"$HOME/.config/quickshell/sparrow/scripts/sparrow-lock\""; }
     Super+Shift+S hotkey-overlay-title="Screenshot with Rishot" { spawn-sh "\"$HOME/.local/bin/rishot\""; }

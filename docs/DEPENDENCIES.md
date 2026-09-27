@@ -23,6 +23,8 @@ shell to start.
 | `curl` | Weather lookup, wallpaper search/download/preview, optional online wallpaper actions. |
 | `xdg-utils` | Generic `xdg-open` integration where used. |
 | `gtk3` | `gtk-launch` starts selected `.desktop` entries in Sparrow Launcher. Ordinary desktop-entry discovery is not a package manager. |
+| `thunar` | Sparrow's default graphical file manager, opened by Super+E and for `inode/directory`; its Sparrow theme is an app-scoped GTK3 theme. |
+| `adw-gtk-theme` | Arch package providing the maintained `adw-gtk3` GTK3 widget/state theme used as Sparrow's wallpaper-colored Thunar base. |
 | `libnotify` | `notify-send` for Sparrow recorder/peripheral notifications. |
 | `systemd` | User units, idle/power actions and graphical session target. |
 | `dbus` and `upower` | User/session services consumed by Quickshell's notifications, tray, Bluetooth and UPower battery services; actual daemons/session bus must be available. |
@@ -52,7 +54,7 @@ components. Sparrow's video preview additionally uses `qt6-multimedia` and
 | `brightnessctl` | Optional on systems with `/sys/class/backlight`; internal brightness UI is only exposed when hardware and tool are detected. |
 | `ddcutil` | Optional external DDC/CI display brightness controls in Mixer. Not installed on the audited host. |
 | `nvibrant` | Optional NVIDIA vibrance backend; Sparrow checks its executable and NVIDIA device before exposing it. Not installed on the audited host. |
-| `kitty`, `thunar`, `firefox` | Current default Niri app bindings. These are replaceable user app choices, not intrinsic Sparrow runtime dependencies. |
+| `kitty`, `firefox` | Current default Niri app bindings. These are replaceable user app choices, not intrinsic Sparrow runtime dependencies. |
 | `fish`, `starship` | Required for Sparrow's reference Kitty shell and Fish/Starship prompt, including the directory pill. `zoxide` is optional and is initialized only when installed. |
 | `ttf-jetbrains-mono-nerd` | Required for Sparrow's default Kitty profile: supplies the configured JetBrains Mono Nerd Font. The future installer should install it with the default Kitty setup. |
 | `bibata-cursor-theme-bin` (AUR) | Supplies the configured `Bibata-Modern-Ice` XCursor theme. The config sets theme and size but does not bundle cursor files. |
@@ -80,6 +82,9 @@ is a KDE/KWin capture path and is not required for Niri.
 
 - `ddcutil`, `nvibrant`, `wlsunset`, `cava`, `mpvpaper`, cursor assets and
   Rishot are optional or feature-specific as described above.
+- `gvfs` is recommended for Thunar's removable-volume and remote-location
+  integration; `tumbler` is optional for file thumbnails. Neither is required
+  for opening local folders or basic file operations.
 - Sparrow does not install packages, manage pacman/AUR, bundle a browser,
   terminal, file manager, personal wallpapers, monitor setup, generated theme
   files, personal Hyprlock configuration or Rishot source.

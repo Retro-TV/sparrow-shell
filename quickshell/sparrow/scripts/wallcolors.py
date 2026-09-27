@@ -3,6 +3,7 @@
 import colorsys
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -142,6 +143,133 @@ def render_kitty(palette):
     return "\n".join(lines) + "\n"
 
 
+def render_sparrow_gtk(palette):
+    """Apply Matugen roles to adw-gtk3's named palette, preserving its states."""
+    data_home = Path(os.environ.get("XDG_DATA_HOME", HOME / ".local/share"))
+    candidates = (
+        data_home / "themes/adw-gtk3/gtk-3.0/gtk-dark.css",
+        Path("/usr/share/themes/adw-gtk3/gtk-3.0/gtk-dark.css"),
+    )
+    source = next((path for path in candidates if path.is_file()), None)
+    if source is None:
+        raise FileNotFoundError(
+            "adw-gtk3 is missing; install Arch package adw-gtk-theme or the upstream user theme"
+        )
+
+    stylesheet = source.read_text()
+    colors = {
+        "blue_1": palette["primary"],
+        "blue_2": palette["primary"],
+        "blue_3": palette["primary"],
+        "blue_4": palette["primary_container"],
+        "blue_5": palette["primary_container"],
+        "green_1": palette["tertiary"],
+        "green_2": palette["tertiary"],
+        "green_3": palette["tertiary"],
+        "green_4": palette["tertiary_container"],
+        "green_5": palette["tertiary_container"],
+        "yellow_1": palette["secondary"],
+        "yellow_2": palette["secondary"],
+        "yellow_3": palette["secondary"],
+        "yellow_4": palette["secondary_container"],
+        "yellow_5": palette["secondary_container"],
+        "orange_1": palette["secondary"],
+        "orange_2": palette["secondary"],
+        "orange_3": palette["secondary"],
+        "orange_4": palette["secondary_container"],
+        "orange_5": palette["secondary_container"],
+        "red_1": palette["error"],
+        "red_2": palette["error"],
+        "red_3": palette["error"],
+        "red_4": palette["error"],
+        "red_5": palette["on_error"],
+        "purple_1": palette["primary"],
+        "purple_2": palette["primary"],
+        "purple_3": palette["primary"],
+        "purple_4": palette["primary_container"],
+        "purple_5": palette["primary_container"],
+        "brown_1": palette["tertiary"],
+        "brown_2": palette["tertiary"],
+        "brown_3": palette["tertiary"],
+        "brown_4": palette["tertiary_container"],
+        "brown_5": palette["tertiary_container"],
+        "light_1": palette["on_surface"],
+        "light_2": palette["on_surface"],
+        "light_3": palette["on_surface_variant"],
+        "light_4": palette["on_surface_variant"],
+        "light_5": palette["outline"],
+        "dark_1": palette["surface_container_highest"],
+        "dark_2": palette["surface_container_high"],
+        "dark_3": palette["surface_container"],
+        "dark_4": palette["surface_container_low"],
+        "dark_5": palette["background"],
+        "accent_bg_color": palette["primary"],
+        "accent_fg_color": palette["on_primary"],
+        "destructive_bg_color": palette["error"],
+        "destructive_fg_color": palette["on_error"],
+        "success_bg_color": palette["tertiary_container"],
+        "success_fg_color": palette["on_tertiary_container"],
+        "warning_bg_color": palette["secondary_container"],
+        "warning_fg_color": palette["on_secondary_container"],
+        "error_bg_color": palette["error"],
+        "error_fg_color": palette["on_error"],
+        "window_bg_color": palette["background"],
+        "window_fg_color": palette["on_background"],
+        "view_bg_color": palette["surface_container_lowest"],
+        "view_fg_color": palette["on_surface"],
+        "headerbar_bg_color": palette["surface_container_low"],
+        "headerbar_fg_color": palette["on_surface"],
+        "headerbar_border_color": palette["outline_variant"],
+        "headerbar_backdrop_color": palette["surface_container"],
+        "sidebar_bg_color": palette["surface_container_low"],
+        "sidebar_fg_color": palette["on_surface"],
+        "sidebar_backdrop_color": palette["surface_container"],
+        "sidebar_border_color": palette["outline_variant"],
+        "card_bg_color": palette["surface_container"],
+        "card_fg_color": palette["on_surface"],
+        "dialog_bg_color": palette["surface_container_high"],
+        "dialog_fg_color": palette["on_surface"],
+        "popover_bg_color": palette["surface_container_high"],
+        "popover_fg_color": palette["on_surface"],
+        "thumbnail_bg_color": palette["surface_container"],
+        "thumbnail_fg_color": palette["on_surface"],
+        "panel_bg_color": palette["surface_container"],
+        "panel_fg_color": palette["on_surface"],
+    }
+    for name, color in colors.items():
+        pattern = re.compile(rf"(@define-color\s+{re.escape(name)}\s+)[^;]+;")
+        stylesheet, count = pattern.subn(rf"\g<1>{color};", stylesheet, count=1)
+        if count != 1:
+            raise ValueError(f"adw-gtk3 stylesheet lacks expected color token: {name}")
+
+    header = (
+        "/* Generated by Sparrow from upstream adw-gtk3 GTK3 CSS (LGPL-2.1).\n"
+        f" * Source: {source}\n"
+        " * Matugen roles replace its named palette; upstream widget/state rules remain intact. */\n"
+    )
+    return header + stylesheet
+
+
+def render_folder_icon(palette):
+    """Create Sparrow's simple wallpaper-accented folder icon."""
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
+  <path fill="{palette["primary_container"]}" d="M4 12a4 4 0 0 1 4-4h12l5 5h15a4 4 0 0 1 4 4v20a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4z"/>
+  <path fill="{palette["primary"]}" d="M4.5 18h39l-3.2 17.7a4 4 0 0 1-3.9 3.3H8.6a4 4 0 0 1-3.9-4.7z"/>
+  <path fill="{palette["on_primary"]}" opacity=".12" d="M6.2 20h35.6l-.5 2.8H5.7z"/>
+</svg>
+'''
+
+
+def render_text_icon(palette):
+    """Recolor Papirus's text-file glyph with the current Matugen accent."""
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <path fill="{palette["primary"]}" d="M2.75 1C2.33 1 2 1.333 2 1.75v12.5c0 .417.333.75.75.75h10.5c.418 0 .75-.333.75-.75V5.667L9.875 4.792 9 1z"/>
+  <path fill="{palette["primary_container"]}" d="M9 1v4.167c0 .458.375.833.833.833H14z"/>
+  <path fill="{palette["on_primary"]}" opacity=".68" d="M5 7h6v1H5zm0 2h6v1H5zm0 2h6v1H5zm0 2h3v1H5z"/>
+</svg>
+'''
+
+
 def main():
     if len(sys.argv) < 2:
         raise SystemExit("usage: wallcolors.py IMAGE | --hue DEGREES dark|light SATURATION")
@@ -254,6 +382,57 @@ def main():
             except OSError as exc:
                 print(f"wallcolors: Kitty palette was written, but live Kitty could not be reloaded: {exc}",
                       file=sys.stderr)
+
+    data_home = Path(os.environ.get("XDG_DATA_HOME", HOME / ".local/share"))
+    gtk_theme_dir = data_home / "themes" / "Sparrow" / "gtk-3.0"
+    try:
+        atomic_write(gtk_theme_dir / "gtk-dark.css", render_sparrow_gtk(surfaces))
+    except (OSError, ValueError) as exc:
+        print(f"wallcolors: optional Matugen GTK theme was not written: {exc}", file=sys.stderr)
+
+    folder_icon = render_folder_icon(surfaces)
+    icon_changes = False
+    for icon_name in (
+        "folder", "folder-open", "folder-documents", "folder-download",
+        "folder-music", "folder-pictures", "folder-publicshare",
+        "folder-templates", "folder-videos", "folder-remote",
+        "folder-bookmarks", "folder-desktop", "user-desktop",
+        "system-file-manager",
+    ):
+        try:
+            icon_changes |= atomic_write(
+                data_home / "icons" / "Sparrow" / "scalable" / "places" /
+                f"{icon_name}.svg", folder_icon
+            )
+        except OSError as exc:
+            print(f"wallcolors: optional GTK folder icon {icon_name} was not written: {exc}",
+                  file=sys.stderr)
+    try:
+        icon_changes |= atomic_write(
+            data_home / "icons" / "Sparrow" / "symbolic" / "places" /
+            "folder-symbolic.svg", folder_icon
+        )
+    except OSError as exc:
+        print(f"wallcolors: optional symbolic folder icon was not written: {exc}",
+              file=sys.stderr)
+    try:
+        icon_changes |= atomic_write(
+            data_home / "icons" / "Sparrow" / "scalable" / "mimetypes" /
+            "text-x-generic.svg", render_text_icon(surfaces)
+        )
+    except OSError as exc:
+        print(f"wallcolors: optional themed text icon was not written: {exc}",
+              file=sys.stderr)
+    if icon_changes:
+        icon_root = data_home / "icons" / "Sparrow"
+        try:
+            subprocess.run(
+                ["gtk-update-icon-cache", "--force", str(icon_root)],
+                check=True, capture_output=True, text=True,
+            )
+        except (OSError, subprocess.CalledProcessError) as exc:
+            print(f"wallcolors: Sparrow folder icons changed, but the icon cache could not be refreshed: {exc}",
+                  file=sys.stderr)
 
 
 if __name__ == "__main__":

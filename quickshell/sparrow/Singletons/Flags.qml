@@ -71,7 +71,7 @@ Singleton {
             property bool time12h: false
             property bool clockSeconds: false
             property bool showGlyphs: true
-            property string paletteMode: "static"
+            property string paletteMode: "dynamic"
             /** Sparrow palette treatment: tonal, vibrant or alternate. */
             property string paletteVariant: "tonal"
             property string lockForegroundMode: "auto"

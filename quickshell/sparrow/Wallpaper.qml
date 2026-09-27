@@ -550,7 +550,10 @@ PillSurface {
             anchors.left: parent.left
             anchors.right: parent.right
             visible: !root.editingDir
-            text: Walls.wpDir
+            text: root.focusIndex >= 0 && root.focusIndex < root.localItems.length
+                    && root.localItems[root.focusIndex].builtIn
+                ? "BUILT-IN  /  Sparrow Default"
+                : "PERSONAL  /  " + Walls.wpDir
             elide: Text.ElideMiddle
             color: folderHover.hovered ? Theme.subtle : Theme.faint
             font.family: Theme.font
@@ -635,6 +638,7 @@ PillSurface {
 
             readonly property string thumb: modelData.thumb !== undefined ? modelData.thumb : ""
             readonly property bool remote: modelData.image !== undefined
+            readonly property bool builtIn: modelData.builtIn === true
             readonly property string thumbSource: remote ? thumb : ("file://" + thumb)
 
             /**
@@ -806,6 +810,27 @@ PillSurface {
                     }
                 }
 
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.bottom: parent.bottom
+                    anchors.margins: 5 * root.s
+                    visible: tile.builtIn
+                    width: builtInText.implicitWidth + 12 * root.s
+                    height: builtInText.implicitHeight + 6 * root.s
+                    radius: height / 2
+                    color: Qt.rgba(0, 0, 0, 0.62)
+
+                    Text {
+                        id: builtInText
+                        anchors.centerIn: parent
+                        text: "BUILT-IN"
+                        color: Theme.cream
+                        font.family: Theme.font
+                        font.pixelSize: 9 * root.s
+                        font.weight: Font.DemiBold
+                    }
+                }
+
                 Text {
                     anchors.centerIn: parent
                     visible: tile.focused && tile.remote && dlProc.running && dlProc.target === tile.modelData.image
@@ -852,8 +877,8 @@ PillSurface {
             HeatHold {
                 id: trashHeat
                 tapThreshold: 0.25
-                enabled: !tile.remote
-                onConfirmed: if (!tile.remote) Walls.trash(tile.modelData.path)
+                enabled: !tile.remote && !tile.builtIn
+                onConfirmed: if (!tile.remote && !tile.builtIn) Walls.trash(tile.modelData.path)
                 onTapped: root.activate()
             }
 
@@ -866,10 +891,17 @@ PillSurface {
                         return;
                     if (tile.remote)
                         root.activate();
-                    else
+                    else if (!tile.builtIn)
                         trashHeat.press();
                 }
-                onReleased: if (tile.focused && !tile.remote) trashHeat.release()
+                onReleased: {
+                    if (!tile.focused || tile.remote)
+                        return;
+                    if (tile.builtIn)
+                        root.activate();
+                    else
+                        trashHeat.release();
+                }
                 onExited: trashHeat.cancel()
                 onClicked: if (!tile.focused) root.focusIndex = tile.index
             }
@@ -1047,7 +1079,12 @@ PillSurface {
 
             HintKey { key: "tap"; caption: root.monMap.tiles.length > 0 ? "set all" : "set" }
             HintKey { visible: root.monMap.tiles.length > 0; key: "corner"; caption: "one screen" }
-            HintKey { key: "hold"; caption: "delete" }
+            HintKey {
+                visible: root.focusIndex < 0 || root.focusIndex >= root.localItems.length
+                    || !root.localItems[root.focusIndex].builtIn
+                key: "hold"
+                caption: "delete"
+            }
         }
 
         Text {

@@ -141,20 +141,21 @@ that the palette must be initialized. The flow is:
    while the global shell/Niri/app theme and lock text decision are shared.
 
 Generated app theme files are outputs, not inputs. The wallpaper pipeline is
-the color source of truth; however, a fresh `Flags.qml` defaults
-`paletteMode` to `static`, so Sparrow's QML theme stays on its curated static
-colors until the user selects Dynamic. The generated palette still feeds Niri,
-Kitty, GTK/icons, and lock luminance. `Theme.qml` also uses its hand-maintained
-fallback when palette data is unavailable. Niri's
+the color source of truth. Fresh `Flags.qml` state defaults `paletteMode` to
+`dynamic`; an explicit value already saved in `flags.json` remains
+authoritative and is not migrated. The generated palette feeds Sparrow QML,
+Niri, Kitty, GTK/icons, and lock luminance. `Theme.qml` also uses its
+hand-maintained fallback when palette data is unavailable. Niri's
 generated color fragment is a consumer, not a second palette generator.
 
 On a fresh system with no wallpaper directory/state, the bundled default is
-used; Sparrow does not copy it over user wallpaper files. If palette generation
-fails, the old/usable fallback theme is retained and errors are reported; the
-pipeline's Niri fragment uses the transaction path rather than writing the
-active root config directly. Optional GTK/icon writes can fail independently.
-These behaviors should be confirmed by the future isolated fresh-default test,
-not inferred from this machine's accumulated cache.
+used and appears as a read-only `Sparrow Default` entry in the Wallpaper
+picker; it does not need to exist in or get copied into the personal wallpaper
+directory. Personal-library shuffle remains limited to that directory. If
+palette generation fails, the old/usable fallback theme is retained and errors
+are reported; the pipeline's Niri fragment uses the transaction path rather
+than writing the active root config directly. Optional GTK/icon writes can fail
+independently.
 
 ## 6. Lockscreen and failure model
 
@@ -286,10 +287,12 @@ package-name/dependency verification before it is used by an installer.
   provenance; comments in normal Workspaces and palette adapter explain
   provenance/schema compatibility. `research/Ricelin` is a reference checkout,
   not an active runtime dependency and should not be installed as Sparrow.
-- `wallpapers/default.png` is the user's Space Engine image supplied for the
-  repository default. Confirm distribution/redistribution rights before making
-  a public GitHub release; user says it was personally captured, but that alone
-  is not a formal license statement.
+- `wallpapers/default.png` is an original screenshot captured by the Sparrow
+  author in SpaceEngine Pro and distributed by that screenshot author as
+  Sparrow's default wallpaper. The author confirmed that SpaceEngine/Steam
+  terms permit keeping and distributing screenshots made in the software.
+  This records provenance; it does not assert a separate third-party wallpaper
+  license. See `quickshell/sparrow/wallpapers/README.md`.
 - Kitty/Fish/Starship/Thunar/Firefox defaults are portable starting points, not
   proof those applications must be installed or their existing user config
   overwritten.
@@ -336,10 +339,10 @@ and caches were excluded from active-source classification.
 - Fresh-start behavior for absent GTK/adw-gtk3 defaults, portal backend,
   package variations and unavailable Niri generated fragments still needs an
   isolated test.
-- A fresh `Flags.qml` starts `paletteMode` at `static`. Matugen outputs are
-  generated, but the Sparrow shell remains on its curated static palette until
-  the user chooses Dynamic. This is documented as current behavior, not changed
-  here; decide before release whether that is the intended first-run default.
+- Fresh `Flags.qml` state defaults `paletteMode` to `dynamic`; saved explicit
+  choices are preserved. The bundled default is selectable without a personal
+  wallpaper directory. Its provenance is documented, and wallpaper
+  redistribution is no longer an unresolved release blocker.
 
 ## 13. Migration, permissions, and failure boundaries
 

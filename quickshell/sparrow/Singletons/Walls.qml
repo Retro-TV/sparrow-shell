@@ -24,7 +24,15 @@ import Quickshell.Io
 Singleton {
     id: root
 
-    property var entries: []
+    property var personalEntries: []
+    readonly property string bundledWallpaperPath: Quickshell.shellPath("wallpapers/default.png")
+    readonly property var entries: [{
+        path: bundledWallpaperPath,
+        name: "Sparrow Default",
+        mtime: 0,
+        thumb: bundledWallpaperPath,
+        builtIn: true
+    }].concat(personalEntries)
     readonly property int count: entries.length
     property string current: ""
     property bool pending: false
@@ -152,10 +160,10 @@ Singleton {
         trashProc.command = ["gio", "trash", path];
         trashProc.running = true;
         var kept = [];
-        for (var i = 0; i < entries.length; i++)
-            if (entries[i].path !== path)
-                kept.push(entries[i]);
-        entries = kept;
+        for (var i = 0; i < personalEntries.length; i++)
+            if (personalEntries[i].path !== path)
+                kept.push(personalEntries[i]);
+        personalEntries = kept;
     }
 
     Process {
@@ -174,7 +182,7 @@ Singleton {
 
     Process {
         id: listProc
-        command: ["sh", "-c", "find \"$1\" -type f \\( -iname '*.jpg' -o -iname '*.png' -o -iname '*.gif' -o -iname '*.webp' -o -iname '*.mp4' -o -iname '*.webm' -o -iname '*.mkv' -o -iname '*.mov' \\) -printf '%T@\\t%p\\n' | sort -rn", "_", root.wpDir]
+        command: ["sh", "-c", "if [ -d \"$1\" ]; then find \"$1\" -type f \\( -iname '*.jpg' -o -iname '*.png' -o -iname '*.gif' -o -iname '*.webp' -o -iname '*.mp4' -o -iname '*.webm' -o -iname '*.mkv' -o -iname '*.mov' \\) -printf '%T@\\t%p\\n' | sort -rn; fi", "_", root.wpDir]
         stdout: StdioCollector {
             onStreamFinished: {
                 var lines = this.text.split("\n");
@@ -192,7 +200,7 @@ Singleton {
                         thumb: root.thumbDir + name + ".png"
                     });
                 }
-                root.entries = out;
+                root.personalEntries = out;
                 stateProc.running = true;
             }
         }

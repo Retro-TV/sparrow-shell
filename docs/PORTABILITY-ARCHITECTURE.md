@@ -79,13 +79,13 @@ tested current session.
 ## Wallpaper and lock defaults
 
 `quickshell/sparrow/wallpapers/default.png` is a source-controlled, read-only
-first-run fallback. On startup `wallpaper.sh init` chooses each output's saved
-selection, then the saved global selection, then this bundled file. It records
-the choice in user state and runs the existing color pipeline once if the
-palette is absent or the selected image changed. It does not copy the default
-into the user's wallpaper folder or overwrite an existing selection. The
-picker continues to list the user's selected wallpaper directory; the bundled
-fallback is a startup default, not an extra user-library entry.
+first-run fallback and a selectable `Sparrow Default` entry in the Wallpaper
+picker. On startup `wallpaper.sh init` chooses each output's saved selection,
+then the saved global selection, then this bundled file. It records the choice
+in user state and runs the existing color pipeline once if the palette is
+absent or the selected image changed. It does not copy the default into the
+user's wallpaper folder or overwrite an existing selection. Personal-library
+shuffle remains limited to the configured personal wallpaper directory.
 
 The primary lockscreen is Sparrow's Quickshell `WlSessionLock` with PAM
 authentication, using the adapted Qylock Last of Us composition. It obtains the

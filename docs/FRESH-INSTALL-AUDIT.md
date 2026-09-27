@@ -1,10 +1,11 @@
 # Fresh-install / zero-state audit
 
-Audit date: 2026-09-27. This is a first-run investigation plus one narrow QML
-null guard. It is not an installer and does not replace a clean graphical VM
-test. State/palette experiments used temporary directories. The active
-wallpaper, Niri config, services, caches, preferences and wallpaper selection
-were left alone.
+Audit date: 2026-09-27. This is a first-run investigation with follow-up
+verification of Dynamic palette defaults and the built-in wallpaper picker,
+plus one narrow QML null guard. It is not an installer and does not replace a
+clean graphical VM test. State/palette experiments used temporary directories.
+The active wallpaper, Niri config, services, caches, preferences and wallpaper
+selection were left alone.
 
 ## Zero-state result
 
@@ -22,17 +23,13 @@ starts. This was verified with isolated migration and palette-generation
 checks, not by starting a second Niri/awww session. A genuine graphical
 zero-state first login remains untested.
 
-Two first-run distinctions should be decided before release:
-
-1. Fresh `Flags.qml` defaults `paletteMode` to **static**. Matugen still
-   generates colors for Niri, Kitty, GTK/icons and lock luminance, but Sparrow
-   QML stays on its curated static colors until the user selects Dynamic. This
-   is current behavior, not changed here.
-2. The bundled default is a startup fallback, not part of the personal-folder
-   wallpaper strip. If that folder is absent/empty, the picker shows its
-   explicit empty message. It does not crash, but the default cannot be
-   selected again from the strip. Acceptable for a first baseline; a selectable
-   “Sparrow default” row is a small optional usability improvement.
+Fresh installations default to Dynamic palette mode. Explicit palette choices
+already saved in `flags.json` remain unchanged because the JsonAdapter default
+only supplies missing state or keys. The Wallpaper picker includes a read-only
+`Sparrow Default` item independently of the personal wallpaper directory;
+personal-library shuffle remains personal-only. The bundled image's provenance
+is documented in `quickshell/sparrow/wallpapers/README.md`; redistribution is no
+longer an unresolved release blocker.
 
 ## Initialization sequence
 
@@ -58,8 +55,8 @@ Two first-run distinctions should be decided before release:
    separate idle service. It does not need to open Wallpaper or Mixer UI to
    initialize those startup paths.
 6. Most surfaces are lazy. Launcher usage and UI-specific preference files are
-   read/written when first used. The wallpaper picker lists the selected
-   personal folder, not the bundled fallback.
+   read/written when first used. The wallpaper picker shows the bundled default
+   separately from discovered images in the selected personal folder.
 
 This ordering depends on the installer integrating the Niri root and static
 managed-fragment include graph before enabling the wallpaper unit. If the
@@ -74,7 +71,7 @@ until a later successful generation.
 | State/output | Creator and timing | Missing/malformed behavior | Installer policy |
 | --- | --- | --- | --- |
 | State/cache roots | Migration pre-start on each unit | Created even with no legacy state. Legacy copies are copy-if-destination-absent and backed up. | Runtime creates; don't seed synthetic state. |
-| `flags.json` | `Flags.qml` JsonAdapter after FileNotFound; parent exists from migration | Defaults include Auto lock text, static palette mode, tonal palette style, Night Light off, empty wallpaper override, and default record/idle preferences. Missing keys use declarations. Malformed JSON recovery was not runtime-tested in isolated QML. | Runtime creates. Never ship a user's flags. |
+| `flags.json` | `Flags.qml` JsonAdapter after FileNotFound; parent exists from migration | Defaults include Auto lock text, Dynamic palette mode, tonal palette style, Night Light off, empty wallpaper override, and default record/idle preferences. Missing keys use declarations; explicit saved choices remain. An isolated JsonAdapter fixture confirmed malformed JSON leaves defaults in memory without rewriting the file; the complete Sparrow singleton was not tested with corrupted state. | Runtime creates. Never ship a user's flags. |
 | `launcher-usage.json` | Launcher reads missing/invalid as `{}`; writes after a launch selection | No usage history is a normal state. | Runtime creates on use. |
 | `events.json` | Events singleton; missing file writes `[]` | Invalid JSON is treated as empty in memory; event changes persist the new list. | Runtime creates when instantiated. |
 | `weather-loc.json` | Weather after successful lookup/geocode | Invalid/missing cache falls through to network lookup. Failed lookup leaves weather unready, not fabricated. | Runtime creates; no installer location. |
@@ -192,7 +189,7 @@ queried. Other missing-service scenarios were not forced by removing packages.
 | Battery / UPower device | `Battery.present` false and battery UI is gated. | Code path graceful. |
 | No tray entries / notifications | Tray hides when model empty; notification count/history starts at zero. | Graceful by code. |
 | No events | Events starts `[]`; calendar has no-event behavior. | Graceful. |
-| Empty wallpaper folder | Thumbnail helper returns; picker shows “No wallpapers in …”; desktop continues with bundled default. | No crash; default not selectable from strip. |
+| Empty wallpaper folder | Picker still shows the read-only built-in Sparrow Default; personal results remain empty. | No crash; built-in remains selectable. |
 
 Installed-host check found no `ddcutil` or `nvibrant`; absence is quiet in
 the Mixer detection design. Other absent-device cases need the VM matrix below.
@@ -232,8 +229,8 @@ not own this preference. Page not implemented.
 
 - Install one Quickshell runtime tree; tracked Niri root/fragments; three unit
   files; Kitty/Fish/Starship defaults; GTK/theme/icon defaults; Sparrow desktop
-  entry; optional simple Hyprlock fallback. Include bundled wallpaper only when
-  license is resolved.
+  entry; optional simple Hyprlock fallback; and the provenance-documented
+  Sparrow default screenshot.
 - Establish one canonical `~/.config/quickshell/sparrow` runtime entry. Do not
   make release services depend on checkout paths. Copy systemd units into
   `~/.config/systemd/user`; don't leave links into a development clone.
@@ -276,12 +273,12 @@ path and never encode username/clone path.
 
 ## Licensing and release blockers
 
-- **Bundled default wallpaper is a public-release blocker until redistribution
-  rights are established.** Git history records its introduction/rename at
-  `fe71173`, but has no license/provenance note. The user identified it earlier
-  as a personal Space Engine capture; the repository has no permission/license
-  metadata. Confirm Space Engine terms and add explicit licensing or exclude it
-  from public releases. Do not replace it in this task.
+- The bundled wallpaper is an original screenshot captured in SpaceEngine Pro
+  by the Sparrow author and distributed by that screenshot author as Sparrow's
+  default. The author confirmed the SpaceEngine/Steam terms permit keeping and
+  distributing screenshots made in the software. This documents provenance,
+  not a separate third-party license; it is no longer an unresolved wallpaper
+  redistribution blocker. See `quickshell/sparrow/wallpapers/README.md`.
 - Qylock Last of Us adaptation has GPL-3.0 text/attribution; Outfit font has
   SIL OFL 1.1; Papirus-derived icons have GPL-3.0 notice; Ricelin-provenance
   code retains `LICENSES/Ricelin-MIT.txt`.
@@ -289,9 +286,10 @@ path and never encode username/clone path.
   upstream attribution; check upstream license/notice requirements for the
   generated output. There is no root `LICENSE` yet, so choose a project-level
   licensing policy before distribution.
-- Open choices before final defaults: static versus Dynamic initial shell
-  palette; whether bundled default is selectable in picker; whether to keep
-  Hyprlock fallback after failure-path testing.
+- Remaining open choice before final defaults: whether to keep the Hyprlock
+  fallback after failure-path testing. Fresh palette mode is Dynamic and the
+  bundled wallpaper is selectable; neither decision overwrites saved user
+  preferences or personal wallpaper state.
 
 ## VM/separate-user/manual tests still required
 
@@ -338,3 +336,35 @@ fresh-state shortcut.
   modification occurred.
 - The lock null guard remains to be tested by a manual lock test in an isolated
   or otherwise safe session.
+
+## Wallpaper/default follow-up verification — 2026-09-27
+
+- A–C: an isolated Quickshell 0.3.1 `FileView`/`JsonAdapter` fixture matching
+  `Flags.qml` produced Dynamic with no saved file, preserved explicit Static,
+  and preserved explicit Dynamic. A malformed JSON fixture left the default
+  Dynamic in memory and did not rewrite the corrupt file. `Flags.qml` only
+  writes defaults for `FileNotFound`; it does not migrate saved choices.
+- D–E: verified the bundled resource resolves inside the runtime tree and is
+  prepended independently of the personal-entry list, including with a
+  missing or empty personal directory. The thumbnail uses the bundled image
+  itself; no user-folder copy/cache entry is required.
+- F–G: temporary HOME/XDG test ran the real `wallpaper.sh set` and restart-style
+  `init` path with only awww and palette execution stubbed. The built-in path
+  was saved globally and for the selected output; restore recognized it as
+  already displayed and did not reapply it.
+- H: actual Matugen generation from `default.png` wrote temporary palette
+  JSON, Niri border fragment, Kitty include, GTK CSS, and folder/document icon
+  outputs. The result was `source_color=#787878`, tonal style, luminance
+  `0.077689`; the Niri transaction and host-side reload/cache commands were
+  mocked.
+- I–J: personal-folder listing still found an ordinary image. With no personal
+  candidates, `next` returned no selection and left the saved bundled wallpaper
+  unchanged; built-in is intentionally excluded from personal shuffle.
+- The live picker was opened and visually checked, then closed without
+  selecting anything. Quickshell hot reload completed successfully. Current
+  saved palette mode and wallpaper paths remained unchanged. Existing
+  ScreenLock null-screen and SearchField width-loop warnings remain unrelated.
+- Both active and repository Niri configs validated. The 35-test Python suite,
+  shell syntax checks, and `git diff --check` passed. `qmllint` is unavailable;
+  the active Quickshell hot reload loaded the changed QML without a new
+  Wallpaper/Flags/Walls error.

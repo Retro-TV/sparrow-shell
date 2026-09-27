@@ -129,7 +129,8 @@ Singleton {
                 id: lastOfUs
                 anchors.fill: parent
                 visible: sessionLock.secure
-                wallpaperPath: Walls.wallpaperForOutput(lockSurface.screen.name)
+                wallpaperPath: lockSurface.screen
+                    ? Walls.wallpaperForOutput(lockSurface.screen.name) : ""
                 username: root.username
                 prompt: root.prompt
                 promptIsError: root.promptIsError

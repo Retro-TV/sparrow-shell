@@ -29,7 +29,7 @@ been tested on a clean installation.
 | Class | Current components |
 | --- | --- |
 | **A — Final / intended** | Niri-native output/workspace/window integration; main pill and surfaces; desktop-entry Launcher; Wallpaper picker and image/video wallpaper backend; Matugen palette and shell theme; Niri Look/Display/Input/Keybind settings; PipeWire Mixer; notification/OSD/tray/media integration; Quickshell secure lock with PAM; power/idle policy; Kitty/Fish/Starship and Thunar/GTK defaults. |
-| **B — Final but needs polish** | Live GTK3 recoloring (running Thunar windows require closing/reopening); multi-output wallpaper-specific lock backgrounds share one global palette; some monitor/application/package assumptions remain host-dependent; lock surface emits a null-screen warning in the current runtime journal; app-default configs need conservative install/merge behavior. |
+| **B — Final but needs polish** | Live GTK3 recoloring (running Thunar windows require closing/reopening); multi-output wallpaper-specific lock backgrounds share one global palette; some monitor/application/package assumptions remain host-dependent; app-default configs need conservative install/merge behavior. |
 | **C — Optional feature** | Video wallpaper playback (`mpvpaper`); Night Light (`wlsunset`); spectrum (`cava`); internal brightness (`brightnessctl` plus a backlight device); DDC/CI (`ddcutil`); NVIDIA vibrance (`nvibrant` and NVIDIA device); recording (`gpu-screen-recorder`, with Niri selection helpers); screenshot integration through separately installed Rishot; optional online wallpaper search/download and optional zoxide/Fastfetch conveniences. |
 | **D — Compatibility / migration only** | `scripts/migrate-state.py` reads selected legacy Ricelin state paths and copies data into Sparrow XDG state only when the destination is absent, retaining a backup. Ricelin provenance comments and included notices are attribution, not runtime dependencies. |
 | **E — Development / testing only** | Python unit tests, Node test for monitor helpers, QML/config validation, transaction documentation, and the checked-in minimal QML test surface. These should remain available to contributors but are not session runtime requirements. |
@@ -68,7 +68,7 @@ The visible/runtime feature set is:
 | Media | Quickshell MPRIS discovery/controls and current-player presentation. | Intended core when MPRIS players exist. |
 | Calendar / weather / battery / devices | Events/calendar state, optional weather lookup, UPower battery/peripheral data, NetworkManager Wi-Fi, BlueZ Bluetooth. | Mixed core/optional service integrations; availability depends on the relevant host daemon/device/network. |
 | Power / idle / Keep Awake | Pill power actions, dedicated idle monitor, lock/screen-off/suspend policy, Niri output power and idle inhibitor. | Intended core; destructive power actions are never part of static validation. |
-| Lock screen | Quickshell `WlSessionLock`, Quickshell PAM, Qylock Last of Us composition, per-output selected wallpaper, and Auto/Light/Dark foreground based on wallpaper metadata. | Intended primary lock. A repeated null `screen.name` warning was present in the current journal and needs a separate narrow correction/test. |
+| Lock screen | Quickshell `WlSessionLock`, Quickshell PAM, Qylock Last of Us composition, per-output selected wallpaper, and Auto/Light/Dark foreground based on wallpaper metadata. | Intended primary lock. This pass added a null-screen guard; live lock was not invoked to test it. |
 | Screenshot | Niri binding invokes separately installed Rishot from `~/.local/bin`. | Optional external application; not vendored. |
 | File drop | Pill's accepted local media files are routed to wallpaper selection/application. No generic software installer remains. | Wallpaper-only behavior; do not restore package install UI. |
 | Sysmon / Cava | System monitor surface and optional Cava visualizer. | Optional and independent of removed Game Mode. |
@@ -141,8 +141,11 @@ that the palette must be initialized. The flow is:
    while the global shell/Niri/app theme and lock text decision are shared.
 
 Generated app theme files are outputs, not inputs. The wallpaper pipeline is
-the color source of truth; the hand-maintained `Theme.qml` fallback is used
-when dynamic palette mode is off or palette data is unavailable. Niri's
+the color source of truth; however, a fresh `Flags.qml` defaults
+`paletteMode` to `static`, so Sparrow's QML theme stays on its curated static
+colors until the user selects Dynamic. The generated palette still feeds Niri,
+Kitty, GTK/icons, and lock luminance. `Theme.qml` also uses its hand-maintained
+fallback when palette data is unavailable. Niri's
 generated color fragment is a consumer, not a second palette generator.
 
 On a fresh system with no wallpaper directory/state, the bundled default is
@@ -178,11 +181,11 @@ the lock client disappears. This is a secure but visibly poor recovery state,
 not a reason to assume the desktop unlocked. See [Niri's security model](https://github.com/niri-wm/niri/blob/main/docs/wiki/Security-Model.md)
 and the [ext-session-lock-v1 protocol](https://sources.debian.org/src/mir/2.20.2-2/wayland-protocols/ext-session-lock-v1.xml).
 
-Current journal audit also showed repeated
-`ScreenLock.qml: Cannot read property 'name' of null` warnings at the direct
-`lockSurface.screen.name` access. PAM successes and failures are separately
-logged by Quickshell; no lock was invoked during this audit. Treat the null
-screen warning as a specific unresolved runtime issue before public release.
+The earlier journal contained repeated
+`ScreenLock.qml: Cannot read property 'name' of null` warnings at the
+`lockSurface.screen.name` access. This pass added a narrow null guard; because
+the lock must not be invoked as part of this audit and `qmllint` is not
+installed, the runtime fix still needs a manual lock test in a safe session.
 
 ## 7. Systemd and session startup
 
@@ -333,6 +336,10 @@ and caches were excluded from active-source classification.
 - Fresh-start behavior for absent GTK/adw-gtk3 defaults, portal backend,
   package variations and unavailable Niri generated fragments still needs an
   isolated test.
+- A fresh `Flags.qml` starts `paletteMode` at `static`. Matugen outputs are
+  generated, but the Sparrow shell remains on its curated static palette until
+  the user chooses Dynamic. This is documented as current behavior, not changed
+  here; decide before release whether that is the intended first-run default.
 
 ## 13. Migration, permissions, and failure boundaries
 
@@ -415,7 +422,9 @@ Suggested cases, in order:
 
 ## 16. Audit status
 
-At audit start the repository was clean at `a8ce538`. The audit did not change
-runtime configuration, user state, wallpapers, packages, services or the
-running session. The only source-tree edits are this document and the
-Hyprlock dependency-classification correction in `docs/DEPENDENCIES.md`.
+The prior baseline document and dependency correction are now in HEAD
+`79823be` (`document final Sparrow baseline`). No runtime configuration, user
+state, wallpapers, packages, service state or desktop session was changed in
+this pass. The only implementation edit is the `ScreenLock.qml` null-screen
+guard; the fresh-install findings are in `docs/FRESH-INSTALL-AUDIT.md`. This
+pass has not been committed.

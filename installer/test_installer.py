@@ -45,6 +45,14 @@ class InstallerTests(unittest.TestCase):
             "invocations": [],
             "events": [],
             "gsettings": {},
+            "fontconfig": {
+                "Inter Black": "Inter Black",
+                "JetBrains Mono Nerd Font": "JetBrains Mono Nerd Font",
+                "Adwaita Sans": "Adwaita Sans",
+                # A family+size GTK description is not a family; this host
+                # would silently fall back if the installer queried it.
+                "Adwaita Sans 11": "Noto Sans",
+            },
         }
 
     def tearDown(self) -> None:
@@ -93,6 +101,39 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(self.machine["gsettings"].get("icon-theme"), "Sparrow")
         self.assertEqual(self.machine["gsettings"].get("font-name"), "Adwaita Sans 11")
         self.assertTrue((self.paths.config / "gtk-3.0/settings.ini").is_file())
+
+    def test_font_validation_uses_family_while_gtk_setting_keeps_size_description(self) -> None:
+        fonts = self.installer().source_manifest()["fonts"]
+        self.assertEqual(fonts["gtk"]["family"], "Adwaita Sans")
+        self.assertEqual(fonts["gtk"]["description"], "Adwaita Sans 11")
+
+        # Model the fresh machine after the failed run: required packages are
+        # already installed, while Sparrow files and user settings are absent.
+        installer = self.installer()
+        package_sets = installer.package_sets()
+        self.machine["packages"].update(package_sets["required"])
+        self.machine["packages"].add(package_sets["polkit_agent"]["package"])
+        self.machine["commands"].update(package_sets["required_executables"])
+        self.machine["commands"].add(package_sets["polkit_agent"]["executable"])
+        self.machine["modules"].update(package_sets["required_python_modules"])
+        self.machine.setdefault("themes", set()).add("Bibata-Modern-Ice")
+
+        self.assertEqual(installer.install(), 0)
+        self.assertTrue(any("Required Sparrow desktop and runtime: already installed" in message for message in self.messages))
+        font_queries = [
+            event[-1]
+            for event in self.machine["events"]
+            if event and event[0] == "fc-match"
+        ]
+        self.assertEqual(font_queries, ["Inter Black", "JetBrains Mono Nerd Font", "Adwaita Sans"])
+        self.assertEqual(self.machine["fontconfig"]["Adwaita Sans 11"], "Noto Sans")
+        self.assertEqual(self.machine["gsettings"].get("font-name"), "Adwaita Sans 11")
+        required = set(package_sets["required"])
+        required_reinstalls = [
+            event for event in self.machine["events"]
+            if event[:3] == ("sudo", "pacman", "-S") and required.intersection(event[4:])
+        ]
+        self.assertEqual(required_reinstalls, [])
 
     def test_blank_home_bootstrap_has_wallpaper_before_shell_without_seeding_generated_state(self) -> None:
         installer = self.installer()

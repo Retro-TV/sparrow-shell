@@ -269,7 +269,7 @@ class SparrowInstaller:
         elif args and args[0] == "bash" and "-n" in args:
             pass
         elif args and args[0] == "fc-match":
-            stdout = args[-1]
+            stdout = self.test_machine.get("fontconfig", {}).get(args[-1], args[-1])
         else:
             raise AssertionError(f"Test runner refused to execute unmodelled host command: {args!r}")
         return subprocess.CompletedProcess(args, code, stdout if text_result else stdout.encode(), stderr if text_result else stderr.encode())
@@ -905,7 +905,11 @@ class SparrowInstaller:
     def _apply_sparrow_defaults(self) -> None:
         if (self.paths.data / "icons/Sparrow/index.theme").is_file():
             self._apply_gsettings_default("org.gnome.desktop.interface/icon-theme", "Sparrow")
-        self._apply_gsettings_default("org.gnome.desktop.interface/font-name", "Adwaita Sans 11")
+        gtk_font = self.source_manifest().get("fonts", {}).get("gtk", {})
+        font_description = gtk_font.get("description")
+        if not isinstance(font_description, str):
+            raise ValueError("SOURCE-OF-TRUTH.json must define the GTK font description separately from its Fontconfig family.")
+        self._apply_gsettings_default("org.gnome.desktop.interface/font-name", font_description)
         if self.bibata_defaults_enabled:
             self._apply_gsettings_default("org.gnome.desktop.interface/cursor-theme", "Bibata-Modern-Ice")
             self._apply_gsettings_default("org.gnome.desktop.interface/cursor-size", 24)

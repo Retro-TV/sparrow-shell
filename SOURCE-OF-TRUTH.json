@@ -28,7 +28,7 @@
   "fonts": {
     "quickshell": {"family": "Inter Black", "package": "inter-font", "source": "quickshell/sparrow/Singletons/Theme.qml"},
     "terminal": {"family": "JetBrains Mono Nerd Font", "package": "ttf-jetbrains-mono-nerd", "source": "kitty/kitty.conf"},
-    "gtk": {"family": "Adwaita Sans 11", "package": "adwaita-fonts", "setting": "GSettings org.gnome.desktop.interface font-name"},
+    "gtk": {"family": "Adwaita Sans", "description": "Adwaita Sans 11", "package": "adwaita-fonts", "setting": "GSettings org.gnome.desktop.interface font-name"},
     "lockscreen": {"family": "Outfit Black", "source": "quickshell/sparrow/Lockscreen/font/Outfit-Black.ttf", "license": "OFL-1.1"}
   },
   "entries": [

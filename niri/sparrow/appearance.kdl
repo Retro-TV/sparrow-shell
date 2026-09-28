@@ -67,5 +67,16 @@ overview {
     }
 }
 
+// Keep Niri's native Alt-Tab switcher, with a restrained Sparrow-shaped focus.
+// Wallpaper-derived Matugen colors override the fallback colors below.
+recent-windows {
+    highlight {
+        active-color "#e0563b"
+        urgent-color "#e0563b"
+        padding 8
+        corner-radius 12
+    }
+}
+
 // Sparrow Look writes user overrides here; never track that generated file.
 include optional=true "user-appearance.kdl"

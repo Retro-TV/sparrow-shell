@@ -27,6 +27,17 @@ MIGRATION_SPEC.loader.exec_module(migrate_state)
 
 
 class PaletteModelTests(unittest.TestCase):
+    def test_niri_generated_colors_include_recent_windows_matugen_roles(self):
+        rendered = wallcolors.render_niri_colors({
+            "primary": "#aabbcc",
+            "outline_variant": "#334455",
+            "error": "#dd2233",
+        })
+        self.assertIn('active-color "#aabbcc"', rendered)
+        self.assertIn('inactive-color "#334455"', rendered)
+        self.assertIn('urgent-color "#dd2233"', rendered)
+        self.assertIn("recent-windows {", rendered)
+
     def test_legacy_palette_style_migration_is_deterministic(self):
         expected = {
             "tonal": "tonal", "scheme-tonal-spot": "tonal", "fidelity": "tonal",

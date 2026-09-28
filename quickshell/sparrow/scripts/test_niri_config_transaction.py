@@ -124,6 +124,7 @@ class TransactionTests(unittest.TestCase):
             if self.fail_next_reload:
                 self.fail_next_reload = False
                 return subprocess.CompletedProcess(args, 1, "", "simulated reload failure")
+            return subprocess.CompletedProcess(args, 0, "", "")
         return subprocess.run(args, **kwargs)
 
     def transaction(self, runner=None, scheduler=None):

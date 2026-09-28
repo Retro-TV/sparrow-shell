@@ -28,6 +28,99 @@ MIGRATION_SPEC.loader.exec_module(migrate_state)
 
 
 class PaletteModelTests(unittest.TestCase):
+    @unittest.skipUnless(shutil.which("matugen"), "Matugen is required")
+    def test_missing_gtk_base_fails_before_any_palette_commit(self):
+        wallpaper = Path(__file__).parents[1] / "wallpapers/default.png"
+        for missing_source in ("find_adw_gtk3_stylesheet", "find_adw_gtk4_theme"):
+            with self.subTest(missing_source=missing_source), \
+                 tempfile.TemporaryDirectory(prefix="sparrow-missing-gtk-") as directory:
+                root = Path(directory)
+                with mock.patch.dict(os.environ, {
+                    "XDG_CACHE_HOME": str(root / "cache"),
+                    "XDG_CONFIG_HOME": str(root / "config"),
+                    "XDG_DATA_HOME": str(root / "data"),
+                }), mock.patch.object(sys, "argv", ["wallcolors.py", str(wallpaper)]), \
+                     mock.patch.object(wallcolors, "CACHE", root / "cache/sparrow-shell"), \
+                     mock.patch.object(wallcolors, missing_source,
+                                       side_effect=FileNotFoundError("adw-gtk-theme missing")):
+                    with self.assertRaisesRegex(FileNotFoundError, "adw-gtk-theme missing"):
+                        wallcolors.main()
+                self.assertFalse((root / "cache/sparrow-shell/palette.json").exists())
+                self.assertFalse((root / "config/niri/sparrow/generated-colors.kdl").exists())
+
+    @unittest.skipUnless(shutil.which("matugen") and shutil.which("niri"), "Matugen and Niri are required")
+    def test_default_wallpaper_bootstraps_from_empty_home(self):
+        """Use only tracked inputs and installed packages; never contact the live compositor."""
+        repo = Path(__file__).parents[3]
+        wallpaper = repo / "quickshell/sparrow/wallpapers/default.png"
+        self.assertTrue(wallpaper.is_file())
+        with tempfile.TemporaryDirectory(prefix="sparrow-fresh-palette-") as directory:
+            home = Path(directory)
+            config, data, cache, state = (home / name for name in ("config", "data", "cache", "state"))
+            shutil.copytree(repo / "niri", config / "niri")
+            (config / "niri/sparrow/cursor.kdl").unlink()
+            shutil.copyfile(repo / "niri/defaults/user-input.kdl", config / "niri/sparrow/user-input.kdl")
+            self.assertIn("focus-follows-mouse", (config / "niri/sparrow/user-input.kdl").read_text())
+            shutil.copytree(repo / "kitty", config / "kitty")
+            shutil.copytree(repo / "gtk/Sparrow", data / "themes/Sparrow")
+            shutil.copytree(repo / "icons/Sparrow", data / "icons/Sparrow")
+            guard_bin = home / "guard-bin"
+            guard_bin.mkdir()
+            for name in ("niri", "pkill"):
+                guard = guard_bin / name
+                guard.write_text("#!/bin/sh\nexit 0\n")
+                guard.chmod(0o700)
+            env = os.environ.copy()
+            for name in ("NIRI_SOCKET", "WAYLAND_DISPLAY", "DISPLAY", "DBUS_SESSION_BUS_ADDRESS"):
+                env.pop(name, None)
+            env.update({
+                "HOME": str(home), "XDG_CONFIG_HOME": str(config), "XDG_DATA_HOME": str(data),
+                "XDG_CACHE_HOME": str(cache), "XDG_STATE_HOME": str(state),
+                "NIRI_CONFIG": str(config / "niri/config.kdl"),
+                "PATH": f"{guard_bin}:{env['PATH']}",
+            })
+            result = subprocess.run(
+                [sys.executable, str(Path(__file__).with_name("wallcolors.py")), str(wallpaper)],
+                env=env, text=True, capture_output=True, timeout=90,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            palette = json.loads((cache / "sparrow-shell/palette.json").read_text())
+            self.assertEqual((palette["theme_source"], palette["palette_style"], palette["appearance_mode"]),
+                             ("dynamic", "auto", "auto"))
+            self.assertIn(palette["resolved_mode"], ("dark", "light"))
+            self.assertIn(palette["primary"], (config / "niri/sparrow/generated-colors.kdl").read_text())
+            self.assertIn(palette["terminal"]["foreground"],
+                          (config / "kitty/sparrow-colors.conf").read_text())
+            gtk3 = data / "themes/Sparrow/gtk-3.0/gtk.css"
+            gtk4 = data / "themes/Sparrow/gtk-4.0/libadwaita.css"
+            self.assertGreater(gtk3.stat().st_size, 100000)
+            self.assertGreater(gtk4.stat().st_size, 10000)
+            for stylesheet in (gtk3, gtk4):
+                self.assertIn(palette["primary"], stylesheet.read_text())
+            self.assertIn(palette["primary"],
+                          (data / "icons/Sparrow/scalable/places/folder.svg").read_text())
+            # The actual wallpaper backend must choose Auto before Flags exists.
+            (state / "sparrow-shell").mkdir(parents=True, exist_ok=True)
+            (state / "sparrow-shell/wallpaper").write_text(str(wallpaper) + "\n")
+            (cache / "sparrow-shell/palette.json").unlink()
+            restored = subprocess.run(
+                ["bash", str(Path(__file__).with_name("wallpaper.sh")), "recolor"],
+                env=env, text=True, capture_output=True, timeout=90,
+            )
+            self.assertEqual(restored.returncode, 0, restored.stderr)
+            restored_palette = json.loads((cache / "sparrow-shell/palette.json").read_text())
+            self.assertEqual(restored_palette["appearance_mode"], "auto")
+            self.assertEqual(restored_palette["primary"], palette["primary"])
+            real_niri = shutil.which("niri")
+            validated = subprocess.run([real_niri, "validate", "-c", str(config / "niri/config.kdl")],
+                                       env=env, text=True, capture_output=True, timeout=20)
+            self.assertEqual(validated.returncode, 0, validated.stderr)
+            user_input = config / "niri/sparrow/user-input.kdl"
+            user_input.write_text("input {\n    keyboard {\n        repeat-rate 25\n    }\n}\n")
+            validated = subprocess.run([real_niri, "validate", "-c", str(config / "niri/config.kdl")],
+                                       env=env, text=True, capture_output=True, timeout=20)
+            self.assertEqual(validated.returncode, 0, validated.stderr)
+
     def test_niri_generated_colors_include_recent_windows_matugen_roles(self):
         rendered = wallcolors.render_niri_colors({
             "primary": "#aabbcc",
@@ -90,6 +183,7 @@ class PaletteModelTests(unittest.TestCase):
             data = root / "data"
             user = data / "themes/adw-gtk3/gtk-4.0"
             for base in (system, user):
+                (base / "assets").mkdir(parents=True)
                 for filename in ("gtk.css", "gtk-dark.css", "libadwaita.css", "libadwaita-tweaks.css"):
                     path = base / filename
                     path.parent.mkdir(parents=True, exist_ok=True)

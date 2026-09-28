@@ -52,6 +52,8 @@ components. Sparrow's video preview additionally uses `qt6-multimedia` and
 | `qt6-multimedia`, `qt6-multimedia-ffmpeg` | Needed for Sparrow's wallpaper video previews in the picker. |
 | `wlsunset` | Optional Night Light backend; status UI remains adaptive when absent. |
 | `inter-font` | Required for the Sparrow core UI default family `Inter`; the package includes its Black/ExtraBold weights, so no separate Inter Black package is needed. |
+| `ttf-jetbrains-mono-nerd` | Supplies Kitty's configured `JetBrains Mono Nerd Font` family. |
+| `adwaita-fonts` | Supplies `Adwaita Sans`, used by the GTK/libadwaita base; required for the canonical Sparrow app-theme appearance. |
 | `cava` | Optional pill spectrum visualizer; Sparrow probes and stays usable when absent. |
 | `networkmanager` | Wi-Fi surface uses `nmcli`; useful only with NetworkManager and a Wi-Fi adapter. |
 | `bluez`, `bluez-utils` | Bluetooth surface uses Quickshell BlueZ integration and `bluetoothctl`; requires the daemon and adapter. |
@@ -63,7 +65,7 @@ components. Sparrow's video preview additionally uses `qt6-multimedia` and
 | `ddcutil` | Optional external DDC/CI display brightness controls in Mixer. Not installed on the audited host. |
 | `nvibrant` | Optional NVIDIA vibrance backend; Sparrow checks its executable and NVIDIA device before exposing it. Not installed on the audited host. |
 | `tumbler` | Optional system D-Bus thumbnail service for Thunar image previews. |
-| `adw-gtk-theme` | Provides the system-installed `adw-gtk3` GTK3/GTK4 bases used by Sparrow's generated, wallpaper-colored app themes (Thunar and the scoped pavucontrol launch). |
+| `adw-gtk-theme` | Required source for Sparrow's generated GTK3/GTK4 CSS (Thunar, the scoped pavucontrol launch, and the GTK portal); palette generation fails clearly if the base is missing or incompatible. |
 | `bibata-cursor-theme-bin` (AUR) | Manual-only recommended cursor asset. Installer does not install an AUR helper or select a missing theme: without the theme it leaves Niri/system cursor defaults intact and prints the manual action. When present, Niri and `environment.d/90-cursor.conf` select Bibata Modern Ice at size 24. |
 
 The Bibata upstream install guide recommends AUR package
@@ -77,6 +79,8 @@ The lockscreen's `Outfit-Black.ttf` is bundled under
 `quickshell/sparrow/Lockscreen/font/` with its OFL-1.1 notice; it does not need
 a system package. Sparrow's icons are SVG/custom QML paths, not a Material,
 Font Awesome, or Nerd Font icon-font dependency.
+The portable source/output contract and the remaining installer-policy gaps
+are recorded in `SOURCE-OF-TRUTH.json` and `docs/SOURCE-OF-TRUTH.md`.
 
 ## Separate screenshot application
 

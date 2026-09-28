@@ -224,7 +224,8 @@ def find_adw_gtk4_theme(
     )
     required = ("gtk.css", "gtk-dark.css", "libadwaita.css", "libadwaita-tweaks.css")
     source = next(
-        (path for path in candidates if all((path / name).is_file() for name in required)),
+        (path for path in candidates if all((path / name).is_file() for name in required)
+         and (path / "assets").is_dir()),
         None,
     )
     if source is None:
@@ -454,6 +455,15 @@ def main() -> None:
     palette["terminal"] = terminal
     palette_json = json.dumps(palette, indent=2) + "\n"
     niri_kdl = render_niri_colors(roles)
+    data_home = Path(os.environ.get("XDG_DATA_HOME", HOME / ".local/share"))
+    # These are required Sparrow appearance inputs. Resolve and render them
+    # before committing any generated state, so a missing base theme fails the
+    # first palette run instead of leaving a partial, silently unthemed desktop.
+    gtk_source = find_adw_gtk3_stylesheet(resolved_mode, data_home)
+    gtk_rendered = render_sparrow_gtk(palette, gtk_source)
+    gtk4_source = find_adw_gtk4_theme(data_home)
+    render_sparrow_gtk4(palette, gtk4_source)
+    render_sparrow_gtk4_tweaks(gtk4_source, palette)
     transaction = Path(__file__).with_name("niri-config-transaction.py")
     request = json.dumps({"fragment": "generated-colors", "content": niri_kdl}) + "\n"
     result = subprocess.run([sys.executable, str(transaction)], input=request,
@@ -468,29 +478,17 @@ def main() -> None:
 
     atomic_write(CACHE / "palette.json", palette_json)
     config_home = Path(os.environ.get("XDG_CONFIG_HOME", HOME / ".config"))
-    try:
-        changed = atomic_write(config_home / "kitty/sparrow-colors.conf", render_kitty(terminal))
-        if changed:
-            subprocess.run(["pkill", "-USR1", "-x", "kitty"],
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
-    except OSError as error:
-        print(f"wallcolors: optional Kitty palette was not written: {error}", file=sys.stderr)
+    changed = atomic_write(config_home / "kitty/sparrow-colors.conf", render_kitty(terminal))
+    if changed:
+        subprocess.run(["pkill", "-USR1", "-x", "kitty"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
 
-    data_home = Path(os.environ.get("XDG_DATA_HOME", HOME / ".local/share"))
     gtk_dir = data_home / "themes/Sparrow/gtk-3.0"
-    try:
-        upstream = find_adw_gtk3_stylesheet(resolved_mode, data_home)
-        rendered = render_sparrow_gtk(palette, upstream)
-        # Both GTK3 preference variants resolve to the one selected canonical palette.
-        atomic_write(gtk_dir / "gtk.css", rendered)
-        atomic_write(gtk_dir / "gtk-dark.css", rendered)
-    except (OSError, ValueError) as error:
-        print(f"wallcolors: optional Matugen GTK theme was not written: {error}", file=sys.stderr)
+    # Both GTK3 preference variants resolve to the one selected canonical palette.
+    atomic_write(gtk_dir / "gtk.css", gtk_rendered)
+    atomic_write(gtk_dir / "gtk-dark.css", gtk_rendered)
 
-    try:
-        write_sparrow_gtk4_theme(palette, data_home)
-    except (OSError, ValueError) as error:
-        print(f"wallcolors: optional Matugen GTK4 theme was not written: {error}", file=sys.stderr)
+    write_sparrow_gtk4_theme(palette, data_home)
 
     icons = data_home / "icons/Sparrow"
     icon_changes = False
@@ -500,15 +498,9 @@ def main() -> None:
         "folder-remote", "folder-bookmarks", "folder-desktop", "user-desktop",
         "system-file-manager",
     ):
-        try:
-            icon_changes |= atomic_write(icons / f"scalable/places/{name}.svg", render_folder_icon(palette))
-        except OSError as error:
-            print(f"wallcolors: optional GTK folder icon {name} was not written: {error}", file=sys.stderr)
-    try:
-        icon_changes |= atomic_write(icons / "symbolic/places/folder-symbolic.svg", render_folder_icon(palette))
-        icon_changes |= atomic_write(icons / "scalable/mimetypes/text-x-generic.svg", render_text_icon(palette))
-    except OSError as error:
-        print(f"wallcolors: optional GTK file icon was not written: {error}", file=sys.stderr)
+        icon_changes |= atomic_write(icons / f"scalable/places/{name}.svg", render_folder_icon(palette))
+    icon_changes |= atomic_write(icons / "symbolic/places/folder-symbolic.svg", render_folder_icon(palette))
+    icon_changes |= atomic_write(icons / "scalable/mimetypes/text-x-generic.svg", render_text_icon(palette))
     if icon_changes:
         try:
             subprocess.run(["gtk-update-icon-cache", "--force", str(icons)],
@@ -520,6 +512,6 @@ def main() -> None:
 if __name__ == "__main__":
     try:
         main()
-    except (OSError, ValueError, KeyError, subprocess.SubprocessError, json.JSONDecodeError) as error:
+    except (OSError, ValueError, KeyError, RuntimeError, subprocess.SubprocessError, json.JSONDecodeError) as error:
         print(f"wallcolors: {error}", file=sys.stderr)
         raise SystemExit(1)

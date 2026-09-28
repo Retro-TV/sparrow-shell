@@ -174,7 +174,7 @@ palette() {
     [[ "$source_mode" == manual ]] && source_mode=dynamic
     [[ "$source_mode" == static ]] || source_mode=dynamic
     [[ -n "$variant" ]] || variant="$(jq -r '.paletteVariant // "auto"' "$flags_file" 2>/dev/null || echo auto)"
-    mode="$(jq -r '.appearanceMode // (if .paletteMode == "manual" then (if .manualDark == false then "light" else "dark" end) else "dark" end)' "$flags_file" 2>/dev/null || echo dark)"
+    mode="$(jq -r '.appearanceMode // (if .paletteMode == "manual" then (if .manualDark == false then "light" else "dark" end) else "auto" end)' "$flags_file" 2>/dev/null || echo auto)"
     if is_video "$pic" || [[ "${pic,,}" == *.gif ]]; then
         make_still "$pic" "$still" || return 1
         pic="$still"
@@ -213,7 +213,10 @@ commit_state() {
     if [[ -n "$out" ]]; then map_put "$out" "$pic"; else map_put_all "$pic"; fi
     active="$(map_get "$(focused_output)")"; [[ -n "$active" ]] || active="$pic"
     tmp="$state.tmp"; printf '%s\n' "$active" > "$tmp"; mv -f -- "$tmp" "$state"
-    palette "$active" || echo "Sparrow wallpaper: wallpaper changed, but palette generation failed; keeping previous palette" >&2
+    palette "$active" || {
+        echo "Sparrow wallpaper: wallpaper changed, but required palette generation failed" >&2
+        return 1
+    }
 }
 
 cmd="${1:-next}"
@@ -263,7 +266,7 @@ case "$cmd" in
                 [[ "$source_mode" == manual ]] && source_mode=dynamic
                 [[ "$source_mode" == static ]] || source_mode=dynamic
                 style="$(jq -r '.paletteVariant // "auto"' "$flags_file" 2>/dev/null || echo auto)"
-                mode="$(jq -r '.appearanceMode // (if .paletteMode == "manual" then (if .manualDark == false then "light" else "dark" end) else "dark" end)' "$flags_file" 2>/dev/null || echo dark)"
+                mode="$(jq -r '.appearanceMode // (if .paletteMode == "manual" then (if .manualDark == false then "light" else "dark" end) else "auto" end)' "$flags_file" 2>/dev/null || echo auto)"
                 if [[ "$active" != "$saved" || ! -s "$palette_file" ]] \
                         || ! jq -e --arg source "$source_mode" --arg style "$style" --arg mode "$mode" '
                             (.wallpaper_luminance | type == "number") and
@@ -272,7 +275,10 @@ case "$cmd" in
                             (.palette_style == $style or $source == "static") and
                             (.appearance_mode == $mode or $source == "static")' \
                             "$palette_file" >/dev/null 2>&1; then
-                    palette "$active" || true
+                    palette "$active" || {
+                        echo "Sparrow wallpaper: required startup palette generation failed" >&2
+                        exit 1
+                    }
                 fi
             fi
         fi

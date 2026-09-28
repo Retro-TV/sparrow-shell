@@ -30,7 +30,7 @@ framework.
 | Personalization | Matugen-derived shell roles, lock foreground, Niri border colors, Kitty, Sparrow GTK/icon assets | Core dynamic theme; outputs generated |
 | Lock | Quickshell `WlSessionLock` + Quickshell PAM + adapted Qylock Last of Us | Primary lock; Qt Multimedia used for themed motion/background behavior |
 | Applications | Kitty/Fish/Starship terminal; Thunar with Sparrow GTK theme; Firefox binding | Intended defaults, replaceable by user |
-| Desktop integration | Sparrow Files `.desktop` directory handler; GTK file chooser portal theme scope | Sparrow-owned integration; preserve existing defaults |
+| Desktop integration | Sparrow Files `.desktop` directory handler; merge-only GTK FileChooser preference; GTK portal theme scope | Sparrow-owned integration; preserve existing defaults and all other portal routes |
 | Network/devices | NetworkManager Wi-Fi, BlueZ Bluetooth, PipeWire audio, UPower/battery, MPRIS | Core surfaces, but dependent on services/devices |
 | Optional controls | Video, Cava, Night Light, brightness, DDC, NVIDIA vibrance, recording, weather/search, Hyprlock fallback, screenshots | Explicitly optional/adaptive |
 
@@ -83,7 +83,7 @@ declaring those when a genuinely minimal install omits them.
 | Command / executable | Callers and purpose | Arch/source recommendation | Absence behavior / class |
 | --- | --- | --- | --- |
 | `niri` | Niri binds; Sparrow Niri IPC/event stream/output queries; transaction helper/reload; recorder window list; power logout | Official `niri` in Extra ([package](https://archlinux.org/packages/extra/x86_64/niri/)) | Required; shell backend cannot operate without Niri |
-| `qs` / `quickshell` | Three user services; IPC bindings; Rishot; main/idle shell and all Quickshell services | Official Extra `quickshell` ([package](https://archlinux.org/packages/extra/x86_64/quickshell/)); require compatible Qt QML/runtime modules | Required; no shell or lock |
+| `qs` / `quickshell` | Main and idle shell services; IPC bindings; Rishot; Quickshell components | Official Extra `quickshell` ([package](https://archlinux.org/packages/extra/x86_64/quickshell/)); require compatible Qt QML/runtime modules | Required; no shell or lock |
 | `python3` | Service migration, color generation, folder chooser, input info, window selection, config transaction | Official `python`; `python-pillow` for palette processing, `python-gobject` for portal chooser helper | Required for service migration/palette/Niri helper; chooser helper reports failure if GObject unavailable |
 | Python `PIL` | `wallcolors.py` image sampling/metadata | Official `python-pillow` | Required for palette generation; background stays but palette update fails |
 | `bash` | wallpaper, thumbnails/search, lock wrapper, several script callers; `bash` is explicit in units/QML | Official `bash` (also Niri package's optional `niri-session` dependency) | Required; helpers don't run |
@@ -124,6 +124,7 @@ declaring those when a genuinely minimal install omits them.
 | `nvidia-smi` | Optional NVIDIA GPU stats | `nvidia-utils` | GPU fields unavailable; CPU/memory/disk stats remain |
 | `df`, `awk`, `grep`, `head`, `cat`, `ls`, `sleep`, `printf`, `find`, `sort`, `shuf`, `tail`, `tr`, `cut`, `date`, `md5sum`, `flock`, `setsid`, `kill`, `rm`, `mv`, `mkdir`, `dirname`, `basename`, `readlink`, `pgrep`, `pkill`, `timeout`, `env`, `stat`, `ip` | Basic helper scripting, CPU/system monitoring, wallpaper/cache process and file operations, Kitty signaling, recorder management, Wi-Fi details | Primarily official `coreutils`, `findutils`, `gawk`, `grep`, `procps-ng`, `util-linux`, `iproute2`; standard Arch base packages | Low-level runtime requirements of helper scripts; normally supplied by a minimal Arch base install but document/check explicitly |
 | `python3` + `gi.repository.Gio` | Recorder directory picker via XDG FileChooser portal | `python`, `python-gobject`, `xdg-desktop-portal`, chosen backend | Portal picker error is surfaced; manual path selection is not silently substituted |
+| `lxqt-policykit-agent` | `sparrow-polkit-agent.service`; graphical Polkit dialogs when no user agent is already running | Official Extra `lxqt-policykit` ([package](https://archlinux.org/packages/extra/x86_64/lxqt-policykit/)) | Unit skips if package binary is absent or a recognized agent is running; existing agent remains authoritative |
 
 Commands such as `nvidia-smi`, DDC, vibrance, brightness, Night Light, weather
 and recording are guarded or feature-specific. The table distinguishes shell
@@ -157,6 +158,7 @@ database. “Optional” means the desktop must remain useful when omitted.
 | Thunar | `thunar` — Arch Extra ([package](https://archlinux.org/packages/extra/x86_64/thunar/)) | Default file manager |
 | Thumbnails | `tumbler` — Arch Extra ([package](https://archlinux.org/packages/extra/x86_64/tumbler/)) | Recommended part of default Thunar integration |
 | Portals | `xdg-desktop-portal` + a backend such as `xdg-desktop-portal-gtk` ([portal package](https://archlinux.org/packages/extra/x86_64/xdg-desktop-portal/)) | Required for portal chooser and recording folder chooser; choose compatible backend, don't force GTK globally |
+| Polkit agent | Existing user agent, otherwise recommended `lxqt-policykit` (Arch Extra) | Desktop infrastructure; Sparrow unit is conditional and Niri-session-scoped; preserve other agents |
 | video wallpapers | `mpvpaper` AUR | Optional video wallpaper enhancement |
 | recording | `gpu-screen-recorder`, `slurp` | Optional GPU-dependent recorder; direct output capture and picker capabilities vary |
 | screenshot | Rishot upstream, `grim`, `wl-clipboard` | Optional separate application; do not bundle or silently run external installer |
@@ -187,8 +189,9 @@ merge existing user config rather than copying whole directories over them.
 | `quickshell/sparrow/**` (including `shell.qml`, QML, `Singletons/`, `lib/`, `scripts/`, `idle/shell.qml`, `qmldir`, lockscreen assets, wallpaper default) | `~/.config/quickshell/sparrow` | Sparrow-owned source | One managed runtime tree; stable canonical path. Development may symlink to checkout; released install must not depend on checkout |
 | `niri/config.kdl` | `~/.config/niri/config.kdl` | Sparrow template + user-owned active root | Merge includes into existing config; never overwrite a user's root config wholesale |
 | `niri/sparrow/appearance.kdl`, `binds.kdl`, `input.kdl`, `window-rules.kdl` | `~/.config/niri/sparrow/` | Sparrow-owned static defaults | Back up conflicts; generated/user subfragments are separate |
-| `quickshell/sparrow/systemd/sparrow-shell.service`, `sparrow-idle.service`, `sparrow-wallpaper.service` | `~/.config/systemd/user/` | Sparrow-owned unit templates | Copy files on install, not links into source checkout; daemon-reload only after staged validation |
+| `quickshell/sparrow/systemd/sparrow-shell.service`, `sparrow-idle.service`, `sparrow-wallpaper.service`, `sparrow-polkit-agent.service` | `~/.config/systemd/user/` | Sparrow-owned unit templates | Copy files on install, not links into source checkout; enable the Polkit unit only if no existing agent/autostart owns that role |
 | `quickshell/sparrow/systemd/xdg-desktop-portal-gtk.service.d/10-sparrow-theme.conf` | `$XDG_CONFIG_HOME/systemd/user/xdg-desktop-portal-gtk.service.d/` | Sparrow-owned integration override | Conflict/backup required; scoped GTK theme affects portal only |
+| `xdg-desktop-portal/niri-portals.conf.fragment` | Merge into `$XDG_CONFIG_HOME/xdg-desktop-portal/niri-portals.conf` | Sparrow-owned one-key merge fragment, not a complete portal config | Add/merge only `org.freedesktop.impl.portal.FileChooser=gtk;`; preserve all other user backend routes |
 | `kitty/kitty.conf` | `~/.config/kitty/kitty.conf` | Sparrow default with generated include | Merge/back up pre-existing Kitty config; runtime colors go beside it |
 | `fish/config.fish` | `~/.config/fish/config.fish` | Sparrow recommendation + user shell config | Merge or install opt-in; Fish config is user-owned and should not be wholesale replaced |
 | `starship/starship.toml` | `~/.config/starship.toml` | Sparrow default + user-customizable prompt | Backup/merge; prompt config may be user's own |
@@ -198,7 +201,7 @@ merge existing user config rather than copying whole directories over them.
 | `applications/sparrow-files.desktop` | `$XDG_DATA_HOME/applications/sparrow-files.desktop` | Sparrow-owned desktop handler | Install optionally; MIME default change requires explicit user approval |
 | `hyprlock/hyprlock.conf` | `~/.config/sparrow/hyprlock.conf` (fallback only) | Optional Sparrow baseline; active config user-owned | Offer only if fallback retained and destination absent; never replace personal Hyprlock config |
 | `quickshell/sparrow/wallpapers/default.png` | remains inside Sparrow runtime tree | Sparrow-owned redistributable default asset | Install as read-only fallback; never copy over the user's wallpaper library |
-| `docs/**`, `LICENSES/**`, root README/license/provenance | repo/docs | Project/legal metadata | Repository distribution; not copied as runtime settings except required third-party notices adjacent to assets |
+| `docs/**`, `LICENSES/**`, root `LICENSE`, `THIRD_PARTY.md` | repo/docs | Project/legal metadata and component notices | Repository distribution; retain root and asset-adjacent notices with redistributed source/assets |
 
 Do not deploy active `~/.config/niri/sparrow/{display-outputs,display-binds,
 generated-colors,user-appearance,user-binds,user-input}.kdl`, current state,
@@ -249,10 +252,11 @@ configuration.
 | --- | --- | --- |
 | Establish canonical Quickshell runtime root and stage shell code | Must | Refuse unrelated target; back up/copy policy explicit |
 | Merge Sparrow Niri include graph into user's existing root config | Must for Niri integration | Show staged diff; back up; run `niri validate` before reload; never replace root wholesale |
-| Install/validate three Sparrow user units and run `systemctl --user daemon-reload` | Must for managed startup | Enable only after path, Niri session and wallpaper dependencies are staged; no duplicate manual QS launch |
+| Install/validate Sparrow user units and run `systemctl --user daemon-reload` | Must for managed startup | Enable only after paths/session dependencies are staged; enable the Polkit unit only if no existing agent/autostart exists; no duplicate manual QS/agent launch |
 | `graphical-session.target` / environment availability for Niri | Must | Check session manager integration; do not start shell from Kitty or duplicate compositor autostart |
-| Install `xdg-desktop-portal` and choose compatible backend | Must for folder chooser/recording portal integration; recommended desktop-wide | Must ask before replacing existing portal backend/default; keep GTK theme environment scoped to chooser service |
+| Install `xdg-desktop-portal` and choose compatible backend | Must for folder chooser/recording portal integration; screen casting is a separate optional portal capability | Merge the one-key FileChooser fragment; preserve existing routes; keep GTK theme environment scoped to GTK portal service |
 | GTK portal per-service override | Recommended for Sparrow-themed chooser | Back up conflicts; no global GTK_THEME |
+| Polkit agent | Use an existing user agent, or offer `lxqt-policykit` when none is found | Never remove/disable an existing agent; skip Sparrow unit if an agent/autostart already owns the role |
 | `inode/directory` default to Sparrow Files | Optional | Must ask; current default is a user preference and may conflict with another file manager |
 | GSettings icon/cursor/theme defaults | Recommended | Must ask/preserve non-default current values; don't globally force `GTK_THEME=Sparrow` |
 | Cursor environment/Niri cursor settings | Recommended portable defaults | Preserve existing XCURSOR and cursor selection unless user opts in |
@@ -283,9 +287,12 @@ configuration.
    chosen.
 7. Install GTK theme/icon scaffold and chosen fonts/cursor. Scope theme to the
    portal and Thunar launch; preserve global app theming and GSettings.
-8. Install unit files and portal drop-in; validate units. Only after the
-   runtime and Niri includes exist, daemon-reload and enable the units against
-   the Niri graphical session. Do not start duplicate QS manually.
+8. Merge the portal fragment into the existing Niri portal config without
+   replacing other routes. Install unit files and the GTK portal drop-in;
+   validate units. Enable Sparrow's Polkit unit only if the user has no
+   existing agent/autostart. Only after runtime/config validation, daemon-reload
+   and enable units against the Niri graphical session. Do not start duplicate
+   Quickshell or Polkit agents.
 9. Initialize XDG runtime roots through Sparrow's idempotent migration. Do not
    create fabricated Flags, wallpaper maps, palettes or host display config.
 10. At first Niri session, wallpaper service restores saved wallpaper or the
@@ -320,16 +327,17 @@ present.
 
 | Material | Current evidence | Release obligation / action |
 | --- | --- | --- |
-| Sparrow source and Ricelin-derived shell lineage | `LICENSES/Ricelin-MIT.txt` carries MIT notice; source retains provenance | Keep MIT copyright/notice for substantial Ricelin-derived portions and identify Sparrow changes accurately |
+| Sparrow combined program and Ricelin-derived shell lineage | Root `LICENSE` is GPL-3.0-only; `LICENSES/Ricelin-MIT.txt` retains the original MIT notice | Keep the MIT notice for inherited portions; the integrated GPL Qylock adaptation makes a uniform MIT project license inaccurate |
 | Qylock Last of Us lockscreen | `Lockscreen/COPYING.GPL-3.0` + `THIRD_PARTY.md`; adapted theme is GPL-3.0 | Preserve license and attribution with source; distribute corresponding source/license for derivative adaptation |
 | Outfit Black font | `Lockscreen/font/OFL.txt` | Preserve OFL and copyright next to font; font is bundled |
 | Papirus-derived fixed icons | `icons/PAPIRUS-LICENSE.txt`, `icons/NOTICE.md`, GPL-3 | Preserve attribution/license; distribute modified/recolored source SVGs as applicable |
-| Sparrow Default wallpaper | `wallpapers/README.md`; original SpaceEngine Pro screenshot captured by author; author confirmed redistribution permission | Keep provenance/permission note; do not claim third-party art license |
+| Sparrow Default wallpaper | `wallpapers/README.md`; original SpaceEngine Pro screenshot created by author; permission is for bundling as Sparrow's default | Keep author copyright and scoped redistribution permission; do not call it upstream art or assign an invented license |
 | Rishot | Separate upstream MIT project | Do not copy source/assets into Sparrow; link to upstream and retain separate license if installer offers it |
 | Arch packages/fonts/theme assets | Installed package projects keep their own licenses | Install packages through package managers rather than repackaging package files |
 
-Before publication, check that root license and all file headers/attribution
-are consistent about the mixed Ricelin-derived and original Sparrow work.
+`LICENSE`, `THIRD_PARTY.md`, and component notices now state the project license
+and the separately licensed material. Recheck this map if files/assets are
+added or if the lock/icon/font components change.
 
 ## Greeter and login boundary
 

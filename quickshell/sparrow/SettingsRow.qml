@@ -4,8 +4,8 @@ import QtQuick
 import "Singletons"
 
 /**
- * One settings line: an optional leading icon, a name and an optional secondary
- * caption on the left, and a control slot on the right, capped by a single bottom
+ * One settings line: an optional leading icon, a name and optional secondary
+ * status/context text on the left, and a control slot on the right, capped by a single bottom
  * hairline. `control` is the default slot for the toggle, segmented control or
  * chevron. `surface` wires hover and activation back to the owning settings
  * surface so the soul seam tracks the focused row; scale derives from it.
@@ -67,7 +67,7 @@ Item {
         anchors.right: controlSlot.left
         anchors.rightMargin: 14 * srow.s
         anchors.verticalCenter: parent.verticalCenter
-        spacing: 5 * srow.s
+        spacing: subtitle.visible ? 5 * srow.s : 0
 
         Text {
             text: srow.name
@@ -77,6 +77,7 @@ Item {
             font.weight: Font.DemiBold
         }
         Text {
+            id: subtitle
             width: parent.width
             visible: srow.sub.length > 0 && (!srow.captionOnFocus || srow.focused || srowHover.hovered)
             text: srow.sub

@@ -1,0 +1,7 @@
+# Merge this single preference into the user's existing
+# $XDG_CONFIG_HOME/xdg-desktop-portal/niri-portals.conf.
+# This is intentionally not a complete portal config: preserve all other
+# backend choices (especially ScreenCast, RemoteDesktop, Screenshot, and
+# Secret) from the user's file.
+[preferred]
+org.freedesktop.impl.portal.FileChooser=gtk;

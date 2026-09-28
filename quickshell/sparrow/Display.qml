@@ -1132,7 +1132,7 @@ SettingsSurface {
                 surface: root
                 icon: "sun"
                 name: "Mode"
-                sub: NightLight.available ? "Off, always warm, or scheduled" : NightLight.unavailableReason
+                sub: NightLight.available ? "" : NightLight.unavailableReason
                 captionOnFocus: true
                 SettingsSeg {
                     s: root.s
@@ -1166,7 +1166,6 @@ SettingsSurface {
                 visible: Flags.nightLightMode === "scheduled"
                 icon: "sun"
                 name: "On at"
-                sub: "Warm tint starts"
                 captionOnFocus: true
                 ScrubValue {
                     id: nightOnScrub
@@ -1185,7 +1184,6 @@ SettingsSurface {
                 visible: Flags.nightLightMode === "scheduled"
                 icon: "sun"
                 name: "Off at"
-                sub: "Back to neutral"
                 captionOnFocus: true
                 last: true
                 ScrubValue {

@@ -21,6 +21,7 @@ shell to start.
 | `gtk3` | `gtk-launch` starts selected `.desktop` entries in Sparrow Launcher. Ordinary desktop-entry discovery is not a package manager. |
 | `systemd` and `dbus` | User services, graphical-session target, session bus and Quickshell desktop-service integration. |
 | `pam` | System PAM stack used by Quickshell's primary secure session lock. |
+| `polkit` plus one graphical authentication agent | The daemon alone cannot display authorization prompts. Sparrow recommends `lxqt-policykit` only when the user has no existing agent; preserve an existing agent rather than starting a second. |
 
 Quickshell's Arch package depends on Qt 6 base/declarative/SVG/Wayland
 components. Sparrow's video preview additionally uses `qt6-multimedia` and
@@ -40,7 +41,8 @@ components. Sparrow's video preview additionally uses `qt6-multimedia` and
 | `gpu-screen-recorder` | Required for Sparrow's Recorder capture/record operation. |
 | `slurp` | Used for Niri's recorder region/window selection helper. |
 | `python-gobject` | Used by the recording folder-selection helper (`gi.repository.Gio/GLib`). |
-| `xdg-desktop-portal`, `xdg-desktop-portal-gtk`, compatible session backend | Recording folder selection calls the FileChooser portal. The GTK backend receives Sparrow's generated GTK theme only through its scoped service environment. |
+| `xdg-desktop-portal`, `xdg-desktop-portal-gtk`, compatible session backend | Recording folder selection calls FileChooser. The tracked `xdg-desktop-portal/niri-portals.conf.fragment` contributes only `FileChooser=gtk`; merge it into the user's existing Niri portal config. GTK theme remains scoped to the GTK portal service. |
+| `lxqt-policykit` (recommended default agent) | Provides `/usr/bin/lxqt-policykit-agent`; Sparrow's user unit starts it in Niri only when no recognized Polkit agent is already running. Optional if the user already has an agent. |
 | `xdg-utils` | `xdg-open` integration used by Recorder for recordings and folders. |
 | `qt6-multimedia`, `qt6-multimedia-ffmpeg` | Needed for Sparrow's wallpaper video previews in the picker. |
 | `wlsunset` | Optional Night Light backend; status UI remains adaptive when absent. |
@@ -125,4 +127,7 @@ The only browser-related runtime work is optional wallpaper search/download.
   terminal, file manager, personal wallpapers, monitor setup, generated theme
   files, personal Hyprlock configuration or Rishot source.
 - A Wayland session portal backend is a session integration dependency, not a
-  reason to hardcode this host's GNOME/GTK backend into the portable defaults.
+  reason to replace the user's portal routing. Sparrow's repository fragment
+  supplies only the GTK FileChooser preference; preserve ScreenCast,
+  RemoteDesktop, Screenshot, Secret, and other backend choices. Niri's
+  recommended GNOME ScreenCast backend is a separate optional capability.

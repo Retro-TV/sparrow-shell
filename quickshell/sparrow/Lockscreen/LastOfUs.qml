@@ -7,6 +7,7 @@ import QtMultimedia
 /*
  * Adapted from the “Last of Us” theme by Darkkal44 in qylock.
  * Original: https://github.com/Darkkal44/qylock/tree/main/themes/last-of-us
+ * Modified for Sparrow on 2026-09-27.
  * The original screen composition is retained; only its SDDM-specific account,
  * session and authentication integration is replaced with Sparrow signals.
  */

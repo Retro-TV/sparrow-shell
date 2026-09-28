@@ -12,6 +12,9 @@ layout {
     }
 
     center-focused-column "never"
+    // Keep a lone default-width column visually balanced without changing
+    // Niri's normal scrolling layout once a second column exists.
+    always-center-single-column true
 
     preset-column-widths {
         proportion 0.33333

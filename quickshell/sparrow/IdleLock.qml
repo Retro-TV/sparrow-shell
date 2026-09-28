@@ -1,8 +1,6 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import Quickshell
-import Quickshell.Io
 import "Singletons"
 
 /**
@@ -38,15 +36,13 @@ SettingsSurface {
     ]
 
     /**
-     * One idle row: name and caption on their own full-width line with the
-     * segmented control stacked below, so a six-option strip never squeezes the
-     * caption into a narrow wrapping column. Hover lights the row and feeds the
-     * soul seam, matching the rest of the settings rows.
+     * One idle row: a name above its segmented control, so a six-option strip
+     * keeps its full width. Hover lights the row and feeds the soul seam,
+     * matching the rest of the settings rows.
      */
     component IdleRow: Item {
         id: irow
         property string name: ""
-        property string caption: ""
         property bool last: false
         default property alias seg: segSlot.data
         readonly property real s: root.s
@@ -84,14 +80,6 @@ SettingsSurface {
                 font.pixelSize: 12.5 * irow.s
                 font.weight: Font.DemiBold
             }
-            Text {
-                width: parent.width
-                visible: irow.caption.length > 0
-                text: irow.caption
-                color: Theme.faint
-                font.family: Theme.font
-                font.pixelSize: 10.5 * irow.s
-            }
             Item { width: 1; height: 7 * irow.s }
             Item {
                 id: segSlot
@@ -128,7 +116,6 @@ SettingsSurface {
         IdleRow {
             id: lockRow
             name: "Auto-lock"
-            caption: "Lock the screen after idle"
 
             SettingsSeg {
                 s: root.s
@@ -142,7 +129,6 @@ SettingsSurface {
         IdleRow {
             id: screenRow
             name: "Screen off"
-            caption: "Blank the display after idle"
 
             SettingsSeg {
                 s: root.s
@@ -156,7 +142,6 @@ SettingsSurface {
         IdleRow {
             id: suspendRow
             name: "Suspend"
-            caption: "Sleep the machine after idle"
             last: true
 
             SettingsSeg {
@@ -174,7 +159,7 @@ SettingsSurface {
             rightPadding: 12 * root.s
             width: parent.width
             text: "Keep-awake (in the mixer) pauses all of this while it is on."
-            color: Theme.faint
+            color: Theme.subtle
             font.family: Theme.font
             font.pixelSize: 9.5 * root.s
             font.weight: Font.Medium

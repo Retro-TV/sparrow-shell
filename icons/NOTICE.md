@@ -7,5 +7,5 @@ Sparrow provides two compatibility aliases for Thunar's GTK icon names:
 `drive-removable-media` uses Papirus's USB-removable-drive artwork, and
 `network-workgroup` uses Papirus's network-server artwork. Wallpaper-colored
 folder icons are generated separately by Sparrow and are not Papirus artwork.
-The generated `text-x-generic` document icon uses the Papirus text-file glyph
-recolored from the active Matugen palette.
+The generated `text-x-generic` document icon is produced by Sparrow's own SVG
+generator; it is not one of the redistributed Papirus files.

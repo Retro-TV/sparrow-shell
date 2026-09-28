@@ -149,8 +149,7 @@ SettingsSurface {
             id: vizRow
             surface: root
             name: "Music visualizer"
-            sub: Cava.available ? "Visualizes audio on the resting pill"
-                : (Cava.checking ? "Checking for Cava…" : "Unavailable — install Cava to enable")
+            sub: Cava.available || Cava.checking ? "" : "Cava unavailable"
             icon: "music"
 
             LinkToggle {
@@ -179,7 +178,6 @@ SettingsSurface {
             surface: root
             visible: Flags.paletteMode === "dynamic"
             name: "Palette"
-            sub: "Auto follows the image; Source stays close to its main color"
             icon: "droplet"
 
             SettingsSeg {
@@ -198,7 +196,6 @@ SettingsSurface {
             surface: root
             visible: Flags.paletteMode === "dynamic"
             name: "Mode"
-            sub: "Auto chooses light or dark from the wallpaper"
             icon: "sun"
 
             SettingsSeg {
@@ -213,7 +210,6 @@ SettingsSurface {
             id: lockTextRow
             surface: root
             name: "Lockscreen text"
-            sub: "Auto follows the selected wallpaper's brightness"
             icon: "type"
 
             SettingsSeg {

@@ -111,8 +111,9 @@ continue to use the managed-fragment API rather than editing the root config.
 The host's four-output layout is not portable and must never be a default.
 
 Niri normal dynamic workspaces, native window rules, overview layer behavior,
-and the current user-facing binds are part of the intended Niri model. No
-active special-workspace binding or Hyprland IPC is intended.
+and the current user-facing binds are part of the intended Niri model. The
+portable layout also centers a lone column without changing normal multi-column
+scrolling. No active special-workspace binding or Hyprland IPC is intended.
 
 ## 5. Wallpaper and color pipeline
 
@@ -198,15 +199,19 @@ installed, the runtime fix still needs a manual lock test in a safe session.
 
 ## 7. Systemd and session startup
 
-Three tracked units are under `quickshell/sparrow/systemd/`:
+Four tracked units are under `quickshell/sparrow/systemd/`:
 
 - `sparrow-wallpaper.service`: starts awww and runs wallpaper restore in the
   graphical Niri session.
 - `sparrow-shell.service`: starts the main `qs --no-duplicate --path` instance.
 - `sparrow-idle.service`: starts the dedicated idle-policy QML instance.
+- `sparrow-polkit-agent.service`: conditionally starts LXQt's agent in Niri
+  when the package exists and no recognized agent is already running.
 
-On this machine all three are active/enabled and exactly two Quickshell
-instances are present (main shell and idle shell). Main and idle services use
+On this machine the first three are active/enabled and exactly two Quickshell
+instances are present (main shell and idle shell). The Polkit unit is enabled
+and active; `lxqt-policykit-agent` is owned by the `lxqt-policykit` package and
+its listener registered successfully. Main and idle services use
 the canonical runtime path. The live wallpaper unit symlink is an absolute
 link to the development checkout, unlike the other two relative links. Its
 unit contents are portable, but moving the checkout can break service
@@ -259,7 +264,8 @@ integration surfaces. Their daemons/hardware are environmental requirements.
 **Feature requirements:** awww and Matugen/Pillow for normal wallpaper/palette
 operation; FFmpeg for still extraction/thumbnails/recording thumbnails;
 GPU Screen Recorder and slurp for recording; compatible portal backend and
-Python GObject for folder selection; GTK3 and adw-gtk3 source CSS for the
+Python GObject for folder selection; a Polkit agent (Sparrow recommends
+`lxqt-policykit` only if the user has no existing agent); GTK3 and adw-gtk3 source CSS for the
 generated Thunar theme; Thunar, Kitty, Fish, Starship and JetBrains Mono Nerd
 Font for the chosen default-app bundle; Bibata cursor assets for the selected
 cursor. Actual user app choices can be changed.
@@ -297,12 +303,11 @@ package-name/dependency verification before it is used by an installer.
   provenance; comments in normal Workspaces and palette adapter explain
   provenance/schema compatibility. `research/Ricelin` is a reference checkout,
   not an active runtime dependency and should not be installed as Sparrow.
-- `wallpapers/default.png` is an original screenshot captured by the Sparrow
-  author in SpaceEngine Pro and distributed by that screenshot author as
-  Sparrow's default wallpaper. The author confirmed that SpaceEngine/Steam
-  terms permit keeping and distributing screenshots made in the software.
-  This records provenance; it does not assert a separate third-party wallpaper
-  license. See `quickshell/sparrow/wallpapers/README.md`.
+- `wallpapers/default.png` is the Sparrow author's original SpaceEngine Pro
+  screenshot. The author retains copyright and permits distribution bundled
+  with Sparrow as its default wallpaper. No upstream SpaceEngine asset or
+  additional SpaceEngine license requirement is claimed. See
+  `quickshell/sparrow/wallpapers/README.md`.
 - Kitty/Fish/Starship/Thunar/Firefox defaults are portable starting points, not
   proof those applications must be installed or their existing user config
   overwritten.
@@ -349,6 +354,12 @@ and caches were excluded from active-source classification.
 - Fresh-start behavior for absent GTK/adw-gtk3 defaults, portal backend,
   package variations and unavailable Niri generated fragments still needs an
   isolated test.
+- The live portal setup already routes FileChooser to GTK and scopes Sparrow's
+  GTK theme to `xdg-desktop-portal-gtk.service`. The repository now carries a
+  merge-only FileChooser fragment; a clean-install merge test remains required.
+- `lxqt-policykit-agent` is active under the guarded Niri session unit and its
+  listener registered. The only startup warning is a missing optional Oxygen
+  fallback icon theme; privileged prompt behavior was not deliberately tested.
 - Fresh `Flags.qml` state defaults `paletteMode` to `dynamic`; saved explicit
   choices are preserved. The bundled default is selectable without a personal
   wallpaper directory. Its provenance is documented, and wallpaper

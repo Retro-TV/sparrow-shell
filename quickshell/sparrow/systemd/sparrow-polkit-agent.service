@@ -1,0 +1,16 @@
+[Unit]
+Description=Sparrow Polkit authentication agent
+After=graphical-session.target
+PartOf=graphical-session.target
+ConditionEnvironment=XDG_CURRENT_DESKTOP=niri
+ConditionFileIsExecutable=/usr/bin/lxqt-policykit-agent
+
+[Service]
+Type=simple
+ExecCondition=/usr/bin/bash %h/.config/quickshell/sparrow/scripts/has-polkit-agent.sh
+ExecStart=/usr/bin/lxqt-policykit-agent
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

@@ -319,7 +319,7 @@ SettingsSurface {
 
             GroupLabel { text: "Keyboard" }
             FieldRow {
-                id: layoutRow; label: "Layout"; caption: "Search installed XKB layouts"; icon: "language"
+                id: layoutRow; label: "Layout"; icon: "language"
                 Item {
                     width: 112 * root.s; height: layoutButton.height + (root.layoutOpen ? layoutList.height + 4 * root.s : 0)
                     Rectangle {

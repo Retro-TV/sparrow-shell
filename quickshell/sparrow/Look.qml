@@ -275,22 +275,22 @@ SettingsSurface {
             spacing: 0
 
             Group { id: windowGroup; title: "Window"; open: true
-                FieldRow { id: gapsRow; label: "Gaps"; caption: "Space between tiled columns and windows"
+                FieldRow { id: gapsRow; label: "Gaps"
                     ScrubValue { id: gapsScrub; s: root.s; value: root.gaps; openValue: root.base.gaps; from: 0; to: 40; step: 1; unit: "px"
                         onEdited: v => { root.gaps = v; root.scheduleWrite(); } }
                 }
-                FieldRow { id: radiusRow; label: "Corner radius"; caption: "Rounded window geometry"
+                FieldRow { id: radiusRow; label: "Corner radius"
                     ScrubValue { id: radiusScrub; s: root.s; value: root.cornerRadius; openValue: root.base.cornerRadius; from: 0; to: 30; step: 1; unit: "px"
                         onEdited: v => { root.cornerRadius = v; root.scheduleWrite(); } }
                 }
-                FieldRow { id: borderRow; label: "Border width"; caption: "Niri window outline thickness"
+                FieldRow { id: borderRow; label: "Border width"
                     ScrubValue { id: borderScrub; s: root.s; value: root.borderWidth; openValue: root.base.borderWidth; from: 0; to: 8; step: 1; unit: "px"
                         onEdited: v => { root.borderWidth = v; root.scheduleWrite(); } }
                 }
-                FieldRow { id: shadowRow; label: "Shadows"; caption: "Show a shadow behind windows"
+                FieldRow { id: shadowRow; label: "Shadows"
                     LinkToggle { s: root.s; on: root.shadowsEnabled; onToggled: { root.shadowsEnabled = !root.shadowsEnabled; root.scheduleWrite(); } }
                 }
-                FieldRow { id: softnessRow; label: "Shadow softness"; caption: "Niri shadow blur softness"; collapsed: !root.shadowsEnabled
+                FieldRow { id: softnessRow; label: "Shadow softness"; collapsed: !root.shadowsEnabled
                     ScrubValue { id: softnessScrub; s: root.s; value: root.shadowSoftness; openValue: root.base.shadowSoftness; from: 0; to: 50; step: 1
                         onEdited: v => { root.shadowSoftness = v; root.scheduleWrite(); } }
                 }
@@ -314,7 +314,7 @@ SettingsSurface {
                         Component.onCompleted: root.appGapControl = this
                         onEdited: v => Flags.appGap = v }
                 }
-                FieldRow { id: pillOpacityRow; label: "Pill opacity"; caption: "How see-through the pill sits"
+                FieldRow { id: pillOpacityRow; label: "Pill opacity"
                     ScrubValue { s: root.s; value: Flags.pillOpacity; openValue: root.base.pillOpacity; from: 0.55; to: 1; step: 0.05; decimals: 2
                         Component.onCompleted: root.pillOpacityControl = this
                         onEdited: v => Flags.pillOpacity = v }

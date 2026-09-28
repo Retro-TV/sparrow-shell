@@ -74,6 +74,27 @@ user's saved preference is Inter Black); Kitty uses JetBrains Mono Nerd Font.
 The Quickshell lockscreen uses its bundled Outfit Black font. No separate
 decorative-glyph font or CJK glyph setting is part of the runtime.
 
+## Portal routing and Polkit agent
+
+The recording folder picker uses XDG FileChooser. Sparrow tracks
+`xdg-desktop-portal/niri-portals.conf.fragment`, which contains only the
+`org.freedesktop.impl.portal.FileChooser=gtk;` preference. It is a merge input,
+not a complete config file: an installer must merge that key into the user's
+`$XDG_CONFIG_HOME/xdg-desktop-portal/niri-portals.conf`, preserving other
+entries such as Niri ScreenCast, RemoteDesktop, Screenshot, and Secret routes.
+Sparrow's `GTK_THEME=Sparrow` remains a systemd user drop-in for
+`xdg-desktop-portal-gtk.service` only; it is not exported globally.
+
+Niri's graphical session needs a Polkit authentication agent in addition to
+`polkitd`. Sparrow recommends the small official-Arch `lxqt-policykit`
+(`lxqt-policykit-agent`) package only when no agent is already present. The
+`sparrow-polkit-agent.service` is ordered with `graphical-session.target`,
+requires the installed executable, and runs a guard for known existing agents
+before starting. Installation must preserve any agent/autostart the user has
+selected; do not replace it or enable Sparrow's unit on top of it. On the
+current host `lxqt-policykit` is installed, and the unit is active with its
+Polkit listener registered. A privileged prompt was not triggered for testing.
+
 ## Quickshell and systemd installation model
 
 Use `~/.config/quickshell/sparrow` as the stable runtime entry point. For a

@@ -437,7 +437,7 @@ PillSurface {
                         width: parent.width
                         visible: appRow.secondary.length > 0
                         text: appRow.secondary
-                        color: appRow.selected ? Theme.dim : Theme.faint
+                        color: appRow.selected ? Theme.dim : Theme.subtle
                         font.family: Theme.font
                         font.pixelSize: 10.5 * root.s
                         elide: Text.ElideRight

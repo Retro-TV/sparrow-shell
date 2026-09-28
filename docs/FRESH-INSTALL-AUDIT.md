@@ -282,19 +282,19 @@ path and never encode username/clone path.
 
 ## Licensing and release blockers
 
-- The bundled wallpaper is an original screenshot captured in SpaceEngine Pro
-  by the Sparrow author and distributed by that screenshot author as Sparrow's
-  default. The author confirmed the SpaceEngine/Steam terms permit keeping and
-  distributing screenshots made in the software. This documents provenance,
-  not a separate third-party license; it is no longer an unresolved wallpaper
-  redistribution blocker. See `quickshell/sparrow/wallpapers/README.md`.
+- The bundled wallpaper is the Sparrow author's own SpaceEngine Pro screenshot.
+  The author retains copyright and permits distribution bundled with Sparrow
+  as its default wallpaper; no separate wallpaper license or SpaceEngine
+  license requirement is asserted. See `quickshell/sparrow/wallpapers/README.md`.
 - Qylock Last of Us adaptation has GPL-3.0 text/attribution; Outfit font has
   SIL OFL 1.1; Papirus-derived icons have GPL-3.0 notice; Ricelin-provenance
   code retains `LICENSES/Ricelin-MIT.txt`.
-- adw-gtk3 is an installed upstream source, not vendored. Generated CSS has an
-  upstream attribution; check upstream license/notice requirements for the
-  generated output. There is no root `LICENSE` yet, so choose a project-level
-  licensing policy before distribution.
+- adw-gtk3 is supplied by the separately installed LGPL-2.1-only `adw-gtk-theme`
+  package, not vendored. The local generated CSS carries its source/license
+  header; it is not distributed in this repository.
+- Root `LICENSE` and `THIRD_PARTY.md` now state the GPL-3.0-only combined
+  program license and map the separately licensed Ricelin, Qylock, Papirus,
+  Outfit, and wallpaper material. Keep this map current as files are added.
 - Remaining open choice before final defaults: whether to keep the Hyprlock
   fallback after failure-path testing. Fresh palette mode is Dynamic and the
   bundled wallpaper is selectable; neither decision overwrites saved user

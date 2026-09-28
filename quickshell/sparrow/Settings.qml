@@ -4,8 +4,8 @@ import QtQuick
 import "Singletons"
 
 /**
- * SETTINGS index: a short list of categories. Each row carries its icon,
- * name and caption, and morphs the pill into that category's sub-surface.
+ * SETTINGS index: a short list of categories. Each row carries its icon and
+ * name, and morphs the pill into that category's sub-surface.
  * Arrow keys move the focused row with the glowing seam and Return opens it.
  */
 SettingsSurface {
@@ -38,10 +38,8 @@ SettingsSurface {
         SettingsRow {
             id: appearanceRow
             surface: root
-            captionOnFocus: true
             icon: "sparkles"
             name: "Appearance"
-            sub: "Clock, palette, and interface preferences"
 
             GlyphIcon {
                 width: 16 * root.s
@@ -55,10 +53,8 @@ SettingsSurface {
         SettingsRow {
             id: lookRow
             surface: root
-            captionOnFocus: true
             icon: "app-window"
             name: "Look"
-            sub: "Gaps, window shape, shadows"
 
             GlyphIcon {
                 width: 16 * root.s
@@ -72,10 +68,8 @@ SettingsSurface {
         SettingsRow {
             id: displayRow
             surface: root
-            captionOnFocus: true
             icon: "monitor"
             name: "Display"
-            sub: "Resolution, refresh, scale"
 
             GlyphIcon {
                 width: 16 * root.s
@@ -89,10 +83,8 @@ SettingsSurface {
         SettingsRow {
             id: inputRow
             surface: root
-            captionOnFocus: true
             icon: "mouse"
             name: "Input"
-            sub: "Keyboard, touchpad, mouse"
 
             GlyphIcon {
                 width: 16 * root.s
@@ -106,10 +98,8 @@ SettingsSurface {
         SettingsRow {
             id: keybindsRow
             surface: root
-            captionOnFocus: true
             icon: "keyboard"
             name: "Keybinds"
-            sub: "Rebind, add, set commands"
 
             GlyphIcon {
                 width: 16 * root.s
@@ -123,10 +113,8 @@ SettingsSurface {
         SettingsRow {
             id: idleRow
             surface: root
-            captionOnFocus: true
             icon: "lock"
             name: "Idle / Lock"
-            sub: "Auto-lock, screen off, suspend"
             GlyphIcon {
                 width: 16 * root.s
                 height: 16 * root.s
@@ -139,10 +127,8 @@ SettingsSurface {
         SettingsRow {
             id: gettingStartedRow
             surface: root
-            captionOnFocus: true
             icon: "sparkles"
             name: "Getting Started"
-            sub: "Shortcuts and a quick tour"
             last: true
 
             GlyphIcon {

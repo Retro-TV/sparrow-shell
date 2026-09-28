@@ -828,6 +828,32 @@ class SparrowInstaller:
         match = re.search(r"(?m)^Hidden\s*=\s*(.*?)\s*$", section.group(1))
         return match.group(1).lower() if match else None
 
+    @staticmethod
+    def _set_desktop_hidden(content: str) -> str:
+        section = re.search(r"(?ms)^\[Desktop Entry\]\s*\n(.*?)(?=^\[|\Z)", content)
+        if not section:
+            raise ValueError("CachyOS Hello autostart entry has no [Desktop Entry] section.")
+        body = section.group(1)
+        hidden = re.search(r"(?m)^Hidden\s*=.*$", body)
+        if hidden:
+            body = body[:hidden.start()] + "Hidden=true" + body[hidden.end():]
+        else:
+            body = "Hidden=true\n" + body
+        return content[:section.start(1)] + body + content[section.end(1):]
+
+    @staticmethod
+    def _is_cachyos_hello_desktop(content: str) -> bool:
+        section = re.search(r"(?ms)^\[Desktop Entry\]\s*\n(.*?)(?=^\[|\Z)", content)
+        if not section:
+            return False
+        body = section.group(1)
+        name = re.search(r"(?m)^Name\s*=\s*(.*?)\s*$", body)
+        command = re.search(r"(?m)^(?:Exec|TryExec)\s*=\s*(.*?)\s*$", body)
+        return bool(
+            (name and name.group(1) == "CachyOS Hello")
+            or (command and re.search(r"(?:^|/)cachyos-hello(?:\s|$)", command.group(1)))
+        )
+
     def _gsettings_user_value(self, key: str) -> tuple[bool, str | int | None]:
         schema, name = key.split("/", 1)
         if self.testing:
@@ -997,8 +1023,7 @@ class SparrowInstaller:
         body = section.group(1)[:match.start()] + replacement + section.group(1)[match.end():]
         result = current[:section.start(1)] + body + current[section.end(1):]
         if not original:
-            remaining = re.sub(r"(?m)^\[Desktop Entry\]\s*$", "", result)
-            if not remaining.strip():
+            if re.fullmatch(r"\s*\[Desktop Entry\]\s*\nType=Application\s*", result):
                 return ""
         return result
 
@@ -1134,6 +1159,9 @@ class SparrowInstaller:
         for entry, source, destination in self._source_entries():
             if source.is_dir() or entry["source"] == "niri/config.kdl":
                 continue
+            if (entry["source"] == "installer/autostart/cachyos-hello.desktop"
+                    and not self._has_cachyos_hello_autostart()):
+                continue
             if entry["source"].startswith("niri/sparrow/") and source.name == "cursor.kdl" and not self.bibata_defaults_enabled:
                 continue
             if source.name == "90-cursor.conf" and not self.bibata_defaults_enabled:
@@ -1148,6 +1176,8 @@ class SparrowInstaller:
                 role = "Niri portal routing"
             elif entry["source"] == "applications/sparrow-files.desktop":
                 role = "Sparrow Files desktop entry"
+            elif entry["source"] == "installer/autostart/cachyos-hello.desktop":
+                role = "CachyOS Hello autostart suppression"
             elif entry["source"] == "hyprlock/hyprlock.conf":
                 role = "optional Hyprlock fallback config"
             elif entry["source"] == "environment.d/90-cursor.conf":
@@ -1213,7 +1243,51 @@ class SparrowInstaller:
 
     def _apply_plan(self, plan: list[tuple[Path, bytes, str, int]]) -> None:
         for path, content, role, mode in plan:
-            self.write_file(path, content, mode=mode, role=role)
+            if role == "CachyOS Hello autostart suppression":
+                self._apply_cachyos_hello_autostart(path, content, mode)
+            else:
+                self.write_file(path, content, mode=mode, role=role)
+
+    def _has_cachyos_hello_autostart(self) -> bool:
+        if self.testing:
+            return bool(self.test_machine["cachyos_hello_autostart"])
+        return any(path.is_file() for path in (
+            self.paths.config / "autostart/cachyos-hello.desktop",
+            Path("/etc/skel/.config/autostart/cachyos-hello.desktop"),
+            Path("/usr/share/applications/cachyos-hello.desktop"),
+        ))
+
+    def _apply_cachyos_hello_autostart(self, path: Path, fallback: bytes, mode: int) -> None:
+        if path.is_symlink() or (path.exists() and not path.is_file()):
+            raise RuntimeError(f"Refusing to replace a non-regular CachyOS Hello autostart path: {path}.")
+        exists = path.is_file() and not path.is_symlink()
+        if exists:
+            original = path.read_text(encoding="utf-8")
+            if not self._is_cachyos_hello_desktop(original):
+                raise RuntimeError(f"Refusing to change an unrelated autostart entry at {path}.")
+            if self._desktop_hidden_value(original) == "true":
+                return
+            updated = self._set_desktop_hidden(original)
+            installed_mode = path.stat().st_mode & 0o777
+        else:
+            original = ""
+            updated = fallback.decode("utf-8")
+            installed_mode = mode
+
+        old_record = self.managed.get(str(path))
+        initial = old_record.get("initial", {"exists": False}) if old_record else self._initial_snapshot(path)
+        self._snapshot_once(path)
+        self.output(f"Install CachyOS Hello autostart suppression: {path}")
+        if not self.dry_run:
+            atomic_write(path, updated.encode("utf-8"), installed_mode)
+        self.managed[str(path)] = {
+            "kind": "merge",
+            "mergeRole": "desktop-hidden",
+            "role": "CachyOS Hello autostart suppression",
+            "mergeExpected": updated,
+            "initial": initial,
+        }
+        self.changed.append(str(path))
 
     def _save_manifest(self) -> None:
         if self.dry_run:
@@ -1451,6 +1525,10 @@ class SparrowInstaller:
                         continue
                 elif role == "desktop-hidden":
                     initial = record.get("initial", {})
+                    if not initial.get("exists") and current == record.get("mergeExpected"):
+                        if not self.dry_run:
+                            remove_path(path)
+                        continue
                     original = ""
                     backup = initial.get("backup")
                     if initial.get("type") == "file" and backup:

@@ -43,6 +43,7 @@
     {"source": "fish/config.fish", "destination": "$XDG_CONFIG_HOME/fish/config.fish", "category": "A", "dependencies": ["fish", "starship"], "generation": null},
     {"source": "starship/starship.toml", "destination": "$XDG_CONFIG_HOME/starship.toml", "category": "A", "dependencies": ["starship"], "generation": null},
     {"source": "gtk/settings.ini", "destination": "$XDG_CONFIG_HOME/gtk-3.0/settings.ini", "category": "A", "dependencies": ["gtk3", "Sparrow icon theme"], "generation": null},
+    {"source": "installer/autostart/cachyos-hello.desktop", "destination": "$XDG_CONFIG_HOME/autostart/cachyos-hello.desktop", "category": "A", "dependencies": ["CachyOS Hello (optional; already part of CachyOS)"], "generation": "merge Hidden=true into this exact CachyOS Hello autostart ID; preserve other desktop-entry fields and restore the prior Hidden value on uninstall"},
     {"source": "gtk/Sparrow/index.theme", "destination": "$XDG_DATA_HOME/themes/Sparrow/index.theme", "category": "A", "dependencies": ["gtk3", "adw-gtk-theme"], "generation": null},
     {"source": "icons/Sparrow", "destination": "$XDG_DATA_HOME/icons/Sparrow", "category": "A", "dependencies": ["GTK icon theme support"], "generation": "copy tracked icon subset; generated SVGs and cache are separate B outputs"},
     {"source": "applications/sparrow-files.desktop", "destination": "$XDG_DATA_HOME/applications/sparrow-files.desktop", "category": "A", "dependencies": ["thunar", "Sparrow GTK theme"], "generation": null},

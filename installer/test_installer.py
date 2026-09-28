@@ -93,10 +93,10 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(installer.install(), 0)
         appearance = (self.paths.config / "niri/sparrow/appearance.kdl").read_text()
         self.assertRegex(appearance, r"(?m)^\s*gaps 8$")
-        self.assertRegex(appearance, r"(?m)^\s*left 8$")
-        self.assertRegex(appearance, r"(?m)^\s*right 8$")
+        self.assertRegex(appearance, r"(?m)^\s*left 0$")
+        self.assertRegex(appearance, r"(?m)^\s*right 0$")
         self.assertRegex(appearance, r"(?m)^\s*top -8$")
-        self.assertRegex(appearance, r"(?m)^\s*bottom 8$")
+        self.assertRegex(appearance, r"(?m)^\s*bottom 0$")
         self.assertIn("geometry-corner-radius 12", appearance)
         self.assertIn("clip-to-geometry true", appearance)
         self.assertIn("slowdown 1.5", appearance)
@@ -106,6 +106,43 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(self.machine["gsettings"].get("icon-theme"), "Sparrow")
         self.assertEqual(self.machine["gsettings"].get("font-name"), "Adwaita Sans 11")
         self.assertTrue((self.paths.config / "gtk-3.0/settings.ini").is_file())
+
+    def test_cachyos_hello_autostart_is_hidden_reversibly_and_only_for_that_app(self) -> None:
+        autostart = self.paths.config / "autostart"
+        autostart.mkdir(parents=True)
+        hello = autostart / "cachyos-hello.desktop"
+        original = (
+            "[Desktop Entry]\nType=Application\nName=CachyOS Hello\n"
+            "Exec=/usr/bin/cachyos-hello\nIcon=org.cachyos.hello\n"
+        )
+        hello.write_text(original)
+        unrelated = autostart / "other-app.desktop"
+        unrelated.write_text("[Desktop Entry]\nName=Other App\nExec=other-app\n")
+
+        self.assertEqual(self.installer().install(), 0)
+        installed = hello.read_text()
+        self.assertIn("Hidden=true", installed)
+        self.assertIn("Exec=/usr/bin/cachyos-hello", installed)
+        self.assertEqual(unrelated.read_text(), "[Desktop Entry]\nName=Other App\nExec=other-app\n")
+        self.assertEqual(self.installer().install(), 0)
+        self.assertEqual(hello.read_text(), installed)
+
+        self.assertEqual(self.installer().uninstall(), 0)
+        self.assertEqual(hello.read_text(), original)
+        self.assertTrue(unrelated.exists())
+
+    def test_cachyos_hello_mask_created_for_clean_home_is_removed_on_uninstall(self) -> None:
+        target = self.paths.config / "autostart/cachyos-hello.desktop"
+        self.assertEqual(self.installer().install(), 0)
+        self.assertTrue(target.is_file())
+        self.assertIn("Hidden=true", target.read_text())
+        self.assertEqual(self.installer().uninstall(), 0)
+        self.assertFalse(target.exists())
+
+    def test_missing_cachyos_hello_does_not_create_an_autostart_mask(self) -> None:
+        self.machine["cachyos_hello_autostart"] = False
+        self.assertEqual(self.installer().install(), 0)
+        self.assertFalse((self.paths.config / "autostart/cachyos-hello.desktop").exists())
 
     def test_font_validation_uses_family_while_gtk_setting_keeps_size_description(self) -> None:
         fonts = self.installer().source_manifest()["fonts"]
@@ -347,10 +384,12 @@ class InstallerTests(unittest.TestCase):
                 mapped_live_files.add(live_rel)
                 repo_text = repo_source.read_text()
                 canonical_defaults = (
-                    "    // Niri applies gaps on every window edge. Matching outer struts make\n"
-                    "    // outer spacing (strut + gap) equal inner spacing (2*gaps).\n"
+                    "    // One Niri gap supplies both the inner seam and the three unobstructed\n"
+                    "    // outer edges. 8 logical px is a clean 10 physical-pixel baseline\n"
+                    "    // at the reference output's 1.25 scale. The negative top strut cancels\n"
+                    "    // Niri's top gap so the pill's exclusive zone supplies that same gap.\n"
                     "    gaps 8\n"
-                    "    struts {\n        left 8\n        right 8\n        top -8\n        bottom 8\n    }"
+                    "    struts {\n        left 0\n        right 0\n        top -8\n        bottom 0\n    }"
                 )
                 live_struts = (
                     "    // Default global spacing; Sparrow Look stores user overrides separately.\n"
@@ -367,8 +406,12 @@ class InstallerTests(unittest.TestCase):
                     "animations {\n    slowdown 1.5\n}\n",
                     "",
                 )
-                self.assertIn("gaps 6", (live_home / ".config/niri/sparrow/user-appearance.kdl").read_text())
-                self.assertIn("top -6", (live_home / ".config/niri/sparrow/user-appearance.kdl").read_text())
+                user_appearance = (live_home / ".config/niri/sparrow/user-appearance.kdl").read_text()
+                self.assertIn("gaps 8", user_appearance)
+                self.assertIn("left 0", user_appearance)
+                self.assertIn("right 0", user_appearance)
+                self.assertIn("top -8", user_appearance)
+                self.assertIn("bottom 0", user_appearance)
                 self.assertIn("geometry-corner-radius 12", (live_home / ".config/niri/sparrow/user-appearance.kdl").read_text())
                 self.assertIn("slowdown 1.5", (live_home / ".config/niri/sparrow/user-appearance.kdl").read_text())
                 self.assertEqual(normalized, live_source.read_text(), item["live"])

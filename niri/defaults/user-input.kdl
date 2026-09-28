@@ -4,5 +4,8 @@ input {
         repeat-rate 25
         repeat-delay 600
     }
+    touchpad {
+        tap
+    }
     focus-follows-mouse
 }

@@ -27,10 +27,7 @@ Singleton {
     property bool vibranceAvailable: false
     property bool pendingVibranceRestore: false
 
-    /**
-     * DDC-capable monitors from `ddcutil detect`: [{ bus, label }] with label
-     * taken from the DRM connector, falling back to the I2C bus number.
-     */
+    /** DDC displays whose VCP 10 can be read, excluding sysfs backlights. */
     property var ddcMonitors: []
 
     /**
@@ -104,15 +101,6 @@ Singleton {
             Math.round(Math.max(1, Math.min(100, pct))) + "%"]);
     }
 
-    /**
-     * Parses a `ddcutil getvcp --brief` line, returning the current brightness
-     * percent or -1 when no value is present.
-     */
-    function parseBrightness(text) {
-        var m = text.match(/C\s+(\d+)\s+/);
-        return m ? parseInt(m[1], 10) : -1;
-    }
-
     Process {
         id: toolsDetect
         command: ["sh", "-c",
@@ -140,19 +128,16 @@ Singleton {
 
     Process {
         id: ddcDetect
-        command: ["sh", "-c", "ddcutil detect --brief 2>/dev/null"]
+        command: ["python3", Quickshell.shellPath("scripts/ddc_brightness_devices.py")]
         running: false
         stdout: StdioCollector {
             onStreamFinished: {
-                var mons = [];
-                var blocks = this.text.split(/\bDisplay \d+/);
-                for (var i = 0; i < blocks.length; i++) {
-                    var bus = /I2C bus:\s+\/dev\/i2c-(\d+)/.exec(blocks[i]);
-                    var conn = /DRM connector:\s+card\d+-(\S+)/.exec(blocks[i]);
-                    if (bus)
-                        mons.push({ bus: bus[1], label: conn ? conn[1] : "BUS " + bus[1] });
+                try {
+                    var result = JSON.parse(this.text || "[]");
+                    root.ddcMonitors = Array.isArray(result) ? result : [];
+                } catch (error) {
+                    root.ddcMonitors = [];
                 }
-                root.ddcMonitors = mons;
             }
         }
     }

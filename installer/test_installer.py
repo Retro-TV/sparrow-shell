@@ -32,7 +32,7 @@ class InstallerTests(unittest.TestCase):
         self.machine = {
             "os": "id=cachyos",
             "packages": set(),
-            "commands": {"sudo", "pacman", "bash", "systemd-analyze", "systemctl", "env", "gio", "udevadm", "ps"},
+            "commands": {"sudo", "pacman", "bash", "systemd-analyze", "systemctl", "env", "gio", "udevadm", "ps", "xdg-user-dir"},
             "modules": set(),
             "missing_after_install": set(),
             "existing_polkit_agent": False,
@@ -45,6 +45,7 @@ class InstallerTests(unittest.TestCase):
             "invocations": [],
             "events": [],
             "gsettings": {},
+            "pictures_dir": str(self.root / "Pictures"),
             "fontconfig": {
                 "Inter Black": "Inter Black",
                 "JetBrains Mono Nerd Font": "JetBrains Mono Nerd Font",
@@ -154,8 +155,31 @@ class InstallerTests(unittest.TestCase):
         seed = self.paths.config / "niri/sparrow/user-input.kdl"
         self.assertTrue(seed.is_file())
         self.assertIn("focus-follows-mouse", seed.read_text())
+        self.assertRegex(seed.read_text(), r"(?s)touchpad\s*\{\s*tap\s*\}")
         self.assertFalse((self.paths.config / "niri/sparrow/generated-colors.kdl").exists())
         self.assertFalse((self.paths.cache / "sparrow-shell/palette.json").exists())
+
+    def test_installer_creates_xdg_wallpaper_library_idempotently_and_preserves_user_contents(self) -> None:
+        pictures = self.root / "Localized Pictures"
+        self.machine["pictures_dir"] = str(pictures)
+        self.assertEqual(self.installer().install(), 0)
+        library = pictures / "wallpapers"
+        self.assertTrue(library.is_dir())
+        wallpaper = library / "personal.png"
+        wallpaper.write_bytes(b"user wallpaper")
+
+        self.assertEqual(self.installer().install(), 0)
+        self.assertEqual(wallpaper.read_bytes(), b"user wallpaper")
+        self.assertEqual(self.installer().uninstall(), 0)
+        self.assertEqual(wallpaper.read_bytes(), b"user wallpaper")
+
+    def test_wallpaper_library_fallback_honors_xdg_user_dirs_config(self) -> None:
+        self.machine["commands"].discard("xdg-user-dir")
+        pictures = self.root / "Images Localized"
+        self.paths.config.mkdir(parents=True)
+        (self.paths.config / "user-dirs.dirs").write_text('XDG_PICTURES_DIR="$HOME/Images Localized"\n')
+        self.installer()._ensure_wallpaper_library()
+        self.assertTrue((pictures / "wallpapers").is_dir())
 
     def test_full_temporary_home_install_then_real_wallpaper_bootstrap(self) -> None:
         required_sources = (
@@ -462,6 +486,7 @@ class InstallerTests(unittest.TestCase):
     def test_user_input_seed_is_created_once_and_keeps_user_edits_on_update_and_uninstall(self) -> None:
         self.assertEqual(self.installer().install(), 0)
         target = self.paths.config / "niri/sparrow/user-input.kdl"
+        self.assertIn("tap", target.read_text())
         target.write_text("// user-owned\n")
         self.assertEqual(self.installer().install(), 0)
         self.assertEqual(target.read_text(), "// user-owned\n")

@@ -270,6 +270,8 @@ class SparrowInstaller:
             pass
         elif args and args[0] == "fc-match":
             stdout = self.test_machine.get("fontconfig", {}).get(args[-1], args[-1])
+        elif args and args[0] == "xdg-user-dir":
+            stdout = self.test_machine["pictures_dir"]
         else:
             raise AssertionError(f"Test runner refused to execute unmodelled host command: {args!r}")
         return subprocess.CompletedProcess(args, code, stdout if text_result else stdout.encode(), stderr if text_result else stderr.encode())
@@ -914,6 +916,44 @@ class SparrowInstaller:
             self._apply_gsettings_default("org.gnome.desktop.interface/cursor-theme", "Bibata-Modern-Ice")
             self._apply_gsettings_default("org.gnome.desktop.interface/cursor-size", 24)
 
+    def _pictures_directory(self) -> Path:
+        if self._which("xdg-user-dir") is not None:
+            try:
+                result = self._command(["xdg-user-dir", "PICTURES"])
+                candidate = Path(result.stdout.strip())
+                if result.returncode == 0 and candidate.is_absolute():
+                    return candidate
+            except OSError:
+                pass
+
+        # If xdg-user-dir is unavailable, honor its standard config file
+        # without sourcing/evaluating shell text from user-dirs.dirs.
+        user_dirs = self.paths.config / "user-dirs.dirs"
+        try:
+            for line in user_dirs.read_text(encoding="utf-8").splitlines():
+                match = re.match(r"^\s*XDG_PICTURES_DIR=(.*?)\s*$", line)
+                if not match:
+                    continue
+                value = match.group(1)
+                if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+                    value = value[1:-1]
+                value = value.replace("${HOME}", str(self.paths.home)).replace("$HOME", str(self.paths.home))
+                if "$" not in value:
+                    candidate = Path(value)
+                    if candidate.is_absolute():
+                        return candidate
+        except OSError:
+            pass
+        return self.paths.home / "Pictures"
+
+    def _ensure_wallpaper_library(self) -> None:
+        directory = self._pictures_directory() / "wallpapers"
+        try:
+            directory.mkdir(parents=True, exist_ok=True)
+            self.output(f"Wallpaper library ready: {directory} (user content; not installer-owned).")
+        except OSError as error:
+            self.output(f"Could not create the wallpaper library at {directory}; Sparrow will create it when first used: {error}")
+
     def _restore_gsettings_default(self, key: str, record: dict) -> None:
         available, current = self._gsettings_user_value(key)
         if not available:
@@ -1261,6 +1301,7 @@ class SparrowInstaller:
             self.output("[5/6] Verifying the installed Niri configuration")
             self._validate_installed_niri()
             self.output("[6/6] Enabling session integration and saving installer state")
+            self._ensure_wallpaper_library()
             self._activate_units()
             self._save_manifest()
         except KeyboardInterrupt:

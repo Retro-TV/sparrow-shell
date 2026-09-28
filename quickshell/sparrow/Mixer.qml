@@ -505,7 +505,7 @@ PillSurface {
                 required property var modelData
                 required property int index
 
-                property int pct: 75
+                property int pct: modelData.brightness
                 property real pendingPct: -1
 
                 width: faderRow.colW
@@ -531,21 +531,6 @@ PillSurface {
                     }
                 }
 
-                Process {
-                    id: brRead
-                    command: ["sh", "-c",
-                        'command -v ddcutil >/dev/null 2>&1 || exit 0; '
-                        + 'exec timeout 3 ddcutil getvcp 10 --bus "$1" --brief 2>/dev/null',
-                        "sh", brFader.modelData.bus]
-                    running: true
-                    stdout: StdioCollector {
-                        onStreamFinished: {
-                            var v = Devices.parseBrightness(this.text);
-                            if (v >= 0)
-                                brFader.pct = v;
-                        }
-                    }
-                }
             }
         }
 

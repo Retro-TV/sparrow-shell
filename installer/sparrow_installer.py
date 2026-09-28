@@ -165,6 +165,8 @@ class SparrowInstaller:
             "invocations": [],
             "events": [],
         }
+        self.test_machine.setdefault("gsettings", {})
+        self.test_machine.setdefault("cachyos_hello_autostart", True)
         self.run = run or (self._test_run if testing else subprocess.run)
         self.output = output
         self.state_root = self.paths.state / "sparrow-shell" / "installer"
@@ -174,6 +176,7 @@ class SparrowInstaller:
         self.backup_root = self.state_root / "backups" / f"{stamp}-{os.getpid()}"
         self.snapshots: dict[str, dict] = {}
         self.managed: dict[str, dict] = dict(self.old.get("managed", {}))
+        self.managed_settings: dict[str, dict] = dict(self.old.get("managed_settings", {}))
         self.changed: list[str] = []
         self.conflicts: list[str] = []
         self.replace_approved: dict[str, bool] = {}
@@ -185,6 +188,7 @@ class SparrowInstaller:
         self.skipped_optional_groups: list[str] = []
         self.default_profile_skipped = False
         self.missing_manual: list[str] = []
+        self.settings_before: dict[str, str | None] = {}
 
     def _which(self, executable: str) -> str | None:
         if self.testing:
@@ -713,6 +717,182 @@ class SparrowInstaller:
             for root in (self.paths.data / "icons", Path("/usr/share/icons"), Path("/usr/local/share/icons"))
         )
 
+    def _has_cachyos_hello_skeleton_entry(self) -> bool:
+        if self.testing:
+            return bool(self.test_machine.get("cachyos_hello_autostart", True))
+        source = Path("/etc/skel/.config/autostart/cachyos-hello.desktop")
+        try:
+            return self._is_cachyos_hello_desktop(source.read_text(encoding="utf-8"))
+        except OSError:
+            return False
+
+    @staticmethod
+    def _is_cachyos_hello_desktop(content: str) -> bool:
+        section = re.search(r"(?ms)^\[Desktop Entry\]\s*\n(.*?)(?=^\[|\Z)", content)
+        if not section:
+            return False
+        values = dict(re.findall(r"(?m)^([A-Za-z][A-Za-z0-9]*)\s*=\s*(.*?)\s*$", section.group(1)))
+        exec_command = values.get("Exec", "").split("%", 1)[0].strip()
+        return values.get("Name") == "CachyOS Hello" and exec_command == "/usr/bin/cachyos-hello"
+
+    @staticmethod
+    def _desktop_hidden_value(content: str) -> str | None:
+        section = re.search(r"(?ms)^\[Desktop Entry\]\s*\n(.*?)(?=^\[|\Z)", content)
+        if not section:
+            return None
+        match = re.search(r"(?m)^Hidden\s*=\s*(.*?)\s*$", section.group(1))
+        return match.group(1).lower() if match else None
+
+    @staticmethod
+    def _merge_desktop_hidden(content: str) -> str:
+        if not content:
+            return "[Desktop Entry]\nHidden=true\n"
+        section = re.search(r"(?ms)^\[Desktop Entry\]\s*\n(.*?)(?=^\[|\Z)", content)
+        if not section:
+            return content.rstrip() + "\n\n[Desktop Entry]\nHidden=true\n"
+        match = re.search(r"(?m)^Hidden\s*=.*$", section.group(1))
+        if match:
+            updated = section.group(1)[:match.start()] + "Hidden=true" + section.group(1)[match.end():]
+        else:
+            updated = section.group(1).rstrip("\n") + "\nHidden=true\n"
+        return content[:section.start(1)] + updated + content[section.end(1):]
+
+    def _icon_theme_user_value(self) -> tuple[bool, str | None]:
+        if self.testing:
+            return True, self.test_machine.setdefault("gsettings", {}).get("icon-theme")
+        if self.paths.home != Path.home():
+            return False, None
+        try:
+            import gi
+            gi.require_version("Gio", "2.0")
+            from gi.repository import Gio
+            settings = Gio.Settings.new("org.gnome.desktop.interface")
+            variant = settings.get_user_value("icon-theme")
+            return True, variant.unpack() if variant is not None else None
+        except Exception as error:
+            self.output(f"Could not inspect the GTK icon-theme user preference; leaving it unchanged: {error}")
+            return False, None
+
+    def _set_icon_theme_user_value(self, value: str | None) -> bool:
+        if self.testing:
+            values = self.test_machine.setdefault("gsettings", {})
+            if value is None:
+                values.pop("icon-theme", None)
+            else:
+                values["icon-theme"] = value
+            return True
+        if self.paths.home != Path.home():
+            return False
+        try:
+            import gi
+            gi.require_version("Gio", "2.0")
+            from gi.repository import Gio
+            settings = Gio.Settings.new("org.gnome.desktop.interface")
+            if value is None:
+                settings.reset("icon-theme")
+                return True
+            return bool(settings.set_string("icon-theme", value))
+        except Exception as error:
+            self.output(f"Could not update GTK icon-theme preference: {error}")
+            return False
+
+    def _apply_sparrow_icon_default(self) -> None:
+        key = "org.gnome.desktop.interface/icon-theme"
+        if not (self.paths.data / "icons/Sparrow/index.theme").is_file():
+            self.output("Sparrow icon theme files are unavailable; preserving the current GTK icon-theme preference.")
+            return
+        available, current = self._icon_theme_user_value()
+        if not available:
+            return
+        previous = self.managed_settings.get(key)
+        if previous:
+            if current == previous.get("installed"):
+                return
+            # A later user choice relinquishes Sparrow ownership permanently.
+            self.managed_settings.pop(key, None)
+            self.output(f"Preserved the user's GTK icon-theme choice: {current}")
+            return
+        if current is not None:
+            self.output(f"Preserved explicit GTK icon-theme choice: {current}")
+            return
+        if self.dry_run:
+            self.output("Would set the unset GTK icon-theme preference to Sparrow (colors remain globally Adwaita).")
+            return
+        if self._set_icon_theme_user_value("Sparrow"):
+            self.settings_before[key] = current
+            self.managed_settings[key] = {"previous": current, "installed": "Sparrow"}
+            self.output("Selected Sparrow icons for this fresh user; global GTK colors remain unchanged.")
+
+    def _restore_icon_default(self, key: str, record: dict) -> None:
+        available, current = self._icon_theme_user_value()
+        if not available:
+            return
+        if current != record.get("installed"):
+            self.output(f"Preserved changed GTK icon-theme preference during restore: {current}")
+            return
+        self._set_icon_theme_user_value(record.get("previous"))
+
+    @classmethod
+    def _restore_desktop_hidden(cls, current: str, original: str) -> str:
+        if cls._desktop_hidden_value(current) != "true":
+            return current
+        original_section = re.search(r"(?ms)^\[Desktop Entry\]\s*\n(.*?)(?=^\[|\Z)", original)
+        original_hidden = None
+        if original_section:
+            match = re.search(r"(?m)^Hidden\s*=.*$", original_section.group(1))
+            if match:
+                original_hidden = match.group(0)
+        section = re.search(r"(?ms)^\[Desktop Entry\]\s*\n(.*?)(?=^\[|\Z)", current)
+        if not section:
+            return current
+        match = re.search(r"(?m)^Hidden\s*=.*(?:\n|$)", section.group(1))
+        if not match:
+            return current
+        replacement = (original_hidden + "\n") if original_hidden else ""
+        body = section.group(1)[:match.start()] + replacement + section.group(1)[match.end():]
+        result = current[:section.start(1)] + body + current[section.end(1):]
+        if not original:
+            remaining = re.sub(r"(?m)^\[Desktop Entry\]\s*$", "", result)
+            if not remaining.strip():
+                return ""
+        return result
+
+    def _apply_cachyos_hello_override(self, path: Path) -> None:
+        current = path.read_text(encoding="utf-8") if path.is_file() else ""
+        old_record = self.managed.get(str(path))
+        if old_record and old_record.get("mergeRole") == "desktop-hidden":
+            if not path.exists():
+                self.managed.pop(str(path), None)
+                self.output(f"Preserved the user's removal of the CachyOS Hello override: {path}")
+                return
+            if current and self._desktop_hidden_value(current) != "true":
+                self.managed.pop(str(path), None)
+                self.output(f"Preserved user-edited CachyOS Hello autostart: {path}")
+                return
+        elif current:
+            if not self._is_cachyos_hello_desktop(current):
+                self.output(f"Preserved unrelated user autostart with the CachyOS Hello desktop ID: {path}")
+                return
+            # Explicit Hidden=false is treated as a user choice to keep it.
+            if self._desktop_hidden_value(current) == "false":
+                self.output(f"Preserved explicit CachyOS Hello autostart choice: {path}")
+                return
+            if self._desktop_hidden_value(current) == "true":
+                return
+        wanted = self._merge_desktop_hidden(current)
+        if wanted == current:
+            return
+        self._snapshot_once(path)
+        initial = self._initial_snapshot(path) if old_record is None else old_record.get("initial", {"exists": False})
+        if not self.dry_run:
+            atomic_write(path, wanted.encode())
+        self.managed[str(path)] = {
+            "kind": "merge", "role": "CachyOS Hello autostart suppression",
+            "initial": initial, "mergeRole": "desktop-hidden", "mergeExpected": "Hidden=true",
+        }
+        self.changed.append(str(path))
+        self.output("Suppressed only CachyOS Hello through the Sparrow user's XDG autostart override.")
+
     def _niri_directives_to_add(self, existing: str) -> list[str]:
         expected = self._niri_expected_directives()
         noncomment = [line.strip() for line in existing.splitlines() if line.strip() and not line.lstrip().startswith("//")]
@@ -879,6 +1059,9 @@ class SparrowInstaller:
             (self.repo / "applications/sparrow-files.desktop", self.paths.data / "applications/sparrow-files.desktop", "Sparrow Files desktop entry"),
             (self.repo / "hyprlock/hyprlock.conf", self.paths.config / "sparrow/hyprlock.conf", "optional Hyprlock fallback config"),
         ]
+        if self._has_cachyos_hello_skeleton_entry():
+            hello_path = self.paths.config / "autostart/cachyos-hello.desktop"
+            plan.append((hello_path, b"[Desktop Entry]\nHidden=true\n", "CachyOS Hello autostart suppression", 0o644))
         if self.bibata_available:
             user_files.append((self.repo / "environment.d/90-cursor.conf", self.paths.config / "environment.d/90-cursor.conf", "recommended cursor defaults"))
         for source, destination, label in user_files:
@@ -936,6 +1119,8 @@ class SparrowInstaller:
                     self.write_file(path, content, mode=mode, role=role)
             elif role == "Sparrow portal route merge":
                 self.write_merged_file(path, content, role=role, merge_role="portal")
+            elif role == "CachyOS Hello autostart suppression":
+                self._apply_cachyos_hello_override(path)
             else:
                 self.write_file(path, content, mode=mode, role=role)
 
@@ -947,6 +1132,7 @@ class SparrowInstaller:
             "schema": SCHEMA,
             "installed_at": datetime.now(timezone.utc).isoformat(),
             "managed": self.managed,
+            "managed_settings": self.managed_settings,
             "last_backup": str(self.backup_root),
             "changed": self.changed,
             "enabled_by_sparrow": sorted(self.enabled_by_sparrow),
@@ -962,6 +1148,10 @@ class SparrowInstaller:
                 self.output(f"Rollback warning: could not undo user-unit enablement: {error}")
         for key, saved in reversed(list(self.snapshots.items())):
             restore_snapshot(Path(key), saved)
+        for key, previous in self.settings_before.items():
+            available, current = self._icon_theme_user_value()
+            if available and current == "Sparrow":
+                self._set_icon_theme_user_value(previous)
         if newly_enabled and not self.testing and not self.dry_run:
             self._command(["systemctl", "--user", "daemon-reload"])
 
@@ -1027,6 +1217,7 @@ class SparrowInstaller:
             self._apply_plan(plan)
             self._copy_tree_files(self.repo / "gtk/Sparrow", self.paths.data / "themes/Sparrow", "Sparrow GTK scaffold", preserve_generated=True)
             self._copy_tree_files(self.repo / "icons/Sparrow", self.paths.data / "icons/Sparrow", "Sparrow icon theme", preserve_generated=True)
+            self._apply_sparrow_icon_default()
             notices = self.paths.data / "sparrow-shell/licenses"
             legal_sources = [
                 ("LICENSE", self.repo / "LICENSE"),
@@ -1171,6 +1362,17 @@ class SparrowInstaller:
                         if not self.dry_run:
                             remove_path(path)
                         continue
+                elif role == "desktop-hidden":
+                    initial = record.get("initial", {})
+                    original = ""
+                    backup = initial.get("backup")
+                    if initial.get("type") == "file" and backup:
+                        original = Path(backup).read_text(encoding="utf-8")
+                    current = self._restore_desktop_hidden(current, original)
+                    if not initial.get("exists") and not current.strip():
+                        if not self.dry_run:
+                            remove_path(path)
+                        continue
                 else:
                     preserved.append(str(path))
                     continue
@@ -1199,6 +1401,8 @@ class SparrowInstaller:
         if defer_runtime_cleanup:
             self.output("Sparrow is still active. Its runtime and entry point were preserved; run ./uninstall.sh again after logging out to finish cleanup.")
         if not self.dry_run:
+            for key, record in self.old.get("managed_settings", {}).items():
+                self._restore_icon_default(key, record)
             if preserved:
                 self.output("Preserved user-modified/in-use paths: " + ", ".join(dict.fromkeys(preserved)))
             # Backups remain available for manual recovery; only the active ownership manifest is removed.

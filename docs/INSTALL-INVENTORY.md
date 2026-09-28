@@ -199,6 +199,7 @@ merge existing user config rather than copying whole directories over them.
 | `environment.d/90-cursor.conf` | `~/.config/environment.d/90-cursor.conf` | Recommended Sparrow environment defaults | Install only when Bibata Modern Ice files are detected; preserve existing cursor environment/user choice |
 | `gtk/Sparrow/**` | `$XDG_DATA_HOME/themes/Sparrow/` | Sparrow static theme scaffold | Install tracked CSS/theme metadata; generated colors are separate |
 | `icons/Sparrow/**`, `icons/NOTICE.md`, `icons/PAPIRUS-LICENSE.txt` | `$XDG_DATA_HOME/icons/Sparrow/` and license records | Sparrow theme files plus third-party subset | Deploy exact subset with GPL notice; generated palette recolors selected icons |
+| CachyOS Hello skeleton entry | `$XDG_CONFIG_HOME/autostart/cachyos-hello.desktop` | Narrow distro integration | Only when `/etc/skel` contains the verified CachyOS Hello entry, merge `Hidden=true`; preserve other autostarts and restore only this key on uninstall |
 | `applications/sparrow-files.desktop` | `$XDG_DATA_HOME/applications/sparrow-files.desktop` | Sparrow-owned desktop handler | Install optionally; MIME default change requires explicit user approval |
 | `hyprlock/hyprlock.conf` | `~/.config/sparrow/hyprlock.conf` (fallback only) | Optional Sparrow baseline; active config user-owned | Offer only if fallback retained and destination absent; never replace personal Hyprlock config |
 | `quickshell/sparrow/wallpapers/default.png` | remains inside Sparrow runtime tree | Sparrow-owned redistributable default asset | Install as read-only fallback; never copy over the user's wallpaper library |
@@ -259,7 +260,7 @@ configuration.
 | GTK portal per-service override | Recommended for Sparrow-themed chooser | Back up conflicts; no global GTK_THEME |
 | Polkit agent | Use an existing user agent, or offer `lxqt-policykit` when none is found | Never remove/disable an existing agent; skip Sparrow unit if an agent/autostart already owns the role |
 | `inode/directory` default to Sparrow Files | Optional | Must ask; current default is a user preference and may conflict with another file manager |
-| GSettings icon/cursor/theme defaults | Recommended | Must ask/preserve non-default current values; don't globally force `GTK_THEME=Sparrow` |
+| GSettings icon-theme default | Recommended Sparrow icon choice | Set `Sparrow` only when no user value exists; preserve explicit choices and restore only an unchanged installer-owned value. Does not change global GTK colors or set `GTK_THEME` |
 | Cursor environment/Niri cursor settings | Recommended portable defaults | Preserve existing XCURSOR and cursor selection unless user opts in |
 | Font and icon cache refresh | Recommended when deploying fonts/icons | Use installed package fonts or tracked assets; refresh caches without changing preferences |
 | NetworkManager / Bluetooth services | Optional system services | Must ask before enabling; avoid conflict with a user's existing network stack or Bluetooth policy |

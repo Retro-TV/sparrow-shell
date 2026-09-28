@@ -8,6 +8,8 @@ layout {
     struts {
         left 12
         right 12
+        // Balance the pill's top gap against the app gap at the default scale.
+        top -6
         bottom 12
     }
 
@@ -76,6 +78,12 @@ recent-windows {
         padding 6
         corner-radius 12
     }
+}
+
+// Product window shape default; the later user-appearance include can override it.
+window-rule {
+    geometry-corner-radius 12
+    clip-to-geometry true
 }
 
 // Sparrow Look writes user overrides here; never track that generated file.

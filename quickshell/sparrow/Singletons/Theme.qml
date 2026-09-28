@@ -52,7 +52,10 @@ Singleton {
     readonly property real shadowOpacity: 0.5
     /** Snapshot of installed system families for the font picker and font validation. */
     property var fontFamilies: Qt.fontFamilies()
-    readonly property string font: (Flags.uiFont.length > 0 && fontFamilies.indexOf(Flags.uiFont) >= 0) ? Flags.uiFont : "Inter"
+    // Inter Black is the product default used by Sparrow's canonical desktop.
+    // Keep a saved font choice when installed; an empty/missing preference on a
+    // fresh account (or after Reset in Look) resolves to the same default.
+    readonly property string font: (Flags.uiFont.length > 0 && fontFamilies.indexOf(Flags.uiFont) >= 0) ? Flags.uiFont : "Inter Black"
 
     /**
      * MPRIS trackArtists arrives as a JS array from some players and as a

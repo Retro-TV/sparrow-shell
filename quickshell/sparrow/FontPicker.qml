@@ -9,7 +9,7 @@ import "Singletons"
  * rendering its own name as a live preview so the user reads the shape before
  * picking. A click writes the family to Flags.uiFont, which Theme.font reads back
  * through a validated ternary so the whole shell re-renders at once; the leading
- * reset row writes "" to fall back to the system-installed Inter default. The
+ * reset row writes "" to fall back to the system-installed Inter Black default. The
  * current pick carries the vermilion tint. Reached from Appearance and morphs
  * back to it on the back chevron or an empty click.
  */
@@ -30,7 +30,7 @@ SettingsSurface {
      */
     property point lastPointer: Qt.point(-1, -1)
 
-    readonly property string resetLabel: "System default (Inter)"
+    readonly property string resetLabel: "Sparrow default (Inter Black)"
 
     /**
      * The only Noto families kept in the list. Noto ships hundreds of per-script

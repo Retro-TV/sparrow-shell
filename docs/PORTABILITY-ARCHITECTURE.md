@@ -51,13 +51,16 @@ workspace-shadow disablement, Firefox PiP floating, the WezTerm width
 workaround, normal dynamic-workspace keybinds, and the user input bridge. No
 output names, resolutions, scales, focus-at-startup choices, hardware input
 settings, generated Matugen colors, or per-user Look/Input/Keybind edits are
-included.
+included. Portable Look defaults now also include the established top strut,
+12px clipped window corners, and 1.5 animation slowdown captured from the
+canonical desktop's prior user override.
 
 On fresh installation, the root also includes the recommended cursor fragment
 only when the Bibata Modern Ice asset is detected; otherwise the managed
 fragment is comment-only and no XCursor environment override is written. The
-root preserves the hotkey overlay startup choice, no-CSD preference, screenshot
-path, and Niri's default animation feel.
+root preserves the hotkey overlay startup choice, no-CSD preference, and
+screenshot path. Sparrow's established animation pace is explicitly set to
+`slowdown 1.5`.
 App binds currently name Kitty, Thunar, and Firefox; those remain configurable
 user application choices and must be installed or changed by the user.
 
@@ -76,8 +79,8 @@ Niri cursor choices rather than force these recommended
 fresh-install defaults over them. The GTK file chooser follows the GTK cursor
 preference; Qt/Wayland clients use the standard XCursor environment. The
 recommended cursor is Bibata Modern Ice at 24, selected only if installed.
-Sparrow's UI uses Inter (this
-user's saved preference is Inter Black); Kitty uses JetBrains Mono Nerd Font.
+Sparrow's UI defaults to Inter Black, matching its canonical desktop; a saved
+font choice remains user state. Kitty uses JetBrains Mono Nerd Font.
 The Quickshell lockscreen uses its bundled Outfit Black font. No separate
 decorative-glyph font or CJK glyph setting is part of the runtime.
 
@@ -92,7 +95,11 @@ Existing ScreenCast, RemoteDesktop, Screenshot,
 Secret, and other routes are preserved. The recommended default profile
 includes `xdg-desktop-portal-gnome` for Niri's portal screencasting path.
 Sparrow's `GTK_THEME=Sparrow` remains a systemd user drop-in for
-`xdg-desktop-portal-gtk.service` only; it is not exported globally.
+`xdg-desktop-portal-gtk.service` only; it is not exported globally. The
+installer selects the Sparrow icon theme only when no explicit GSettings icon
+theme exists, and restores that preference on uninstall only while it remains
+unchanged. This selects icons, not GTK colors; global GTK colors remain the
+user's choice.
 
 Niri's graphical session needs a Polkit authentication agent in addition to
 `polkitd`. Sparrow recommends the small official-Arch `lxqt-policykit`
@@ -194,5 +201,9 @@ after deployment and only for unit files Sparrow installed successfully; they
 are not started/restarted by install. `uninstall.sh` disables only units whose
 enablement Sparrow recorded, restores unchanged managed files, preserves user
 edits and shared packages, and leaves backups available.
+On CachyOS, when `/etc/skel` contains the verified CachyOS Hello autostart
+entry, the installer merges `Hidden=true` into only the user's matching
+`autostart/cachyos-hello.desktop`; package files and unrelated autostarts are
+untouched. Uninstall restores that key without discarding later unrelated edits.
 Temporary-XDG tests do not replace a real clean-user/VM graphical acceptance
 test; see the root README and `installer/test_installer.py`.

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 from pathlib import Path
 import subprocess
@@ -41,6 +42,7 @@ class InstallerTests(unittest.TestCase):
             "interrupt_at_prompt": False,
             "invocations": [],
             "events": [],
+            "gsettings": {},
         }
 
     def tearDown(self) -> None:
@@ -92,6 +94,98 @@ class InstallerTests(unittest.TestCase):
         self.assertLess(package_event, units_validate)
         self.assertTrue({"qs", "awww", "awww-daemon", "matugen", "lxqt-policykit-agent"}.issubset(self.machine["commands"]))
         self.assertTrue((self.paths.config / "systemd/user/sparrow-polkit-agent.service").is_file())
+
+    def test_fresh_defaults_include_canonical_niri_font_icon_and_welcome_behavior(self) -> None:
+        installer = self.installer()
+        self.assertEqual(installer.install(), 0)
+        appearance = (self.paths.config / "niri/sparrow/appearance.kdl").read_text()
+        self.assertRegex(appearance, r"(?m)^\s*top -6$")
+        rules = (self.paths.config / "niri/sparrow/appearance.kdl").read_text()
+        self.assertIn("geometry-corner-radius 12", rules)
+        self.assertIn("clip-to-geometry true", rules)
+        entry = (self.paths.config / "niri/sparrow/entry.kdl").read_text()
+        self.assertIn("slowdown 1.5", entry)
+        self.assertLess(entry.index("slowdown 1.5"), entry.index('include "appearance.kdl"'))
+        self.assertLess(rules.index("geometry-corner-radius 12"), rules.index('include optional=true "user-appearance.kdl"'))
+        theme = (REPO / "quickshell/sparrow/Singletons/Theme.qml").read_text()
+        self.assertIn(': "Inter Black"', theme)
+        self.assertEqual(self.machine["gsettings"].get("icon-theme"), "Sparrow")
+        hello = self.paths.config / "autostart/cachyos-hello.desktop"
+        self.assertEqual(hello.read_text(), "[Desktop Entry]\nHidden=true\n")
+
+    def test_blank_home_bootstrap_has_wallpaper_before_shell_without_seeding_generated_state(self) -> None:
+        installer = self.installer()
+        self.assertEqual(installer.install(), 0)
+        runtime = self.paths.data / "sparrow-shell/runtime"
+        self.assertTrue((runtime / "wallpapers/default.png").is_file())
+        wallpaper_unit = (self.paths.config / "systemd/user/sparrow-wallpaper.service").read_text()
+        shell_unit = (self.paths.config / "systemd/user/sparrow-shell.service").read_text()
+        self.assertIn("Before=graphical-session.target", wallpaper_unit)
+        self.assertIn("ExecStartPost=/usr/bin/env SPARROW_AWWW_DAEMON_MANAGED=1", wallpaper_unit)
+        self.assertIn("wallpaper.sh init", wallpaper_unit)
+        self.assertIn("After=graphical-session.target", shell_unit)
+        self.assertIn('include "sparrow/entry.kdl"', (self.paths.config / "niri/config.kdl").read_text())
+        wallpaper_script = (runtime / "scripts/wallpaper.sh").read_text()
+        self.assertIn('default_wallpaper="$helper/../wallpapers/default.png"', wallpaper_script)
+        self.assertFalse((self.paths.config / "niri/sparrow/generated-colors.kdl").exists())
+        self.assertFalse((self.paths.cache / "sparrow-shell/palette.json").exists())
+
+    def test_explicit_icon_theme_and_cachyos_hello_choice_are_preserved(self) -> None:
+        self.machine["gsettings"]["icon-theme"] = "Adwaita"
+        hello = self.paths.config / "autostart/cachyos-hello.desktop"
+        hello.parent.mkdir(parents=True)
+        hello.write_text("[Desktop Entry]\nType=Application\nName=CachyOS Hello\nExec=/usr/bin/cachyos-hello\nHidden=false\n")
+        installer = self.installer()
+        self.assertEqual(installer.install(), 0)
+        self.assertEqual(self.machine["gsettings"]["icon-theme"], "Adwaita")
+        self.assertIn("Hidden=false", hello.read_text())
+
+    def test_icon_preference_converges_only_while_sparrow_still_owns_it(self) -> None:
+        self.assertEqual(self.installer().install(), 0)
+        self.machine["gsettings"]["icon-theme"] = "Papirus"
+        self.assertEqual(self.installer().install(), 0)
+        self.assertEqual(self.machine["gsettings"]["icon-theme"], "Papirus")
+        manifest = json.loads((self.paths.state / "sparrow-shell/installer/manifest.json").read_text())
+        self.assertNotIn("org.gnome.desktop.interface/icon-theme", manifest.get("managed_settings", {}))
+
+    def test_welcome_override_restore_preserves_later_unrelated_edits(self) -> None:
+        target = self.paths.config / "autostart/cachyos-hello.desktop"
+        target.parent.mkdir(parents=True)
+        original = "[Desktop Entry]\nType=Application\nName=CachyOS Hello\nExec=/usr/bin/cachyos-hello\nComment=hello\n"
+        target.write_text(original)
+        self.assertEqual(self.installer().install(), 0)
+        self.assertIn("Hidden=true", target.read_text())
+        target.write_text(target.read_text().replace("Comment=hello", "Comment=my note"))
+        self.assertEqual(self.installer().install(), 0)
+        self.assertIn("Comment=my note", target.read_text())
+        self.assertIn("Hidden=true", target.read_text())
+        self.assertEqual(self.installer().uninstall(), 0)
+        self.assertNotIn("Hidden=", target.read_text())
+        self.assertIn("Comment=my note", target.read_text())
+
+    def test_welcome_override_does_not_recreate_user_deleted_entry_on_update(self) -> None:
+        target = self.paths.config / "autostart/cachyos-hello.desktop"
+        self.assertEqual(self.installer().install(), 0)
+        target.unlink()
+        self.assertEqual(self.installer().install(), 0)
+        self.assertFalse(target.exists())
+
+    def test_managed_niri_fragment_updates_on_convergence(self) -> None:
+        self.assertEqual(self.installer().install(), 0)
+        target = self.paths.config / "niri/sparrow/appearance.kdl"
+        manifest_path = self.paths.state / "sparrow-shell/installer/manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        record = manifest["managed"][str(target)]
+        old = target.read_text()
+        record["sha256"] = hashlib.sha256(old.encode()).hexdigest()
+        manifest_path.write_text(json.dumps(manifest))
+        target.write_text(old.replace("top -6", "top 0"))
+        # Model an installer-owned file from the previous release: its recorded
+        # hash, not the current contents, identifies it as safe to converge.
+        manifest["managed"][str(target)]["sha256"] = hashlib.sha256(target.read_bytes()).hexdigest()
+        manifest_path.write_text(json.dumps(manifest))
+        self.assertEqual(self.installer().install(), 0)
+        self.assertIn("top -6", target.read_text())
 
     def test_systemd_validation_fails_if_a_required_binary_remains_missing_after_pacman(self) -> None:
         self.machine["missing_after_install"].add("qs")

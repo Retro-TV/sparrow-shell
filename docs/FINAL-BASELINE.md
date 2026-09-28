@@ -4,7 +4,8 @@ This document records the repository and the active development machine as
 audited on 2026-09-27. It describes the implementation as it exists; it is not
 an installer, a promise that every optional feature is available everywhere,
 or a replacement for user configuration. Do not treat the live home directory
-as a clean-install template.
+as a clean-install template. Installer v1 is implemented in this working
+baseline; fresh graphical installation still requires VM/separate-user QA.
 
 ## 1. What Sparrow is
 
@@ -381,9 +382,9 @@ PAM failures retain the session lock. A dead Quickshell lock client should not
 unlock a conforming Niri session; recovery is a security/compositor behavior,
 not tested by this audit.
 
-## 14. Future installer boundaries (not implemented)
+## 14. Installer v1 boundary and remaining acceptance
 
-The installer must eventually:
+Installer v1 is intended to retain these conservative boundaries:
 
 1. detect Niri/XDG/session availability and show a non-mutating plan;
 2. separate core and optional packages, ask before package/AUR operations, and
@@ -403,7 +404,13 @@ The installer must eventually:
 10. validate staged config and QML before enabling services, without restarting
     Niri or logging out as an install side effect.
 
-No installer or setup wizard exists in this baseline.
+Installer v1 is implemented by `install.sh`, `uninstall.sh`, and
+`installer/sparrow_installer.py`. It does not install a greeter, automatically
+install AUR packages, remove shared packages, seed machine state, or start
+services in the current session. The temporary-root test suite covers fresh
+install, repeat install, existing Niri/portal files, conflict preservation,
+ownership-aware restore, and user edits made after install. A graphical
+clean-user or VM login/install test remains outstanding.
 
 ## 15. Proposed isolated fresh-default audit
 

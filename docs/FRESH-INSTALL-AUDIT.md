@@ -4,6 +4,8 @@ Audit date: 2026-09-27. This is a first-run investigation with follow-up
 verification of Dynamic palette defaults and the built-in wallpaper picker,
 plus one narrow QML null guard. It is not an installer and does not replace a
 clean graphical VM test. State/palette experiments used temporary directories.
+The audit results below remain historical; Installer v1 status is recorded at
+the end of this document.
 The active wallpaper, Niri config, services, caches, preferences and wallpaper
 selection were left alone.
 
@@ -377,3 +379,10 @@ fresh-state shortcut.
   shell syntax checks, and `git diff --check` passed. `qmllint` is unavailable;
   the active Quickshell hot reload loaded the changed QML without a new
   Wallpaper/Flags/Walls error.
+
+## Installer v1 status (2026-09-28)
+
+The previously proposed installer is implemented in the repository root
+wrappers and `installer/`. Automated tests exercise install/update/restore
+logic against temporary XDG roots; they do not perform a real graphical login.
+A disposable Arch/CachyOS user or VM remains required for end-to-end acceptance.

@@ -3,28 +3,12 @@
 // existing user configuration. Generated and user-managed fragments stay out
 // of the repository and are included only when present.
 
-include "sparrow/appearance.kdl"
-// Wallpaper-generated colors intentionally come after appearance defaults.
-include optional=true "sparrow/generated-colors.kdl"
-include optional=true "sparrow/display-outputs.kdl"
-include "sparrow/window-rules.kdl"
-include "sparrow/binds.kdl"
-include optional=true "sparrow/user-binds.kdl"
-include optional=true "sparrow/display-binds.kdl"
-include "sparrow/input.kdl"
+// A single entry include lets the installer integrate Sparrow into an
+// existing user-owned config without replacing that file. Includes inside
+// sparrow/entry.kdl are relative to this managed fragment.
+include "sparrow/entry.kdl"
 
-cursor {
-    xcursor-theme "Bibata-Modern-Ice"
-    xcursor-size 24
-}
-
-hotkey-overlay {
-    skip-at-startup
-}
-
-// Prefer Niri's geometry over client-side decorations where clients permit.
-prefer-no-csd
-
-screenshot-path "~/Pictures/Screenshots/Screenshot from %Y-%m-%d %H-%M-%S.png"
-
-// Keep Niri's native scrolling-layout animation defaults.
+// Fresh-install defaults only. When merging into an existing config, keep the
+// user's own cursor and miscellaneous Niri preferences instead.
+include "sparrow/session-defaults.kdl"
+include "sparrow/cursor.kdl"

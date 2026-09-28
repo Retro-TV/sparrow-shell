@@ -1,0 +1,11 @@
+// Sparrow's portable Niri session defaults for a fresh config.
+hotkey-overlay {
+    skip-at-startup
+}
+
+// Prefer Niri's geometry over client-side decorations where clients permit.
+prefer-no-csd
+
+screenshot-path "~/Pictures/Screenshots/Screenshot from %Y-%m-%d %H-%M-%S.png"
+
+// Keep Niri's native scrolling-layout animation defaults.

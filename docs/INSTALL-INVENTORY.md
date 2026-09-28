@@ -57,8 +57,8 @@ documents `rishot` as the command and its current installer installs runtime
 files under `~/.local/share/rishot` and links `~/.local/bin/rishot`. The
 installer's source says the `rishot-git` AUR package is its primary route;
 because the README and AUR availability/maintenance need to remain current,
-the future installer should not silently clone or run a privileged upstream
-script. Recommended policy: list Rishot as an optional, separate app; offer its
+Installer v1 does not silently clone or run a privileged upstream script.
+Recommended policy: list Rishot as an optional, separate app; offer its
 upstream-supported AUR package only after explicit AUR consent, otherwise give
 the user the upstream reviewed-install instructions. Verify that the resulting
 launcher is on PATH before enabling its optional bind. Do not vendor it.
@@ -367,7 +367,7 @@ invented by the installer.
 
 This is descriptive only; no redesign decision is implied.
 
-## Basic desktop gap scan and installer blockers
+## Basic desktop gap scan and installer acceptance
 
 No clearly missing basic desktop facility was found in current source for the
 declared scope: windows/workspaces/compositor are Niri; applications come
@@ -376,13 +376,11 @@ tray, media and lock/idle are represented; portal-based directory selection,
 wallpaper, screenshots and recording exist. The key caveat is availability:
 service daemons and hardware vary and some are intentionally optional.
 
-The login manager/greeter is intentionally outside Sparrow and should be an
-explicit product choice. Other blockers before installer coding are practical
-not feature gaps: test on a clean graphical Arch/Niri account; define safe
-merge/backup behavior for existing Niri and app configs; confirm target
-Quickshell API/Qt module package set; decide exactly which default apps are
-installed vs merely bound; verify current AUR availability and user consent
-flow for Bibata/Rishot/nvibrant; exercise package absence, portal choice,
-PAM lock and multi-monitor/wallpaper startup in a disposable VM; and resolve
-whether package installation itself will be left to the user or handled only
-with explicit package-source approvals.
+The login manager/greeter remains intentionally outside Sparrow. Installer v1
+now implements the XDG runtime copy, Niri staged validation/include merge,
+FileChooser-only portal merge, package consent tiers, conflict backups,
+ownership manifest, service enablement policy, and restore command. Its exact
+automatic package lists are in `installer/package-sets.json`; AUR tools remain
+manual. Remaining acceptance is a disposable Arch/CachyOS graphical user or
+VM run, especially session startup, PAM lock, portal chooser and multi-output
+wallpaper restore. No live-session test is substituted for that check.

@@ -1,7 +1,9 @@
 # Sparrow runtime dependencies (Arch/CachyOS)
 
 This inventory is based on active QML, scripts, systemd units and the current
-Niri binds. It is a future-installer input, not a package-install command.
+Niri binds. `installer/package-sets.json` is the exact set offered by Installer
+v1; this document explains runtime rationale and dependencies not selected
+for automatic installation.
 Arch package names are shown in backticks; names marked AUR are not official
 repository packages. Core means needed for the corresponding Sparrow session
 or surface, not that every feature-specific binary must be installed for the
@@ -132,3 +134,13 @@ The only browser-related runtime work is optional wallpaper search/download.
   supplies only the GTK FileChooser preference; preserve ScreenCast,
   RemoteDesktop, Screenshot, Secret, and other backend choices. Niri's
   recommended GNOME ScreenCast backend is a separate optional capability.
+
+## Installer v1 package policy
+
+Installer v1 separates required runtime packages, replaceable default apps,
+optional feature groups, and manual-only AUR/upstream components in
+`installer/package-sets.json`. It uses pacman only after explicit consent,
+never bootstraps an AUR helper, and never removes packages during restore.
+Systemd, D-Bus, PAM, the Polkit daemon, and a graphical session are platform
+prerequisites rather than installer-owned system services; Sparrow does not
+rewrite their system configuration.

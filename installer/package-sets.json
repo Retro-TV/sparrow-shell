@@ -1,0 +1,66 @@
+{
+  "required": [
+    "niri",
+    "quickshell",
+    "python",
+    "python-pillow",
+    "bash",
+    "jq",
+    "matugen",
+    "awww",
+    "gtk3",
+    "qt6-5compat",
+    "qt6-multimedia",
+    "qt6-multimedia-ffmpeg",
+    "pipewire",
+    "wireplumber",
+    "pipewire-pulse",
+    "coreutils",
+    "findutils",
+    "grep",
+    "gawk",
+    "sed",
+    "procps-ng",
+    "util-linux",
+    "iproute2"
+  ],
+  "defaults": [
+    "kitty",
+    "fish",
+    "starship",
+    "inter-font",
+    "ttf-jetbrains-mono-nerd",
+    "thunar",
+    "tumbler",
+    "gvfs",
+    "udisks2",
+    "firefox",
+    "pavucontrol",
+    "adw-gtk-theme",
+    "xdg-desktop-portal",
+    "xdg-desktop-portal-gtk",
+    "python-gobject",
+    "xdg-utils",
+    "libnotify"
+  ],
+  "polkit_agent": "lxqt-policykit",
+  "optional": {
+    "recording": ["gpu-screen-recorder", "slurp"],
+    "video-wallpaper-and-thumbnails": ["ffmpeg"],
+    "network-bluetooth-battery": ["networkmanager", "bluez", "bluez-utils", "upower"],
+    "night-light": ["wlsunset"],
+    "audio-visualizer": ["cava"],
+    "brightness-hardware": ["brightnessctl", "ddcutil"],
+    "wallpaper-search": ["curl", "imagemagick"],
+    "hyprlock-fallback": ["hyprlock"]
+  },
+  "aur_manual": {
+    "Bibata Modern Ice cursor": "bibata-cursor-theme",
+    "Video wallpaper player": "mpvpaper",
+    "Rishot screenshot app (separate upstream project)": "rishot-git"
+  },
+  "manual_optional": {
+    "NVIDIA vibrance": "nvibrant has no Sparrow-selected official Arch package; source/package is user and driver specific.",
+    "Rishot": "Install using its upstream-supported method; Sparrow does not clone or run a remote installer."
+  }
+}

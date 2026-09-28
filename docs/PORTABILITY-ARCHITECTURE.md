@@ -1,8 +1,8 @@
 # Sparrow portability and installation architecture
 
-This is an architecture note, not an installer. No live configuration is
-managed by this document, and the files under a user's home directory are not
-copied into the repository.
+This architecture note describes the repository and Installer v1. It does not
+authorize changes to a live home directory; the installer keeps user data and
+generated state separate from portable source.
 
 ## Current runtime and ownership
 
@@ -106,11 +106,11 @@ live-development friendly. The cloned repository may live anywhere; shell
 scripts are resolved relative to the Quickshell shell root or canonical XDG
 paths, not the checkout.
 
-The three tracked user units launch through the canonical runtime root and
-their `ExecStartPre` migration is idempotent. A future installer should copy
-the unit files (not leave absolute checkout symlinks), ensure the Quickshell
-runtime path exists first, run `systemctl --user daemon-reload`, then enable
-the units for `graphical-session.target`. It must not manually start a second
+The four tracked user units launch through the canonical runtime root and
+their `ExecStartPre` migration is idempotent. Installer v1 copies the unit
+files (not absolute checkout symlinks), ensures the Quickshell runtime path
+exists first, runs `systemctl --user daemon-reload`, then enables the units for
+`graphical-session.target`. It does not manually start a second
 Quickshell process while the service is active. The installed Niri session
 must expose `XDG_CURRENT_DESKTOP=niri` and `graphical-session.target` as in the
 tested current session.
@@ -171,31 +171,18 @@ kdialog and libnotify.
   without error; recordings are user output and are not installed.
 - No repository file is copied from the live generated/state/cache trees.
 
-## Future installer design (not implemented)
+## Installer v1 implementation
 
-1. Detect Arch/CachyOS, Niri session state, XDG roots, existing configs and
-   services; print a plan before mutation.
-2. Check required binaries and show separate core/optional package lists.
-   Package installation must be opt-in, and AUR helpers/assets must be
-   separately confirmed.
-3. Stage a timestamped backup/transaction directory before touching any target.
-4. Create the canonical Quickshell path as one managed symlink (or one clearly
-   selected copy strategy) and refuse to overwrite an unrelated directory.
-5. Install Niri fragments under `~/.config/niri/sparrow`; if a root config
-   exists, offer a backed-up include merge or stop for manual resolution. Never
-   replace the user's config wholesale.
-6. Copy systemd units into `~/.config/systemd/user`, validate them, and reload
-   the user manager only after all staged files are ready.
-7. Copy Hyprlock defaults only to absent paths; leave screenshots, wallpapers,
-   generated palettes and user state untouched.
-8. Create XDG state/cache directories and run the safe legacy migration.
-9. Let Sparrow generate display, Look, Input, keybind and palette fragments;
-   don't synthesize hardware values in the installer.
-10. Run Niri validation and unit/QML checks against the staged result before
-    enabling services. On failure, restore only files created or replaced by
-    this installation transaction from its backup; never roll back user data
-    or generated state.
-11. Enable user units only after successful validation and report exact manual
-    logout/login checks. Do not restart Niri as an installation side effect.
-
-This is a plan only. There is no installer in this change.
+The implementation is `install.sh` plus `installer/sparrow_installer.py`.
+It copies the runtime into `$XDG_DATA_HOME/sparrow-shell/runtime`, creates the
+canonical Quickshell config symlink, stages and validates the Niri include
+graph, merges only the FileChooser portal key, backs up conflicts under
+`$XDG_STATE_HOME/sparrow-shell/installer/`, and records ownership hashes for
+safe updates/restores. Package groups are in `installer/package-sets.json`;
+there is no automatic AUR helper or package removal. Services are enabled only
+after deployment and only for unit files Sparrow installed successfully; they
+are not started/restarted by install. `uninstall.sh` disables only units whose
+enablement Sparrow recorded, restores unchanged managed files, preserves user
+edits and shared packages, and leaves backups available.
+Temporary-XDG tests do not replace a real clean-user/VM graphical acceptance
+test; see the root README and `installer/test_installer.py`.

@@ -358,14 +358,14 @@ Sparrow is sufficiently coherent and technically distinct to package as a focuse
 
 Use the groups in section 5: **MINIMUM REQUIRED**, **SPARROW DEFAULT EXPERIENCE**, **OPTIONAL FEATURE PACKAGES**, **HARDWARE-SPECIFIC / SYSTEM SERVICE PACKAGES**, **DEVELOPMENT ONLY**, and **EXTERNAL/SEPARATE TOOLS**. Keep package-manager calls explicit; official Arch packages preferred; AUR and system-service changes separately opt-in.
 
-### 9. REMAINING INSTALLER BLOCKERS
+### 9. ORIGINAL INSTALLER READINESS REVIEW
 
-**None identified. Sparrow is READY TO START INSTALLER DEVELOPMENT.** Portal
-merge behavior, conflict handling, package detection, rollback, and clean-user
-installation tests are implementation/acceptance work for the installer. The
-current portal route and scoped GTK theme are verified; the Polkit agent is
-installed, active, and registered. This is not a claim that Sparrow is
-bug-free or that a clean installation has already been tested.
+At review time, no product-level blocker was identified. Portal merge
+behavior, conflict handling, package detection, rollback, and clean-user
+installation tests were implementation/acceptance work. The live portal route
+and scoped GTK theme were verified; the Polkit agent was installed, active,
+and registered. This is not a claim that Sparrow is bug-free or that a clean
+installation had already been tested.
 
 ### 10. MY DECISIONS NEEDED
 
@@ -373,9 +373,20 @@ bug-free or that a clean installation has already been tested.
 2. Should Sparrow installer offer an optional Thunar archive integration? Recommendation: keep it opt-in and omit from minimal/default install unless you want archive context menus.
 3. Do you want one small Pill-shape identity pass before v1, or ship current geometry? Recommendation: ship current version and revisit only after a user-visible comparison.
 
-### 11. RECOMMENDED NEXT STEPS
+### 11. RECOMMENDED NEXT STEPS AT REVIEW TIME
 
-1. Begin installer development from the install inventory and ownership matrix; keep greeter/login-manager changes outside scope.
-2. Build dry-run planning, conflict backups, portal merge, agent detection, validation, and rollback into acceptance criteria.
-3. Test in a disposable Arch/Niri user or VM with pre-existing configs, optional packages absent, and failure/rollback cases.
-4. Run a true clean-user install and upgrade/migration rehearsal; the current development symlink/live desktop is not fresh-install proof.
+1. Develop from the install inventory and ownership matrix; keep greeter/login-manager changes outside scope.
+2. Test in a disposable Arch/Niri user or VM with pre-existing configs, optional packages absent, and failure/rollback cases.
+3. Run a true clean-user install and upgrade/migration rehearsal; the current development symlink/live desktop is not fresh-install proof.
+
+## Installer v1 implementation status (2026-09-28)
+
+Installer v1 is implemented in `install.sh`, `uninstall.sh`, and
+`installer/sparrow_installer.py`; exact package groups live in
+`installer/package-sets.json`. It validates a staged Niri configuration before
+deployment, preserves/merges user config with consent and backups, installs a
+copy of the runtime under XDG data, enables only successfully deployed unit
+files, and provides an ownership-aware restore path. Automated coverage uses
+temporary XDG roots. This resolves the installer-coding blocker, but not fresh
+graphical acceptance: perform a disposable Arch/CachyOS user or VM
+install/login test before calling it release-ready.

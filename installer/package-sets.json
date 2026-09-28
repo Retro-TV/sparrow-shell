@@ -54,7 +54,8 @@
     "xdg-utils",
     "libnotify"
   ],
-  "required_executables": ["niri", "qs", "python3", "bash", "jq", "matugen", "awww", "awww-daemon", "wpctl", "gtk-launch", "kitty", "fish", "starship", "thunar", "fc-match"],
+  "required_executables": ["niri", "qs", "python3", "bash", "jq", "matugen", "awww", "awww-daemon", "mpvpaper", "wpctl", "gtk-launch", "kitty", "fish", "starship", "thunar", "fc-match"],
+  "required_feature_packages": ["mpvpaper"],
   "platform_executables": ["systemctl", "systemd-analyze", "env", "gio", "udevadm", "ps"],
   "required_python_modules": ["PIL.Image", "gi"],
   "polkit_agent": {"package": "lxqt-policykit", "executable": "lxqt-policykit-agent"},
@@ -68,7 +69,6 @@
     "hyprlock-fallback": ["hyprlock"]
   },
   "manual_external": {
-    "Video wallpaper player": "mpvpaper",
     "Rishot screenshot app (separate upstream project)": "rishot-git"
   },
   "manual_optional": {

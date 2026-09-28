@@ -23,7 +23,7 @@ framework.
 | --- | --- | --- |
 | Session | Niri 26.04, systemd user manager, graphical-session target | Required foundation |
 | Main shell | Quickshell main `shell.qml`; pill, surfaces and IPC | Required foundation |
-| Background | Sparrow wallpaper unit, awww image/still layer; optional mpvpaper video per output | awww is default; mpvpaper optional |
+| Background | Sparrow wallpaper unit, awww image/still layer and required mpvpaper motion layer per output | Static and animated wallpapers are both first-class |
 | Idle | Separate `idle/shell.qml` instance; Niri idle/output controls and session lock | Required to deliver configured idle policy |
 | Pill / surfaces | Workspaces, Launcher, Wallpaper, Mixer, Recorder, Settings and modal/morphed surfaces | Core Sparrow UI |
 | Niri settings | Look, Display, Input, Keybinds through validated managed fragments | Core, with machine/user values generated outside portable defaults |
@@ -87,7 +87,7 @@ declaring those when a genuinely minimal install omits them.
 | `jq` | flags/state JSON reads/writes and wallpaper/theme tooling | Official `jq` | Required for reliable wallpaper and state helpers; error/fallback paths otherwise |
 | `matugen` | `wallcolors.py` invokes Matugen for wallpaper palette generation | Official Extra `matugen` ([package](https://archlinux.org/packages/extra/x86_64/matugen/)); prefer official repo package over `matugen-bin` | Required for Dynamic palette; old palette/fallback colors remain if failed |
 | `awww-daemon`, `awww` | wallpaper systemd service and wallpaper operations/query/stop | Official Extra `awww` ([package](https://archlinux.org/packages/extra/x86_64/awww/)) | Required default wallpaper daemon; restoration reports failure if absent |
-| `mpvpaper` | video wallpaper playback | AUR package `mpvpaper` on Arch ([ArchWiki app index](https://wiki.archlinux.org/title/List_of_applications/Other)); confirm target repo/package before install | Optional; images/stills continue; saved video cannot restore as video |
+| `mpvpaper` | animated wallpaper playback | CachyOS repository package; on Arch, upstream's AUR package is a reviewed pre-install prerequisite | Required feature backend; installer installs from configured CachyOS repos or stops before deployment with an Arch prerequisite message |
 | `ffmpeg`, `ffprobe` | video/GIF stills, wallpaper thumbnails, recording thumbnails and media dimensions | Official Extra `ffmpeg` | Recommended default bundle; absent tools degrade previews/stills but do not block shell startup |
 | `nmcli` | Wi-Fi scan/connect/profile operations and hotspot UI | Official `networkmanager` provides CLI; enable NetworkManager only by user choice if another network manager owns networking | Wi-Fi feature requires NetworkManager service; failures are presented in that surface |
 | `bluetoothctl` | Bluetooth pairing/trust/connect command path | Official `bluez-utils`; daemon is `bluez` | Feature-specific; unavailable adapter/daemon prevents Bluetooth operations |
@@ -156,7 +156,7 @@ database. “Optional” means the desktop must remain useful when omitted.
 | Thumbnails | `tumbler` — Arch Extra ([package](https://archlinux.org/packages/extra/x86_64/tumbler/)) | Recommended part of default Thunar integration |
 | Portals | `xdg-desktop-portal`, `xdg-desktop-portal-gtk`, and `xdg-desktop-portal-gnome` ([Arch package](https://archlinux.org/packages/extra/x86_64/xdg-desktop-portal-gnome/)) | Required by the tracked GTK FileChooser + Niri ScreenCast profile |
 | Polkit agent | Existing user agent, otherwise `lxqt-policykit` (Arch Extra) | Added to required transaction only when no existing agent is detected; preserve other agents |
-| video wallpapers | `mpvpaper` AUR | Optional video wallpaper enhancement |
+| video wallpapers | `mpvpaper` | Required runtime; CachyOS repository package, or Arch AUR package installed by the user before rerunning Installer |
 | recording | `gpu-screen-recorder`, `slurp` | Optional GPU-dependent recorder; direct output capture and picker capabilities vary |
 | screenshot | Rishot upstream, `grim`, `wl-clipboard` | Optional separate application; do not bundle or silently run external installer |
 | Night Light / audio viz | `wlsunset`, `cava` — prefer official Extra where available | Optional features |
@@ -329,7 +329,7 @@ is preserved; on a fresh home declining the pinned Bibata asset stops before
 Sparrow files are deployed. Optional app extras may be declined without
 removing the required terminal, file-manager, and GTK defaults.
 
-Keep adaptive extras as a compact optional list: video wallpapers, Cava, Night
+Keep adaptive extras as a compact optional list: Cava, Night
 Light, internal brightness, DDC, NVIDIA vibrance, GPU Screen Recorder,
 Rishot/grim, weather/search network endpoints, Hyprlock fallback and
 XWayland compatibility. These controls already gate or report missing

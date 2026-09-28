@@ -35,10 +35,10 @@ components. Sparrow's video preview additionally uses `qt6-multimedia` and
 
 | Package/tool | Classification and caller |
 | --- | --- |
-| `awww` | Required for the image/GIF-still wallpaper backend and transition control; `awww-daemon` is launched by `sparrow-wallpaper.service`. |
+| `awww` | Required for image wallpapers, the persistent still/backdrop layer, and transition control; `awww-daemon` is launched by `sparrow-wallpaper.service`. |
 | `matugen` | Required for wallpaper-derived palette generation. This host currently has the AUR `matugen-bin`; Arch Extra provides `matugen`, which is the preferred portable package name. |
 | `python-pillow` | Required by `scripts/wallcolors.py` for palette image processing. |
-| `mpvpaper` | Optional; enables video wallpaper playback while awww still supplies the still frame/backdrop. |
+| `mpvpaper` | Required for Sparrow's first-class animated/video wallpapers (GIF, MP4, WebM, MKV, MOV); it renders motion per output while awww supplies the still/backdrop layer. Installer installs the CachyOS repository package and refuses file deployment if the backend is neither installed nor available. On Arch, install `mpvpaper` from the AUR using a reviewed `PKGBUILD`, then rerun the installer; Sparrow does not bootstrap an AUR helper or execute remote install scripts. |
 | `ffmpeg` | Recommended default bundle: Wallpaper-picker thumbnails, wallpaper dimensions/stills, and recording thumbnails use it. Images and the shell still work without it, but those previews/helpers are degraded. |
 | `imagemagick` | Optional wallpaper-search image format identification and Rishot multi-monitor stitching/metadata handling. |
 | `hyprlock` | Optional fallback only. The primary lock is Sparrow's Quickshell `WlSessionLock` + PAM flow; `sparrow-lock` invokes Hyprlock only when Sparrow lock IPC is unavailable. |
@@ -133,7 +133,7 @@ The only browser-related runtime work is optional wallpaper search/download.
 
 ## Not core / not included
 
-- `ddcutil`, `nvibrant`, `wlsunset`, `cava`, `mpvpaper`, and Recorder packages
+- `ddcutil`, `nvibrant`, `wlsunset`, `cava`, and Recorder packages
   are optional; Rishot is separately installed as described above. Bibata is
   an explicitly offered pinned upstream user install, not an AUR package.
 - `gvfs` is recommended for Thunar's removable-volume and remote-location

@@ -96,9 +96,11 @@ checkout's live config or state into the test home.
 - Record the cursor note. Bibata Modern Ice is manual AUR-only; when absent,
   Sparrow must leave the system/Niri cursor default alone rather than point at
   a missing theme.
-- Rishot and `mpvpaper` are separate/manual. Their absence is expected unless
-  you installed them independently. The screenshot key may therefore be
-  unavailable; the installer should say so rather than fail the install.
+- Rishot remains a separate/manual application; its absence may leave the
+  screenshot shortcut unavailable. `mpvpaper` is required for the advertised
+  animated wallpaper feature: CachyOS installs it from its repositories, while
+  on vanilla Arch the reviewed AUR package must be installed before rerunning
+  Sparrow Installer.
 - Do not install the optional Hyprlock fallback just to test Sparrow's primary
   Quickshell + PAM session lock.
 
@@ -141,7 +143,8 @@ Check the following before adjusting settings:
 - [ ] Alt+Tab, W/O scope switching, Super+Tab tabbed columns, workspace and
       window movement bindings; do not test by disrupting important windows.
 - [ ] Super+L Quickshell lock, wrong/correct PAM authentication, and idle lock.
-- [ ] Video wallpaper only if `mpvpaper` was separately installed.
+- [ ] Test an animated wallpaper; the installer must have verified the
+      required `mpvpaper` backend before deploying Sparrow.
 - [ ] Rishot only if separately installed.
 
 Avoid changing wallpaper, monitor layout, audio devices/volume, brightness,

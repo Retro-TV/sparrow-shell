@@ -38,7 +38,7 @@ Classifications: **CORE** is required for the Sparrow Niri desktop; **DEFAULT AP
 | Resting Pill and morph system | CORE | Main control surface, workspace indicator, status, controls and surface launch point. Keeps Ricelin-derived dimensions/morph mechanics, but Sparrow palette, content, icon work and Niri integration form the current shell identity (visual review below). |
 | Normal workspaces/window integration | CORE | `Workspaces.qml` and `Singletons/Niri.qml` use Niri’s dynamic workspaces, stable IDs, output association, event stream and native IPC. This is not a special-workspace model. |
 | Launcher | CORE | Discovers ordinary `.desktop` applications and launches through `gtk-launch`; independent of removed AppImage management. Calculation result copy uses `wl-copy` if installed. |
-| Wallpaper picker and restore | CORE | Wallpaper surfaces/singletons and `sparrow-wallpaper.service`; `awww-daemon` is managed by Sparrow and restores per-output state. Image and video paths are supported, with `mpvpaper` optional. Wallpaper switching is also exposed from Pill/Niri binds. |
+| Wallpaper picker and restore | CORE | Wallpaper surfaces/singletons and `sparrow-wallpaper.service`; `awww-daemon` is managed by Sparrow and restores per-output state. Image and animated/video paths are first-class; `mpvpaper` is a required backend. Wallpaper switching is also exposed from Pill/Niri binds. |
 | Matugen / palette | CORE | `wallcolors.py`, `wallpaper.sh`, `Dyn.qml`, and the generator config/template path create one wallpaper-derived palette for Quickshell, Niri borders, Kitty, and Sparrow GTK theme. Current user choices are Dynamic + Auto palette style + Auto light/dark. Static generated state stays outside Git. |
 | Look and Appearance settings | CORE | Matugen source/style/mode, lock foreground, and Niri-native Look controls are applied through Sparrow state and validated Niri fragment transactions. User overrides belong in untracked per-user Niri fragments/state, not the tracked defaults. |
 | Display / Input / Keybind settings | CORE | Niri-native settings surfaces. Display arrangement/number mapping, generated display outputs and user mappings are host-specific. Keyboard layout/input and user keybind fragments are user-owned. Do not install the current machine’s display fragments as defaults. |
@@ -197,7 +197,7 @@ The repository’s `docs/INSTALL-INVENTORY.md` provides the exhaustive source-ca
 | Package/tool | Feature / caller |
 |---|---|
 | `ffmpeg` | Video/GIF still extraction, media dimensions and thumbnail workflows. Static images remain usable without it. |
-| `mpvpaper` (AUR/source availability must be confirmed) | Video wallpaper playback; image wallpaper remains default if omitted. |
+| `mpvpaper` | Required animated wallpaper playback; available as a CachyOS repository package, and an explicit reviewed AUR prerequisite on vanilla Arch. |
 | `gpu-screen-recorder`, `slurp`, `xdg-desktop-portal`, `python-gobject`, PipeWire | Recording, region/window selection and folder chooser. Hardware/portal compatibility must be checked. |
 | `wlsunset` | Night Light, off by default. |
 | `cava` | Optional visualizer. |
@@ -253,7 +253,7 @@ The future installer should be transactional and conservative. The ordering belo
 11. **Deploy environment and app defaults:** merge rather than overwrite cursor env, Kitty, Fish, Starship, GTK theme selector and file-manager desktop entry. Respect pre-existing user choices and MIME associations.
 12. **Install generated/local assets:** generate GTK theme/icons and palette-dependent templates under XDG data/config paths. Never install generated colors or selected wallpaper as if portable config.
 13. **Migrate existing state once:** run the safe migration helper with its lock/backup semantics; preserve current flags, wallpaper maps and generated state. Do not initialize over established state.
-14. **Handle wallpaper defaults:** seed only the bundled Sparrow Default when no prior selection exists. Do not overwrite/import personal images; validate `awww` and optional `mpvpaper` separately.
+14. **Handle wallpaper defaults:** seed only the bundled Sparrow Default when no prior selection exists. Do not overwrite/import personal images; validate `awww` and required `mpvpaper` separately.
 15. **Onboarding:** show supported defaults, chosen packages, controls, feature limitations and optional system integrations; don’t enable Night Light or alter gamma/display state.
 16. **Validate staged result:** Python tests, QML parse/runtime load, shell syntax, Niri validation, unit verification, desktop entry and portal config checks before reload/start.
 17. **Activate only after a user-approved plan:** reload user manager and start units if safe; do not restart Niri or lock/log out automatically. For live session, detect existing instances and defer tests that could duplicate them.

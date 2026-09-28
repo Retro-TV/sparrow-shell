@@ -59,6 +59,7 @@ class InstallerTests(unittest.TestCase):
         self.machine = {
             "os": "id=cachyos",
             "packages": set(),
+            "repo_packages": {"mpvpaper"},
             "commands": {"sudo", "pacman", "bash", "systemd-analyze", "systemctl", "env", "gio", "udevadm", "ps", "xdg-user-dir"},
             "modules": set(),
             "missing_after_install": set(),
@@ -113,6 +114,8 @@ class InstallerTests(unittest.TestCase):
         self.assertLess(package_event, niri_validate)
         self.assertLess(package_event, units_validate)
         self.assertTrue({"qs", "awww", "awww-daemon", "matugen", "lxqt-policykit-agent"}.issubset(self.machine["commands"]))
+        self.assertIn("mpvpaper", self.machine["packages"])
+        self.assertIn("mpvpaper", self.machine["commands"])
         self.assertTrue((self.paths.config / "systemd/user/sparrow-polkit-agent.service").is_file())
 
     def test_fresh_defaults_copy_live_niri_appearance_and_gtk_icons(self) -> None:
@@ -855,7 +858,7 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(installer.install(), 0)
         self.assertNotIn("cava", self.machine["commands"])
         self.assertNotIn("wlsunset", self.machine["commands"])
-        self.assertNotIn("mpvpaper", self.machine["commands"])
+        self.assertIn("mpvpaper", self.machine["commands"])
         self.assertTrue(any("Rishot" in message and "Super+Shift+S" in message for message in self.messages))
 
     def test_declining_canonical_cursor_stops_before_deploying_sparrow(self) -> None:
@@ -1107,13 +1110,30 @@ class InstallerTests(unittest.TestCase):
         self.assertFalse((self.paths.config / "quickshell/sparrow").exists())
         self.assertFalse(installer.manifest_path.exists())
 
-    def test_package_sets_keep_aur_out_of_automatic_lists(self) -> None:
+    def test_required_video_backend_blocks_deployment_when_repo_package_is_unavailable(self) -> None:
+        self.machine["repo_packages"].discard("mpvpaper")
+        self.assertEqual(self.installer().install(), 2)
+        self.assertFalse((self.paths.config / "niri/config.kdl").exists())
+        self.assertTrue(any("review the mpvpaper PKGBUILD" in message for message in self.messages))
+
+    def test_preinstalled_aur_video_backend_allows_arch_install_without_reinstall(self) -> None:
+        self.machine["os"] = "id=arch"
+        self.machine["repo_packages"].discard("mpvpaper")
+        self.machine["commands"].add("mpvpaper")
+        self.assertEqual(self.installer().install(), 0)
+        self.assertNotIn("pacman -Si mpvpaper", [" ".join(event) for event in self.machine["events"]])
+        package_events = [event for event in self.machine["events"] if event[:3] == ("sudo", "pacman", "-S")]
+        self.assertFalse(any("mpvpaper" in event for event in package_events))
+        self.assertTrue((self.paths.config / "niri/config.kdl").is_file())
+
+    def test_package_sets_keep_unselected_aur_out_of_automatic_lists(self) -> None:
         sets = self.installer().package_sets()
         automatic = set(sets["required"] + sets["defaults"])
         for group in sets["optional"].values():
             automatic.update(group)
         self.assertNotIn("bibata-cursor-theme", automatic)
-        self.assertNotIn("mpvpaper", automatic)
+        self.assertIn("mpvpaper", sets["required_feature_packages"])
+        self.assertNotIn("mpvpaper", sets["manual_external"].values())
         self.assertNotIn("Bibata-Modern-Ice", automatic)
         self.assertNotIn("Bibata Modern Ice cursor", sets["manual_external"])
         self.assertEqual(self.installer().source_manifest()["cursor"]["version"], "v2.0.6")

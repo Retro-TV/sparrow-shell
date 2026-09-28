@@ -15,8 +15,8 @@ focused_output_name=""
 outputs_csv=""
 mkdir -p "$state_root"
 
-is_video() { [[ "$1" =~ \.(mp4|webm|mkv|mov)$ ]]; }
-is_media() { [[ "$1" =~ \.(jpg|jpeg|png|gif|webp|mp4|webm|mkv|mov)$ ]]; }
+is_video() { [[ "${1,,}" =~ \.(gif|mp4|webm|mkv|mov)$ ]]; }
+is_media() { [[ "${1,,}" =~ \.(jpg|jpeg|png|gif|webp|mp4|webm|mkv|mov)$ ]]; }
 outputs() { [[ -n "$outputs_csv" ]] && tr ',' '\n' <<< "$outputs_csv"; }
 focused_output() { printf '%s\n' "$focused_output_name"; }
 map_get() { awk -F '\t' -v o="$1" '$1 == o {sub($1 FS, ""); print; exit}' "$map" 2>/dev/null || true; }
@@ -44,7 +44,7 @@ ensure_awww() {
         echo "Sparrow wallpaper: existing awww daemon did not become available" >&2
         return 1
     fi
-    awww-daemon >/dev/null 2>&1 &
+    awww-daemon >/dev/null 2>&1 8>&- &
     for _ in {1..40}; do awww query >/dev/null 2>&1 && return 0; sleep 0.15; done
     echo "Sparrow wallpaper: awww daemon did not become available" >&2
     return 1
@@ -57,23 +57,34 @@ mpvpaper_pid_is_sparrow() {
     [[ "$pid" =~ ^[0-9]+$ ]] || return 1
     cmd="$(tr '\0' ' ' 2>/dev/null < "/proc/$pid/cmdline" || true)"
     [[ "$cmd" == *mpvpaper* && "$cmd" == *"input-ipc-server=/tmp/sparrow-wallpaper-$out"* ]] || return 1
-    [[ -z "$expected_pic" || "$cmd" == *" $out $expected_pic" ]]
+    [[ -z "$expected_pic" || "$cmd" == *" $out $expected_pic "* ]]
+}
+find_video_pids() {
+    local out="$1" expected_pic="${2:-}" proc pid
+    for proc in /proc/[0-9]*; do
+        pid="${proc##*/}"
+        mpvpaper_pid_is_sparrow "$pid" "$out" "$expected_pic" && printf '%s\n' "$pid"
+    done
 }
 video_is_current() {
     local out="$1" pic="$2" safe_out pidfile pid=""
     safe_out="${out//[^[:alnum:]_.-]/_}"
     pidfile="$state_root/mpvpaper-$safe_out.pid"
-    [[ -r "$pidfile" ]] || return 1
-    read -r pid < "$pidfile" || true
-    mpvpaper_pid_is_sparrow "${pid:-}" "$out" "$pic"
+    if [[ -r "$pidfile" ]]; then
+        read -r pid < "$pidfile" || true
+        mpvpaper_pid_is_sparrow "${pid:-}" "$out" "$pic" && return 0
+    fi
+    pid="$(find_video_pids "$out" "$pic" | head -n 1)"
+    [[ -n "$pid" ]] || { rm -f -- "$pidfile"; return 1; }
+    printf '%s\n' "$pid" > "$pidfile"
 }
 stop_video() {
-    local out="$1" safe_out pidfile pid=""
+    local out="$1" safe_out pidfile pid
+    local -a pids=()
     safe_out="${out//[^[:alnum:]_.-]/_}"
     pidfile="$state_root/mpvpaper-$safe_out.pid"
-    [[ -r "$pidfile" ]] || return 0
-    read -r pid < "$pidfile" || true
-    if mpvpaper_pid_is_sparrow "${pid:-}" "$out"; then
+    mapfile -t pids < <(find_video_pids "$out")
+    for pid in "${pids[@]}"; do
         kill "$pid" 2>/dev/null || true
         for _ in {1..30}; do
             mpvpaper_pid_is_sparrow "$pid" "$out" || break
@@ -83,7 +94,7 @@ stop_video() {
             kill -KILL "$pid" 2>/dev/null || true
             for _ in {1..10}; do kill -0 "$pid" 2>/dev/null || break; sleep 0.05; done
         fi
-    fi
+    done
     rm -f -- "$pidfile"
     rm -f -- "/tmp/sparrow-wallpaper-$out"
 }
@@ -93,7 +104,10 @@ start_video() {
     pidfile="$state_root/mpvpaper-$safe_out.pid"
     log="$state_root/mpvpaper-$safe_out.log"
     rm -f -- "/tmp/sparrow-wallpaper-$out"
-    setsid mpvpaper -p -o "no-audio loop-file=inf hwdec=auto panscan=1.0 input-ipc-server=/tmp/sparrow-wallpaper-$out" "$out" "$pic" >"$log" 2>&1 &
+    # Do not use mpvpaper's -p auto-pause heuristic here: it depends on
+    # compositor frame-callback visibility and can pause/resume unexpectedly.
+    # A Sparrow wallpaper should play continuously until explicitly replaced.
+    setsid mpvpaper -o "no-audio loop-file=inf hwdec=auto panscan=1.0 input-ipc-server=/tmp/sparrow-wallpaper-$out" "$out" "$pic" >"$log" 2>&1 8>&- &
     pid=$!
     for _ in {1..30}; do
         if ! kill -0 "$pid" 2>/dev/null; then
@@ -127,6 +141,15 @@ apply_visual() {
     fi
     if is_video "$pic"; then
         command -v mpvpaper >/dev/null || { echo "Sparrow wallpaper: mpvpaper is required for video wallpapers; install it to enable video playback" >&2; return 1; }
+        if [[ -n "$out" ]]; then video_outputs=("$out")
+        else mapfile -t video_outputs < <(outputs); fi
+        ((${#video_outputs[@]})) || { echo "Sparrow wallpaper: no Niri outputs were supplied" >&2; return 1; }
+        local all_current=true
+        for target_out in "${video_outputs[@]}"; do
+            video_is_current "$target_out" "$pic" || all_current=false
+        done
+        # A repeated picker choice must not blink/restart the wallpaper surface.
+        [[ "$all_current" == false ]] || return 0
         show="$still"; make_still "$pic" "$show"
     elif [[ "${pic,,}" == *.gif ]]; then
         show="$still"; make_still "$pic" "$show"
@@ -139,12 +162,10 @@ apply_visual() {
         fi
     fi
     if is_video "$pic"; then
-        if [[ -n "$out" ]]; then video_outputs=("$out")
-        else mapfile -t video_outputs < <(outputs); fi
-        ((${#video_outputs[@]})) || { echo "Sparrow wallpaper: no Niri outputs were supplied" >&2; return 1; }
         for target_out in "${video_outputs[@]}"; do
             # mpvpaper permits one wallpaper surface per output: replace only
             # Sparrow's recorded process, and don't commit a failed launch.
+            video_is_current "$target_out" "$pic" && continue
             previous="$(map_get "$target_out")"
             stop_video "$target_out"
             if ! start_video "$pic" "$target_out"; then
@@ -221,6 +242,14 @@ commit_state() {
 
 cmd="${1:-next}"
 shift || true
+case "$cmd" in
+    init|recolor|set|next)
+        # The service, Quickshell, and wallpaper controls are independent
+        # callers. Serialize their shared still-frame, palette, and player state.
+        exec 8>"$state_root/wallpaper.lock"
+        flock 8
+        ;;
+esac
 case "$cmd" in
     resolve) printf '%s\n' "$wall_dir" > "$state_root/wallpaper-dir.tmp"; mv -f "$state_root/wallpaper-dir.tmp" "$state_root/wallpaper-dir"; exit 0 ;;
     list-dir) printf '%s\n' "$wall_dir"; exit 0 ;;

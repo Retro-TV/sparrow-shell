@@ -64,7 +64,7 @@ been tested on a clean installation.
 | --- | --- |
 | **A — Final / intended** | Niri-native output/workspace/window integration; main pill and surfaces; desktop-entry Launcher; Wallpaper picker and image/video wallpaper backend; Matugen palette and shell theme; Niri Look/Display/Input/Keybind settings; PipeWire Mixer; notification/OSD/tray/media integration; Quickshell secure lock with PAM; power/idle policy; Kitty/Fish/Starship and Thunar/GTK defaults. |
 | **B — Final but needs polish** | Live GTK3 recoloring (running Thunar windows require closing/reopening); multi-output wallpaper-specific lock backgrounds share one global palette; some monitor/application/package assumptions remain host-dependent; app-default configs need conservative install/merge behavior. |
-| **C — Optional feature** | Video wallpaper playback (`mpvpaper`); Night Light (`wlsunset`); spectrum (`cava`); internal brightness (`brightnessctl` plus a backlight device); DDC/CI (`ddcutil`); NVIDIA vibrance (`nvibrant` and NVIDIA device); recording (`gpu-screen-recorder`, with Niri selection helpers); screenshot integration through separately installed Rishot; optional online wallpaper search/download and optional zoxide/Fastfetch conveniences. |
+| **C — Optional feature** | Night Light (`wlsunset`); spectrum (`cava`); internal brightness (`brightnessctl` plus a backlight device); DDC/CI (`ddcutil`); NVIDIA vibrance (`nvibrant` and NVIDIA device); recording (`gpu-screen-recorder`, with Niri selection helpers); screenshot integration through separately installed Rishot; optional online wallpaper search/download and optional zoxide/Fastfetch conveniences. |
 | **D — Compatibility / migration only** | `scripts/migrate-state.py` reads selected legacy Ricelin state paths and copies data into Sparrow XDG state only when the destination is absent, retaining a backup. Ricelin provenance comments and included notices are attribution, not runtime dependencies. |
 | **E — Development / testing only** | Python unit tests, Node test for monitor helpers, QML/config validation, transaction documentation, and the checked-in minimal QML test surface. These should remain available to contributors but are not session runtime requirements. |
 | **F — Legacy / dead / not part of Sparrow** | Ricelin's special workspaces/Stash/Private/Minimized model; Game Mode; Ricelin updater; AppImage/package manager UI; the Pill file installer; abandoned Hyprlock visual redesign/avatar and its generated palette/link architecture. No replacement special-workspace or package-manager system is intended. |
@@ -95,7 +95,7 @@ The visible/runtime feature set is:
 | Input | Niri input configuration bridge with detected device information and generated user overrides. | Intended core; device-specific values are user state. |
 | Keybinds | Catalog-backed editing of Sparrow Niri bindings through generated user fragment and transaction helper. | Intended core; user customization must survive updates. |
 | Workspaces | Normal Niri dynamic workspaces with stable IDs and output association. | Intended core; explicitly not the old Ricelin special-workspace model. |
-| Wallpaper | awww images and GIF stills, optional mpvpaper video per output, persisted per-output map, switching/search/picker and Matugen generation. | Intended core; video/search tools are optional or feature dependencies. |
+| Wallpaper | awww images/still backdrop plus required mpvpaper animated playback per output, persisted per-output map, switching/search/picker and Matugen generation. | Core; video backend is installed/required, online search tools remain optional. |
 | Mixer | PipeWire volume/source, hardware brightness, optional DDC and NVIDIA vibrance. | Intended core with adaptive optional controls. |
 | Night Light | Quickshell-managed `wlsunset`, persisted off/on/scheduled mode. | Optional backend; runtime probe/restoration occurs at shell startup. |
 | Recorder | GPU Screen Recorder with Niri output/window/region selection and directory portal helper. | Optional feature requiring capture backend and portal integration. |
@@ -156,7 +156,7 @@ that the palette must be initialized. The flow is:
    Startup resolves each connected Niri output from its saved selection, then
    the saved global wallpaper, then the bundled `wallpapers/default.png`.
 3. awww displays static images. GIF/video uses an extracted still for the
-   persistent layer/palette path; mpvpaper optionally renders video per output.
+   persistent layer/palette path; mpvpaper renders animated media per output.
 4. `wallcolors.py` reads the selected source/still and generates a palette
    using the selected Matugen style. Video is not continuously re-analyzed.
 5. The generated JSON lives in `$XDG_CACHE_HOME/sparrow-shell/palette.json`.
@@ -298,7 +298,7 @@ generated Thunar theme; Thunar, Kitty, Fish, Starship and JetBrains Mono Nerd
 Font for the chosen default-app bundle; Bibata cursor assets for the selected
 cursor. Actual user app choices can be changed.
 
-**Optional:** mpvpaper video playback, wlsunset Night Light, cava, brightnessctl
+**Optional:** wlsunset Night Light, cava, brightnessctl
 on backlight hardware, ddcutil, nvibrant on supported NVIDIA hardware, optional
 online wallpaper functions, zoxide/Fastfetch, imagemagick conveniences, and
 Hyprlock fallback. Missing optional controls should remain absent/adaptive, not

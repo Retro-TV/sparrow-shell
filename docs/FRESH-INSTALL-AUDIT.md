@@ -225,13 +225,13 @@ surface.
   UPower, GTK3, xdg-utils, libnotify, portal frontend plus compatible chooser
   backend.
 - Wallpaper/theme: awww, Matugen (verify Arch package name), Pillow, FFmpeg,
-  adw-gtk3 source stylesheet; mpvpaper optional.
+  adw-gtk3 source stylesheet; `mpvpaper` required for animated wallpapers.
 - Default apps: Kitty, Fish, Starship, JetBrains Mono Nerd Font, Thunar and
   Tumbler, Firefox. These app choices can be changed by the user.
 - Feature-specific: GPU Screen Recorder and slurp; Qt Multimedia modules for
   video previews; Rishot separately with its dependencies and grim for Niri.
 - Optional: wlsunset, cava, brightnessctl on backlight hardware, ddcutil on DDC
-  displays, nvibrant on supported NVIDIA systems, mpvpaper, imagemagick,
+  displays, nvibrant on supported NVIDIA systems, imagemagick,
   zoxide/Fastfetch, Hyprlock fallback. AUR operations always need explicit
   user choice. Verify all package names before installer work.
 
@@ -307,7 +307,7 @@ path and never encode username/clone path.
 1. Fresh Arch/Niri VM: session target ordering, first visible wallpaper,
    palette startup, exactly one awww owner, shell/idle count and no startup
    warnings.
-2. Isolated output session: static/GIF/video wallpaper, no mpvpaper fallback,
+2. Isolated output session: static/GIF/video wallpaper, required mpvpaper backend,
    multiple/disconnected/reconnected output names, failed Matugen and failed
    Niri transaction.
 3. Live Quickshell: absent/malformed flags/events/palette; null-screen guard;

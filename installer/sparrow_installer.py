@@ -299,6 +299,7 @@ class SparrowInstaller:
         package_binaries = {
             "niri": {"niri"}, "quickshell": {"qs"}, "python": {"python3"},
             "awww": {"awww", "awww-daemon"}, "matugen": {"matugen"},
+            "mpvpaper": {"mpvpaper"},
             "bash": {"bash"}, "jq": {"jq"}, "wireplumber": {"wpctl"},
             "gtk3": {"gtk-launch"}, "lxqt-policykit": {"lxqt-policykit-agent"},
             "ffmpeg": {"ffmpeg", "ffprobe"}, "networkmanager": {"nmcli"},
@@ -317,6 +318,9 @@ class SparrowInstaller:
                 code, stderr = 1, "simulated pacman query failure"
             else:
                 stdout = "\n".join(sorted(self.test_machine["packages"]))
+        elif args[:2] == ["pacman", "-Si"]:
+            if args[-1] not in self.test_machine.get("repo_packages", {"mpvpaper"}):
+                code, stderr = 1, f"simulated repository package unavailable: {args[-1]}"
         elif args[:3] == ["sudo", "pacman", "-S"]:
             self.test_machine["pacman_transaction_count"] += 1
             transaction = self.test_machine["pacman_transaction_count"]
@@ -566,6 +570,11 @@ class SparrowInstaller:
             values = sets.get(key, [])
             if not isinstance(values, list) or any(not isinstance(item, str) or not package_pattern.fullmatch(item) for item in values):
                 raise ValueError(f"Installer package set '{key}' must be a list of executable names.")
+        feature_packages = sets.get("required_feature_packages", [])
+        if not isinstance(feature_packages, list) or any(
+            not isinstance(item, str) or not package_pattern.fullmatch(item) for item in feature_packages
+        ):
+            raise ValueError("Installer package set 'required_feature_packages' must be a list of valid package names.")
         modules = sets.get("required_python_modules", [])
         if not isinstance(modules, list) or any(not isinstance(item, str) or not re.fullmatch(r"[A-Za-z0-9_.]+", item) for item in modules):
             raise ValueError("Installer package set 'required_python_modules' must contain valid module names.")
@@ -701,6 +710,18 @@ class SparrowInstaller:
         installed = self.installed_packages()
         agent_exists = self.has_existing_polkit_agent()
         required_packages = list(sets["required"])
+        for package in sets.get("required_feature_packages", []):
+            if self._which(package) is not None:
+                continue
+            availability = self._command(["pacman", "-Si", package])
+            if availability.returncode:
+                self.output(
+                    f"Required Sparrow feature package '{package}' is not installed and is unavailable in configured pacman repositories. "
+                    "On Arch, install it from the AUR using your reviewed package-build workflow (for example, review the mpvpaper PKGBUILD and run makepkg -si), then rerun Sparrow Installer. "
+                    "No Sparrow files will be deployed without the video wallpaper backend."
+                )
+                return False
+            required_packages.append(package)
         if not agent_exists:
             required_packages.append(sets["polkit_agent"]["package"])
         for group, names in (("Required", required_packages), ("Defaults", sets["defaults"]), *sets["optional"].items()):
@@ -778,7 +799,7 @@ class SparrowInstaller:
         else:
             self.skipped_optional_groups.extend(optional)
         self.output("Sparrow does not install AUR or upstream applications. Manual external items: " + "; ".join(f"{k}: {v}" for k, v in sets["manual_external"].items()))
-        for executable, label in (("rishot", "Rishot screenshots"), ("mpvpaper", "video wallpaper playback")):
+        for executable, label in (("rishot", "Rishot screenshots"),):
             if self._which(executable) is None:
                 self.missing_manual.append(label)
         if self._which("rishot") is None:

@@ -1,5 +1,3 @@
-// Recommended Sparrow cursor default; installer skips this for existing
-// configs that already select a cursor theme.
 cursor {
     xcursor-theme "Bibata-Modern-Ice"
     xcursor-size 24

@@ -1,5 +1,10 @@
 # Bare-metal CachyOS convergence audit
 
+This is the earlier install-test audit, not the authoritative desktop capture.
+Its reconstruction recommendations are superseded by
+[`installer/live-source-map.json`](../installer/live-source-map.json) and the
+SSD-source convergence update in `docs/PRE-INSTALLER-REVIEW.md`.
+
 Reference: the active Sparrow desktop on the external SSD, compared with the
 files and behavior deployed by installer baseline `9c0e550`. This report
 records the live-vs-source findings that motivated the convergence fixes; it
@@ -9,7 +14,7 @@ does not copy generated or host-specific state into the repository.
 
 | Live input | Live observation | Installer/source counterpart | Decision |
 | --- | --- | --- | --- |
-| `~/.config/niri/config.kdl` and included `sparrow/*.kdl` | Loads Sparrow appearance, generated colors, optional output/user fragments, window rules, binds and input. Active `user-appearance.kdl` contains Look-produced values. | `niri/config.kdl` → `sparrow/entry.kdl` and tracked fragments. | Track product defaults; never copy display outputs, generated colors, or user fragments. |
+| `~/.config/niri/config.kdl` and included `sparrow/*.kdl` | Loads Sparrow appearance, generated colors, optional output/user fragments, window rules, binds and input. Active `user-appearance.kdl` is Look-produced mutable state. | Current direct-copy model: `niri/config.kdl` → tracked Sparrow fragments; Look defaults are static in `appearance.kdl`. | Do not seed user fragments; the source map records the three deliberate sanitizations. |
 | Niri display/output state | `eDP-1`, 1920×1080 physical, 1536×864 logical at 1.25 scale on the audit host. | Optional `display-outputs.kdl`/`display-binds.kdl`. | Machine state; do not track. |
 | Niri appearance override | Live user fragment: top strut `-6`, 12px geometry radius with clipping, animation slowdown `1.5`; base repository fragment already supplies gaps 6, side/bottom struts 12, 50% column width, centering, border/shadow, presets, wallpaper layer rules and Overview styling. | These three defaults were absent from tracked portable fragments. | Promote the established Sparrow defaults into tracked Niri defaults, while keeping user overrides separate. |
 | Niri palette | Live generated active/inactive border colors are wallpaper-derived. | `wallcolors.py` writes optional `generated-colors.kdl` after static appearance. | Generated state; preserve generation and precedence, do not copy current hex values. |

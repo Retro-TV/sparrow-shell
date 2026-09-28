@@ -20,7 +20,7 @@ SettingsSurface {
     property int borderWidth: 2
     property bool shadowsEnabled: true
     property int shadowSoftness: 12
-    property string animationPreset: "normal"
+    property string animationPreset: "smooth"
     property string note: ""
     property bool seeded: false
     property int pendingRequestId: -1
@@ -71,8 +71,12 @@ SettingsSurface {
             root.animationPreset = "off";
         else {
             var slowdown = t.match(/^    slowdown (0\.75|1\.0|1\.5)$/m);
-            root.animationPreset = !slowdown || slowdown[1] === "1.0" ? "normal"
-                : (slowdown[1] === "0.75" ? "fast" : "smooth");
+            if (!slowdown || slowdown[1] === "1.5")
+                root.animationPreset = "smooth";
+            else if (slowdown[1] === "1.0")
+                root.animationPreset = "normal";
+            else
+                root.animationPreset = "fast";
         }
         root.base = {
             gaps: root.gaps,

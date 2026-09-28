@@ -1,14 +1,15 @@
-// Portable Niri-native layout and appearance defaults for Sparrow.
+// Sparrow's portable Niri-native layout and appearance defaults.
 
 layout {
-    // Keep wallpaper stationary behind workspaces in Overview.
+    // Let the backdrop wallpaper show through the scaled workspace in Overview.
     background-color "transparent"
 
+    // Default global spacing; Sparrow Look stores user overrides separately.
     gaps 6
+    // Balance the pill's top gap against the app gap at the default scale.
     struts {
         left 12
         right 12
-        // Balance the pill's top gap against the app gap at the default scale.
         top -6
         bottom 12
     }
@@ -53,6 +54,7 @@ layout {
     }
 }
 
+// Keep wallpaper stationary in Overview instead of scaling it with workspaces.
 layer-rule {
     match namespace="^awww-daemon$"
     place-within-backdrop true
@@ -64,6 +66,7 @@ layer-rule {
 }
 
 overview {
+    // Niri's default zoom is already 0.5; retain it and remove the workspace card shadow.
     workspace-shadow {
         off
     }
@@ -80,11 +83,15 @@ recent-windows {
     }
 }
 
-// Product window shape default; the later user-appearance include can override it.
+// User values changed through Sparrow Look override these portable defaults.
 window-rule {
     geometry-corner-radius 12
     clip-to-geometry true
 }
 
-// Sparrow Look writes user overrides here; never track that generated file.
+// Product motion default; Look-generated preferences override this when saved.
+animations {
+    slowdown 1.5
+}
+
 include optional=true "user-appearance.kdl"

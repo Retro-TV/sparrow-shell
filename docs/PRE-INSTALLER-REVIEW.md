@@ -1,5 +1,10 @@
 # Sparrow pre-installer product review
 
+This document preserves the earlier architecture audit. Its original
+merge/reconstruction recommendations are historical; the authoritative SSD
+capture and current direct-copy policy are recorded in the final section and
+[`installer/live-source-map.json`](../installer/live-source-map.json).
+
 **Review date:** 2026-09-28
 **Repository baseline:** `b31a192` — `document Sparrow install inventory and fix Rishot path`
 **Scope:** source/history and read-only live-session audit. No runtime code, user config, package, service, wallpaper, or desktop state was changed.
@@ -390,3 +395,16 @@ files, and provides an ownership-aware restore path. Automated coverage uses
 temporary XDG roots. This resolves the installer-coding blocker, but not fresh
 graphical acceptance: perform a disposable Arch/CachyOS user or VM
 install/login test before calling it release-ready.
+
+## SSD source-of-truth convergence update (2026-09-28)
+
+The active external-SSD desktop is now the source of Sparrow-owned defaults.
+The prior review's recommendations to merge a reconstructed Niri include
+block and portal fragment are superseded. See
+[`installer/live-source-map.json`](../installer/live-source-map.json) for each
+live source, repository source, destination, and copy/sanitize/generate/exclude
+policy. Tracked configs are deployed as files with explicit conflict consent
+and recoverable backups; no live SSD config was changed while capturing them.
+The temporary-HOME file-level convergence test compares the mapped deployed
+files and checks that live Niri Sparrow fragments, active Sparrow user units,
+the GTK portal drop-in, and Sparrow desktop entries are all represented.

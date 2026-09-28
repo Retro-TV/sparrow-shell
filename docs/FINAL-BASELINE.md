@@ -10,6 +10,30 @@ installation ordering. The ordering fix and isolated regression coverage are in
 place; the second bare-metal run is still required before clean-install
 acceptance is claimed.
 
+## Current SSD source-of-truth capture (2026-09-28)
+
+For the packaging convergence pass, the active external-SSD desktop is the
+product source. The byte-level source/install policy is recorded in
+[`installer/live-source-map.json`](../installer/live-source-map.json). This
+supersedes older recommendations below to reconstruct Niri includes, merge a
+portal fragment, or omit the current Look baseline. The installer deploys
+tracked files directly to their XDG destinations, requests consent before
+replacing conflicts, and backs them up. It does not edit the live reference
+configuration during this capture.
+
+Captured defaults include the current Niri root/fragments, Quickshell runtime,
+systemd units, valid portal routing, scoped GTK portal theme, Kitty, Fish,
+Starship, GTK icon setting, Sparrow desktop entry, and fallback Hyprlock file.
+Canonical Look defaults are static in `appearance.kdl`; `user-appearance.kdl`
+is generated only when a user saves a change and is not seeded on fresh install.
+Monitor layout/bindings, generated colors/CSS/icons, selected wallpaper,
+personal state, histories, caches, recordings, and separately installed
+Rishot remain excluded. Niri root normalization is limited to making generated
+colors optional, extracting the conditional Bibata cursor block, removing the
+commented host-output example, promoting canonical Look defaults into the
+static fragment, removing an unavailable Secret portal route, and restoring
+Rishot's `PATH` invocation.
+
 ## 1. What Sparrow is
 
 Sparrow is a Quickshell desktop shell integrated with Niri 26.04. The main
@@ -81,7 +105,7 @@ The visible/runtime feature set is:
 | Calendar / weather / battery / devices | Events/calendar state, optional weather lookup, UPower battery/peripheral data, NetworkManager Wi-Fi, BlueZ Bluetooth. | Mixed core/optional service integrations; availability depends on the relevant host daemon/device/network. |
 | Power / idle / Keep Awake | Pill power actions, dedicated idle monitor, lock/screen-off/suspend policy, Niri output power and idle inhibitor. | Intended core; destructive power actions are never part of static validation. |
 | Lock screen | Quickshell `WlSessionLock`, Quickshell PAM, Qylock Last of Us composition, per-output selected wallpaper, and Auto/Light/Dark foreground based on wallpaper metadata. | Intended primary lock. This pass added a null-screen guard; live lock was not invoked to test it. |
-| Screenshot | Niri binding invokes separately installed Rishot as `rishot` through `PATH`. | Optional external application; not vendored. |
+| Screenshot | Niri binding invokes separately installed `rishot` through `PATH`. | Optional external application; not vendored. |
 | File drop | Pill's accepted local media files are routed to wallpaper selection/application. No generic software installer remains. | Wallpaper-only behavior; do not restore package install UI. |
 | Sysmon / Cava | System monitor surface and optional Cava visualizer. | Optional and independent of removed Game Mode. |
 

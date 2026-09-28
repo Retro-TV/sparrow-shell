@@ -5,7 +5,7 @@ GenericName=File Manager
 Comment=Browse files with Sparrow
 Exec=env GTK_THEME=Sparrow thunar %U
 TryExec=thunar
-Icon=system-file-manager
+Icon=org.xfce.thunar
 Terminal=false
 StartupNotify=true
 Categories=System;Core;GTK;FileTools;FileManager;

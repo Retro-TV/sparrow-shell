@@ -39,16 +39,12 @@ Auto lock text, Night Light off and the built-in Sparrow Default wallpaper.
 Flags are per-user: installation must provide defaults through the schema, not
 copy the development host's `flags.json`.
 
-## Rishot PATH correction and standalone boundary
+## Rishot standalone boundary
 
-The tracked Niri bind previously executed the host-specific
-`"$HOME/.local/bin/rishot"` through `spawn-sh`. It now uses Niri's direct
-`spawn "rishot"`, resolving the executable through the inherited session PATH.
-The keybind catalog already described only the screenshot action/key and had
-no path to change. Getting Started likewise has no Rishot command/path. The
-dependency, portability, baseline and fresh-install docs now describe the
-PATH contract rather than asserting a fixed installation path. The current
-host's active `~/.config/niri` tree is separate from the tracked source; it was
+The portable Niri bind invokes `rishot` through `PATH`. Rishot remains a separately installed upstream
+application and is not copied into Sparrow. The installer checks for that
+executable and reports the optional missing dependency. No Rishot private
+configuration or user state is part of this source capture.
 not edited or reloaded in this task.
 
 Rishot is an independent MIT-licensed Quickshell application by Gakuseei, not a
@@ -105,7 +101,7 @@ declaring those when a genuinely minimal install omits them.
 | `gpu-screen-recorder` | Recorder capture/record; process polling/stop | Official Extra `gpu-screen-recorder` ([package](https://archlinux.org/packages/extra/x86_64/gpu-screen-recorder/)) | Optional feature; surface reports backend failures |
 | `slurp` | Recorder region and window-point selection helper | Official Extra `slurp` | Optional within Recorder; direct display recording remains; picker reports unavailable |
 | `grim` | Rishot Niri capture dependency | Official Extra `grim`; separate Rishot dependency | Optional Rishot path only |
-| `rishot` | Niri `Super+Shift+S` screenshot bind, resolved through PATH | Separate upstream Rishot install; not Sparrow package/source | Manual-only; installer explicitly warns when the screenshot bind has no executable |
+| `rishot` on `PATH` | Niri `Super+Shift+S` screenshot bind | Separate upstream Rishot install; not Sparrow package/source | Manual-only; installer explicitly warns when the executable is missing |
 | `kitty` | Niri terminal bind; generated colors reload via `pkill -USR1` | Official Extra `kitty` ([manual/package](https://man.archlinux.org/man/kitty.1.en)) | Default app; change bind if user does not install/choose Kitty |
 | `fish` | Kitty login shell; user's Fish configuration | Official Extra `fish` | Default app dependency; Kitty shell launch fails or falls back depending Kitty handling |
 | `starship` | Fish prompt initialization | Official Extra `starship` | Optional for base Fish; Sparrow directory prompt absent if not installed |
@@ -182,33 +178,34 @@ time. Never assume `matugen-bin` is the Arch default.
 
 ## Repository files to deploy
 
-Repository source is not a template for machine-generated state. Preserve and
-merge existing user config rather than copying whole directories over them.
+The live reference files are the source of truth for Sparrow-owned defaults.
+The installer copies tracked files to known destinations; generated and
+machine-specific state stays out of the repository. Existing conflicts require
+consent and are backed up, rather than reconstructed by installer code.
 
 | Tracked repository path(s) | Future destination | Ownership class | Deployment policy |
 | --- | --- | --- | --- |
 | `quickshell/sparrow/**` (including `shell.qml`, QML, `Singletons/`, `lib/`, `scripts/`, `idle/shell.qml`, `qmldir`, lockscreen assets, wallpaper default) | `~/.config/quickshell/sparrow` | Sparrow-owned source | One managed runtime tree; stable canonical path. Development may symlink to checkout; released install must not depend on checkout |
-| `niri/config.kdl` | `~/.config/niri/config.kdl` | Sparrow template + user-owned active root | Merge includes into existing config; never overwrite a user's root config wholesale |
-| `niri/sparrow/appearance.kdl`, `binds.kdl`, `input.kdl`, `window-rules.kdl` | `~/.config/niri/sparrow/` | Sparrow-owned static defaults | Back up conflicts; generated/user subfragments are separate |
+| `niri/config.kdl` and tracked `niri/sparrow/*.kdl` | `~/.config/niri/` | Captured Sparrow root and working fragment defaults | Deploy repository files directly; an existing conflicting root/file requires explicit consent and a recoverable backup |
 | `quickshell/sparrow/systemd/sparrow-shell.service`, `sparrow-idle.service`, `sparrow-wallpaper.service`, `sparrow-polkit-agent.service` | `~/.config/systemd/user/` | Sparrow-owned unit templates | Copy files on install, not links into source checkout; enable the Polkit unit only if no existing agent/autostart owns that role |
 | `quickshell/sparrow/systemd/xdg-desktop-portal-gtk.service.d/10-sparrow-theme.conf` | `$XDG_CONFIG_HOME/systemd/user/xdg-desktop-portal-gtk.service.d/` | Sparrow-owned integration override | Conflict/backup required; scoped GTK theme affects portal only |
-| `xdg-desktop-portal/niri-portals.conf.fragment` | Merge into `$XDG_CONFIG_HOME/xdg-desktop-portal/niri-portals.conf` | Sparrow-owned targeted route defaults, not a complete portal config | Set FileChooser to GTK after consent; add ScreenCast=gnome only when the GNOME backend is installed and no route exists; preserve all other routes |
-| `kitty/kitty.conf` | `~/.config/kitty/kitty.conf` | Sparrow default with generated include | Merge/back up pre-existing Kitty config; runtime colors go beside it |
-| `fish/config.fish` | `~/.config/fish/config.fish` | Sparrow recommendation + user shell config | Merge or install opt-in; Fish config is user-owned and should not be wholesale replaced |
-| `starship/starship.toml` | `~/.config/starship.toml` | Sparrow default + user-customizable prompt | Backup/merge; prompt config may be user's own |
+| `xdg-desktop-portal/niri-portals.conf` | `$XDG_CONFIG_HOME/xdg-desktop-portal/niri-portals.conf` | Captured working portal profile | Copy exact file with the recommended profile; existing destination requires consent and backup; declining profile leaves portal routing untouched |
+| `kitty/kitty.conf` | `~/.config/kitty/kitty.conf` | Captured Sparrow default with generated palette include | Copy exact tracked file; ask and back up if a different file already exists |
+| `fish/config.fish` | `~/.config/fish/config.fish` | Captured Sparrow shell setup | Copy exact tracked file; ask and back up if a different file already exists |
+| `starship/starship.toml` | `~/.config/starship.toml` | Captured Sparrow prompt | Copy exact tracked file; ask and back up if a different file already exists |
 | `environment.d/90-cursor.conf` | `~/.config/environment.d/90-cursor.conf` | Recommended Sparrow environment defaults | Install only when Bibata Modern Ice files are detected; preserve existing cursor environment/user choice |
 | `gtk/Sparrow/**` | `$XDG_DATA_HOME/themes/Sparrow/` | Sparrow static theme scaffold | Install tracked CSS/theme metadata; generated colors are separate |
 | `icons/Sparrow/**`, `icons/NOTICE.md`, `icons/PAPIRUS-LICENSE.txt` | `$XDG_DATA_HOME/icons/Sparrow/` and license records | Sparrow theme files plus third-party subset | Deploy exact subset with GPL notice; generated palette recolors selected icons |
-| CachyOS Hello skeleton entry | `$XDG_CONFIG_HOME/autostart/cachyos-hello.desktop` | Narrow distro integration | Only when `/etc/skel` contains the verified CachyOS Hello entry, merge `Hidden=true`; preserve other autostarts and restore only this key on uninstall |
 | `applications/sparrow-files.desktop` | `$XDG_DATA_HOME/applications/sparrow-files.desktop` | Sparrow-owned desktop handler | Install optionally; MIME default change requires explicit user approval |
 | `hyprlock/hyprlock.conf` | `~/.config/sparrow/hyprlock.conf` (fallback only) | Optional Sparrow baseline; active config user-owned | Offer only if fallback retained and destination absent; never replace personal Hyprlock config |
 | `quickshell/sparrow/wallpapers/default.png` | remains inside Sparrow runtime tree | Sparrow-owned redistributable default asset | Install as read-only fallback; never copy over the user's wallpaper library |
 | `docs/**`, `LICENSES/**`, root `LICENSE`, `THIRD_PARTY.md` | repo/docs | Project/legal metadata and component notices | Repository distribution; retain root and asset-adjacent notices with redistributed source/assets |
 
 Do not deploy active `~/.config/niri/sparrow/{display-outputs,display-binds,
-generated-colors,user-appearance,user-binds,user-input}.kdl`, current state,
-portal choices, user-selected app defaults or user shell preferences from this
-host. `~/.config/quickshell/sparrow` currently is a development symlink; the
+generated-colors,user-binds,user-input}.kdl`, current state, selected
+wallpaper, user-selected app defaults or user shell preferences from this
+host. The complete portal profile is an intentional captured default.
+`~/.config/quickshell/sparrow` currently is a development symlink; the
 three live service links also point to the checkout and are not a released
 installation model.
 
@@ -227,7 +224,7 @@ seeded with development-host contents.
 | wallpaper choice/map/shuffle | `$XDG_STATE_HOME/sparrow-shell/{wallpaper,wallpaper-map,wallpaper-bag,...}` | wallpaper scripts | Per-user/output state; never seed |
 | video still and mpvpaper bookkeeping/logs | `$XDG_STATE_HOME/sparrow-shell/{wallpaper-still.png,mpvpaper-*.pid,mpvpaper-*.log}` | wallpaper scripts | Runtime/cache/process state |
 | migration/config transaction journals/backup | `$XDG_STATE_HOME/sparrow-shell/niri-config-transactions/`, `backups/` | Niri transaction helper | Runtime recovery state, never copy |
-| display/config overrides | `~/.config/niri/sparrow/{display-outputs,display-binds,user-appearance,user-binds,user-input}.kdl` | Display, Look, Keybinds, Input | User-owned outputs/preferences; preserve and validate |
+| display/config overrides | `~/.config/niri/sparrow/{display-outputs,display-binds,user-binds,user-input}.kdl` | Display, Keybinds, Input | Machine/user preferences; preserve and validate |
 | generated Matugen palette | `$XDG_CACHE_HOME/sparrow-shell/palette.json` | `wallcolors.py` | Generated, contains current wallpaper-derived palette/luminance |
 | generated Niri colors | `~/.config/niri/sparrow/generated-colors.kdl` | Matugen + transaction helper | Generated; do not include a machine's current values as portable default |
 | Kitty palette | `~/.config/kitty/sparrow-colors.conf` | `wallcolors.py` | Generated; optional include is quiet before first generation |
@@ -253,10 +250,10 @@ configuration.
 | Action | Classification | Safe installer boundary |
 | --- | --- | --- |
 | Establish canonical Quickshell runtime root and stage shell code | Must | Refuse unrelated target; back up/copy policy explicit |
-| Merge Sparrow Niri include graph into user's existing root config | Must for Niri integration | Show staged diff; back up; run `niri validate` before reload; never replace root wholesale |
+| Deploy captured Niri root and Sparrow fragments | Must for Niri integration | Stage and validate repository files; ask before replacing an existing root and back it up |
 | Install/validate Sparrow user units and run `systemctl --user daemon-reload` | Must for managed startup | Enable only after paths/session dependencies are staged; enable the Polkit unit only if no existing agent/autostart exists; no duplicate manual QS/agent launch |
 | `graphical-session.target` / environment availability for Niri | Must | Check session manager integration; do not start shell from Kitty or duplicate compositor autostart |
-| Install portal backends | Recommended desktop profile for chooser and Niri screen sharing | GTK FileChooser plus GNOME ScreenCast for a fresh/unconfigured route; preserve existing ScreenCast and unrelated routes; keep GTK_THEME scoped to GTK portal service |
+| Install portal backends/config | Recommended desktop profile for chooser and Niri screen sharing | Copy captured full portal config after profile consent; conflicting destination is backed up; declining leaves routing untouched; keep GTK_THEME scoped to GTK portal service |
 | GTK portal per-service override | Recommended for Sparrow-themed chooser | Back up conflicts; no global GTK_THEME |
 | Polkit agent | Use an existing user agent, or offer `lxqt-policykit` when none is found | Never remove/disable an existing agent; skip Sparrow unit if an agent/autostart already owns the role |
 | `inode/directory` default to Sparrow Files | Optional | Must ask; current default is a user preference and may conflict with another file manager |
@@ -287,10 +284,11 @@ configuration.
 6. Install/copy the Quickshell runtime to canonical
    `~/.config/quickshell/sparrow`; ensure all tracked scripts/assets/licenses
    are present before enabling units.
-7. Deploy Sparrow static Niri fragments. Merge only include statements into
-   existing `~/.config/niri/config.kdl`; keep generated colors/output/user
-   files absent until runtime creates them. The staged config was validated
-   after Niri was installed.
+7. Deploy the repository's captured Niri root and Sparrow fragments. Ask
+   before replacing a conflicting root, create a restorable backup, and
+   validate the staged repository graph before changing live files. Keep
+   machine output, generated colors, and user input/bind fragments outside the
+   portable defaults.
 8. Install default-app configs and desktop entry only with explicit conflict
    policy. Preserve app config and MIME defaults; install packages only when
    chosen.
@@ -298,9 +296,9 @@ configuration.
    portal and Thunar launch; preserve global app theming and GSettings. Select
    Bibata only if its theme files are present; otherwise preserve the system
    cursor and give the user the manual AUR package name.
-10. Merge Sparrow's targeted portal routes into the existing Niri portal config
-   without replacing unrelated or explicitly selected routes. Install validated
-   units and the GTK portal drop-in. Include Sparrow's Polkit unit only if the
+10. Copy the captured portal file only when the recommended desktop profile is
+    accepted; an existing file requires consent and backup. Install validated
+    units and the GTK portal drop-in. Include Sparrow's Polkit unit only if the
    accepted agent package is installed and no existing agent/autostart owns it.
    Only after successful validation, daemon-reload and enable units against
    the Niri graphical session. Do not start duplicate Quickshell or Polkit
@@ -391,8 +389,8 @@ wallpaper, screenshots and recording exist. The key caveat is availability:
 service daemons and hardware vary and some are intentionally optional.
 
 The login manager/greeter remains intentionally outside Sparrow. Installer v1
-now implements the XDG runtime copy, Niri staged validation/include merge,
-FileChooser plus conditional ScreenCast portal merge, package consent tiers, conflict backups,
+now implements the XDG runtime copy, Niri staged validation and direct tracked
+file deployment, captured portal config copy, package consent tiers, conflict backups,
 ownership manifest, service enablement policy, and restore command. Its exact
 automatic package lists are in `installer/package-sets.json`; AUR tools remain
 manual. Remaining acceptance is a disposable Arch/CachyOS graphical user or

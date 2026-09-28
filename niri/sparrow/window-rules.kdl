@@ -1,10 +1,10 @@
-// Keep Firefox picture-in-picture windows detached from the tiled layout.
+// Preserve the existing Firefox picture-in-picture behavior.
 window-rule {
     match app-id=r#"firefox$"# title="^Picture-in-Picture$"
     open-floating true
 }
 
-// Preserve the initial-width workaround for WezTerm.
+// Preserve the WezTerm initial configure workaround.
 window-rule {
     match app-id=r#"^org\.wezfurlong\.wezterm$"#
     default-column-width {}

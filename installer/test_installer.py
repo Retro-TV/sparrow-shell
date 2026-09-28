@@ -10,6 +10,7 @@ import unittest
 from unittest import mock
 
 from sparrow_installer import SparrowInstaller, XdgPaths
+from sparrow_installer import tree_digest
 
 
 REPO = Path(__file__).resolve().parents[1]
@@ -62,24 +63,6 @@ class InstallerTests(unittest.TestCase):
     def confirm_full_profile(prompt: str, _default: bool) -> bool:
         return "optional feature" not in prompt.lower() and "include optional group" not in prompt.lower()
 
-    def test_portal_merge_preserves_routes_and_is_idempotent(self) -> None:
-        original = """[preferred]\ndefault=gnome;gtk;\norg.freedesktop.impl.portal.ScreenCast=gnome;\norg.freedesktop.impl.portal.FileChooser=org.gtk.FileChooser;\n"""
-        installer = self.installer()
-        updated = installer.merge_portal(original, include_screencast=True)
-        self.assertIn("ScreenCast=gnome;", updated)
-        self.assertIn("FileChooser=gtk;", updated)
-        self.assertEqual(installer.merge_portal(updated, include_screencast=True), updated)
-
-    def test_portal_merge_adds_niri_screencast_route_without_overwriting_other_routes(self) -> None:
-        existing = "[preferred]\norg.freedesktop.impl.portal.ScreenCast=custom;\norg.freedesktop.impl.portal.RemoteDesktop=other;\n"
-        installer = self.installer()
-        updated = installer.merge_portal(existing, include_screencast=True)
-        self.assertIn("ScreenCast=custom;", updated)
-        self.assertIn("RemoteDesktop=other;", updated)
-        self.assertIn("FileChooser=gtk;", updated)
-        restored = installer._restore_portal_key(updated, existing)
-        self.assertEqual(restored, existing)
-
     def test_clean_cachyos_installs_packages_before_niri_and_systemd_validation(self) -> None:
         # The five missing binaries from the bare-metal report start absent.
         for executable in ("niri", "qs", "awww", "awww-daemon", "matugen", "lxqt-policykit-agent"):
@@ -95,23 +78,19 @@ class InstallerTests(unittest.TestCase):
         self.assertTrue({"qs", "awww", "awww-daemon", "matugen", "lxqt-policykit-agent"}.issubset(self.machine["commands"]))
         self.assertTrue((self.paths.config / "systemd/user/sparrow-polkit-agent.service").is_file())
 
-    def test_fresh_defaults_include_canonical_niri_font_icon_and_welcome_behavior(self) -> None:
+    def test_fresh_defaults_copy_live_niri_appearance_and_gtk_icons(self) -> None:
         installer = self.installer()
         self.assertEqual(installer.install(), 0)
         appearance = (self.paths.config / "niri/sparrow/appearance.kdl").read_text()
         self.assertRegex(appearance, r"(?m)^\s*top -6$")
-        rules = (self.paths.config / "niri/sparrow/appearance.kdl").read_text()
-        self.assertIn("geometry-corner-radius 12", rules)
-        self.assertIn("clip-to-geometry true", rules)
-        entry = (self.paths.config / "niri/sparrow/entry.kdl").read_text()
-        self.assertIn("slowdown 1.5", entry)
-        self.assertLess(entry.index("slowdown 1.5"), entry.index('include "appearance.kdl"'))
-        self.assertLess(rules.index("geometry-corner-radius 12"), rules.index('include optional=true "user-appearance.kdl"'))
+        self.assertIn("geometry-corner-radius 12", appearance)
+        self.assertIn("clip-to-geometry true", appearance)
+        self.assertIn("slowdown 1.5", appearance)
+        self.assertFalse((self.paths.config / "niri/sparrow/user-appearance.kdl").exists())
         theme = (REPO / "quickshell/sparrow/Singletons/Theme.qml").read_text()
         self.assertIn(': "Inter Black"', theme)
         self.assertEqual(self.machine["gsettings"].get("icon-theme"), "Sparrow")
-        hello = self.paths.config / "autostart/cachyos-hello.desktop"
-        self.assertEqual(hello.read_text(), "[Desktop Entry]\nHidden=true\n")
+        self.assertTrue((self.paths.config / "gtk-3.0/settings.ini").is_file())
 
     def test_blank_home_bootstrap_has_wallpaper_before_shell_without_seeding_generated_state(self) -> None:
         installer = self.installer()
@@ -124,21 +103,213 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("ExecStartPost=/usr/bin/env SPARROW_AWWW_DAEMON_MANAGED=1", wallpaper_unit)
         self.assertIn("wallpaper.sh init", wallpaper_unit)
         self.assertIn("After=graphical-session.target", shell_unit)
-        self.assertIn('include "sparrow/entry.kdl"', (self.paths.config / "niri/config.kdl").read_text())
+        niri_config = (self.paths.config / "niri/config.kdl").read_text()
+        self.assertIn('include "sparrow/appearance.kdl"', niri_config)
+        self.assertIn('include optional=true "sparrow/generated-colors.kdl"', niri_config)
         wallpaper_script = (runtime / "scripts/wallpaper.sh").read_text()
         self.assertIn('default_wallpaper="$helper/../wallpapers/default.png"', wallpaper_script)
         self.assertFalse((self.paths.config / "niri/sparrow/generated-colors.kdl").exists())
         self.assertFalse((self.paths.cache / "sparrow-shell/palette.json").exists())
 
-    def test_explicit_icon_theme_and_cachyos_hello_choice_are_preserved(self) -> None:
-        self.machine["gsettings"]["icon-theme"] = "Adwaita"
-        hello = self.paths.config / "autostart/cachyos-hello.desktop"
-        hello.parent.mkdir(parents=True)
-        hello.write_text("[Desktop Entry]\nType=Application\nName=CachyOS Hello\nExec=/usr/bin/cachyos-hello\nHidden=false\n")
+    def test_installed_portable_files_converge_with_the_live_ssd_source_map(self) -> None:
+        source_map = json.loads((REPO / "installer/live-source-map.json").read_text())
+        live_home = Path(os.environ.get("SPARROW_LIVE_HOME", str(Path.home())))
+        live_config = live_home / ".config/niri/config.kdl"
+        if not live_config.is_file():
+            self.skipTest("known-good live Niri source is not available; set SPARROW_LIVE_HOME to audit it")
+
+        represented_repo_files = {
+            Path(path)
+            for path in subprocess.check_output(
+                ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"], cwd=REPO
+            ).decode().split("\0")
+            if path
+        }
+
+        root_text = live_config.read_text()
+        cursor_start = root_text.index("\ncursor {") + 1
+        cursor_end = root_text.index("\n}", cursor_start) + 2
+        live_cursor = root_text[cursor_start:cursor_end] + "\n"
+        root_text = root_text[:cursor_start] + 'include optional=true "sparrow/cursor.kdl"' + root_text[cursor_end:]
+        root_text = root_text.replace(
+            'include "sparrow/generated-colors.kdl"',
+            'include optional=true "sparrow/generated-colors.kdl"',
+        )
+        machine_comment = (
+            "// Keep the existing output setup commented until it is intentionally selected.\n"
+            "// -output \"eDP-1\" {\n"
+            "//     mode \"1920x1080@120.030\"\n"
+            "//     scale 2\n"
+            "//     transform \"normal\"\n"
+            "//     position x=1280 y=0\n"
+            "// }\n"
+        )
+        root_text = root_text.replace(machine_comment, "")
+        root_text = root_text.replace("\n\n\nhotkey-overlay", "\n\nhotkey-overlay")
+        self.assertEqual((REPO / "niri/config.kdl").read_text(), root_text)
+        self.assertEqual((REPO / "niri/sparrow/cursor.kdl").read_text(), live_cursor)
+
+        mapped_live_files = set()
+        for item in source_map["home_relative_sources"]:
+            live_rel = item["live"].split("#", 1)[0]
+            repo_source = REPO / item["repo"]
+            self.assertTrue(repo_source.exists(), f"unrepresented repository source: {item['repo']}")
+            repo_rel = Path(item["repo"])
+            if repo_source.is_dir():
+                for candidate in repo_source.rglob("*"):
+                    if candidate.is_file():
+                        self.assertIn(
+                            candidate.relative_to(REPO), represented_repo_files,
+                            f"portable source is not represented in the Git worktree: {candidate}",
+                        )
+            else:
+                self.assertIn(repo_rel, represented_repo_files, f"portable source is not represented in the Git worktree: {repo_source}")
+            if item["policy"] == "copy-tree-exact-through-current-development-link":
+                live_tree = (live_home / live_rel).resolve()
+                self.assertEqual(tree_digest(repo_source), tree_digest(live_tree), item["live"])
+            elif item["policy"].startswith("copy-scaffold"):
+                live_tree = live_home / live_rel
+                self.assertTrue(live_tree.is_dir(), f"missing live theme tree: {item['live']}")
+                for source_file in repo_source.rglob("*"):
+                    if source_file.is_file():
+                        live_file = live_tree / source_file.relative_to(repo_source)
+                        self.assertTrue(live_file.is_file(), f"unrepresented theme source: {live_file}")
+                        if source_file.name == "index.theme":
+                            self.assertEqual(source_file.read_bytes(), live_file.read_bytes(), str(live_file))
+            elif "#cursor-block" in item["live"]:
+                self.assertEqual(repo_source.read_text(), live_cursor)
+            elif item["live"] == ".config/niri/config.kdl":
+                self.assertEqual(repo_source.read_text(), root_text)
+            elif item["policy"] == "copy-with-generated-look-defaults-promoted":
+                live_source = live_home / live_rel
+                self.assertTrue(live_source.is_file(), f"missing live source: {item['live']}")
+                mapped_live_files.add(live_rel)
+                repo_text = repo_source.read_text()
+                canonical_defaults = (
+                    "    // Balance the pill's top gap against the app gap at the default scale.\n"
+                    "    struts {\n        left 12\n        right 12\n        top -6\n        bottom 12\n    }"
+                )
+                live_struts = (
+                    "    // The top edge is balanced against Sparrow's pill reservation in the\n"
+                    "    // managed user fragment; keep the other outer struts fixed here.\n"
+                    "    struts {\n        left 12\n        right 12\n        bottom 12\n    }"
+                )
+                self.assertIn(canonical_defaults, repo_text)
+                normalized = repo_text.replace(canonical_defaults, live_struts)
+                normalized = normalized.replace(
+                    "\nwindow-rule {\n    geometry-corner-radius 12\n    clip-to-geometry true\n}\n\n"
+                    "// Product motion default; Look-generated preferences override this when saved.\n"
+                    "animations {\n    slowdown 1.5\n}\n",
+                    "",
+                )
+                self.assertIn("gaps 6", (live_home / ".config/niri/sparrow/user-appearance.kdl").read_text())
+                self.assertIn("top -6", (live_home / ".config/niri/sparrow/user-appearance.kdl").read_text())
+                self.assertIn("geometry-corner-radius 12", (live_home / ".config/niri/sparrow/user-appearance.kdl").read_text())
+                self.assertIn("slowdown 1.5", (live_home / ".config/niri/sparrow/user-appearance.kdl").read_text())
+                self.assertEqual(normalized, live_source.read_text(), item["live"])
+            elif item["policy"] == "copy-with-rishot-home-path-sanitized-to-path":
+                live_source = live_home / live_rel
+                self.assertTrue(live_source.is_file(), f"missing live source: {item['live']}")
+                mapped_live_files.add(live_rel)
+                normalized = live_source.read_text().replace(
+                    'spawn-sh "\\"$HOME/.local/bin/rishot\\""',
+                    'spawn "rishot"',
+                )
+                self.assertNotEqual(normalized, live_source.read_text(), "expected captured absolute Rishot invocation")
+                self.assertEqual(repo_source.read_text(), normalized, item["live"])
+            elif item["policy"] == "copy-with-unavailable-secret-route-removed-after-conflict-consent":
+                live_source = live_home / live_rel
+                self.assertTrue(live_source.is_file(), f"missing live source: {item['live']}")
+                mapped_live_files.add(live_rel)
+                normalized = live_source.read_text().replace(
+                    "org.freedesktop.impl.portal.Secret=gnome-keyring;\n", ""
+                )
+                self.assertIn("FileChooser=gtk;", normalized)
+                self.assertIn("ScreenCast=gnome;", normalized)
+                self.assertNotIn("org.freedesktop.impl.portal.Secret=", repo_source.read_text())
+                self.assertEqual(repo_source.read_text(), normalized, item["live"])
+            else:
+                live_source = live_home / live_rel
+                self.assertTrue(live_source.is_file(), f"missing live source: {item['live']}")
+                mapped_live_files.add(live_rel)
+                if item["policy"].startswith("copy-exact"):
+                    self.assertEqual(repo_source.read_bytes(), live_source.read_bytes(), item["live"])
+
+        live_sparrow_fragments = {
+            f".config/niri/sparrow/{path.name}"
+            for path in (live_home / ".config/niri/sparrow").glob("*.kdl")
+            if ".backup" not in path.name and ".bak" not in path.name
+        }
+        excluded_fragments = {
+            ".config/niri/sparrow/generated-colors.kdl",
+            ".config/niri/sparrow/display-outputs.kdl",
+            ".config/niri/sparrow/display-binds.kdl",
+            ".config/niri/sparrow/user-binds.kdl",
+            ".config/niri/sparrow/user-input.kdl",
+            ".config/niri/sparrow/user-appearance.kdl",
+        }
+        mapped_fragments = {path for path in mapped_live_files if path.startswith(".config/niri/sparrow/")}
+        self.assertEqual(live_sparrow_fragments - excluded_fragments, mapped_fragments)
+
+        # These active Sparrow-owned file families are source inputs, not
+        # generated state. Fail closed if the live SSD gains one that the
+        # source map (and therefore repository deployment) does not cover.
+        mapped_sources = {
+            item["live"].split("#", 1)[0]
+            for item in source_map["home_relative_sources"]
+        }
+        required_live_families = (
+            (".config/systemd/user", "sparrow-*.service"),
+            (".config/systemd/user/xdg-desktop-portal-gtk.service.d", "*.conf"),
+            (".local/share/applications", "sparrow*.desktop"),
+        )
+        for directory, pattern in required_live_families:
+            for live_file in (live_home / directory).glob(pattern):
+                self.assertIn(
+                    (Path(directory) / live_file.name).as_posix(),
+                    mapped_sources,
+                    f"live Sparrow-owned file is missing from the source map: {live_file}",
+                )
+
+        self.machine["themes"] = {"Bibata-Modern-Ice"}
         installer = self.installer()
         self.assertEqual(installer.install(), 0)
-        self.assertEqual(self.machine["gsettings"]["icon-theme"], "Adwaita")
-        self.assertIn("Hidden=false", hello.read_text())
+        for item in source_map["home_relative_sources"]:
+            repo_source = REPO / item["repo"]
+            destination = self.root / item["install"]
+            if item["policy"] == "copy-tree-exact-through-current-development-link":
+                runtime_target = destination.resolve()
+                for source_file in repo_source.rglob("*"):
+                    if not source_file.is_file():
+                        continue
+                    relative = source_file.relative_to(repo_source)
+                    if relative.as_posix() in {
+                        "lib/monitors.test.mjs",
+                        "scripts/test_wallcolors.py",
+                        "scripts/test_niri_config_transaction.py",
+                    }:
+                        continue
+                    deployed = runtime_target / relative
+                    self.assertTrue(deployed.is_file(), f"not deployed: {relative}")
+                    self.assertEqual(deployed.read_bytes(), source_file.read_bytes(), str(relative))
+            elif item["policy"].startswith("copy-exact") or item["policy"].startswith("copy-with-") or item["policy"].startswith("extract-exact") or item["policy"] == "sanitize-generated-and-machine-comment":
+                if item["policy"] == "copy-exact-when-no-agent-exists":
+                    self.assertTrue(destination.is_file())
+                    self.assertEqual(destination.read_bytes(), repo_source.read_bytes(), item["install"])
+                elif item["policy"] == "copy-exact-when-bibata-exists":
+                    self.assertTrue(destination.is_file())
+                    self.assertEqual(destination.read_bytes(), repo_source.read_bytes(), item["install"])
+                else:
+                    self.assertEqual(destination.read_bytes(), repo_source.read_bytes(), item["install"])
+
+        for tree_source, installed in (
+            (REPO / "gtk/Sparrow", self.paths.data / "themes/Sparrow"),
+            (REPO / "icons/Sparrow", self.paths.data / "icons/Sparrow"),
+        ):
+            for source_file in tree_source.rglob("*"):
+                if source_file.is_file():
+                    relative = source_file.relative_to(tree_source)
+                    self.assertEqual((installed / relative).read_bytes(), source_file.read_bytes(), str(relative))
 
     def test_icon_preference_converges_only_while_sparrow_still_owns_it(self) -> None:
         self.assertEqual(self.installer().install(), 0)
@@ -148,44 +319,14 @@ class InstallerTests(unittest.TestCase):
         manifest = json.loads((self.paths.state / "sparrow-shell/installer/manifest.json").read_text())
         self.assertNotIn("org.gnome.desktop.interface/icon-theme", manifest.get("managed_settings", {}))
 
-    def test_welcome_override_restore_preserves_later_unrelated_edits(self) -> None:
-        target = self.paths.config / "autostart/cachyos-hello.desktop"
-        target.parent.mkdir(parents=True)
-        original = "[Desktop Entry]\nType=Application\nName=CachyOS Hello\nExec=/usr/bin/cachyos-hello\nComment=hello\n"
-        target.write_text(original)
+    def test_generated_look_override_is_not_seeded_or_overwritten(self) -> None:
         self.assertEqual(self.installer().install(), 0)
-        self.assertIn("Hidden=true", target.read_text())
-        target.write_text(target.read_text().replace("Comment=hello", "Comment=my note"))
-        self.assertEqual(self.installer().install(), 0)
-        self.assertIn("Comment=my note", target.read_text())
-        self.assertIn("Hidden=true", target.read_text())
-        self.assertEqual(self.installer().uninstall(), 0)
-        self.assertNotIn("Hidden=", target.read_text())
-        self.assertIn("Comment=my note", target.read_text())
-
-    def test_welcome_override_does_not_recreate_user_deleted_entry_on_update(self) -> None:
-        target = self.paths.config / "autostart/cachyos-hello.desktop"
-        self.assertEqual(self.installer().install(), 0)
-        target.unlink()
-        self.assertEqual(self.installer().install(), 0)
+        target = self.paths.config / "niri/sparrow/user-appearance.kdl"
         self.assertFalse(target.exists())
-
-    def test_managed_niri_fragment_updates_on_convergence(self) -> None:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("// user's mutable Look choices\nlayout { gaps 9 }\n")
         self.assertEqual(self.installer().install(), 0)
-        target = self.paths.config / "niri/sparrow/appearance.kdl"
-        manifest_path = self.paths.state / "sparrow-shell/installer/manifest.json"
-        manifest = json.loads(manifest_path.read_text())
-        record = manifest["managed"][str(target)]
-        old = target.read_text()
-        record["sha256"] = hashlib.sha256(old.encode()).hexdigest()
-        manifest_path.write_text(json.dumps(manifest))
-        target.write_text(old.replace("top -6", "top 0"))
-        # Model an installer-owned file from the previous release: its recorded
-        # hash, not the current contents, identifies it as safe to converge.
-        manifest["managed"][str(target)]["sha256"] = hashlib.sha256(target.read_bytes()).hexdigest()
-        manifest_path.write_text(json.dumps(manifest))
-        self.assertEqual(self.installer().install(), 0)
-        self.assertIn("top -6", target.read_text())
+        self.assertEqual(target.read_text(), "// user's mutable Look choices\nlayout { gaps 9 }\n")
 
     def test_systemd_validation_fails_if_a_required_binary_remains_missing_after_pacman(self) -> None:
         self.machine["missing_after_install"].add("qs")
@@ -326,27 +467,23 @@ class InstallerTests(unittest.TestCase):
         package_install = next(event for event in self.machine["events"] if event[:3] == ("sudo", "pacman", "-S"))
         self.assertNotIn("lxqt-policykit", package_install)
 
-    def test_existing_custom_screencast_route_is_kept_without_installing_gnome_backend(self) -> None:
+    def test_portal_config_is_copied_from_the_repository_after_conflict_consent(self) -> None:
         portal = self.paths.config / "xdg-desktop-portal/niri-portals.conf"
         portal.parent.mkdir(parents=True)
         portal.write_text("[preferred]\norg.freedesktop.impl.portal.ScreenCast=custom;\n")
         installer = self.installer()
         self.assertEqual(installer.install(), 0)
-        package_install = next(event for event in self.machine["events"] if event[:3] == ("sudo", "pacman", "-S"))
-        self.assertNotIn("xdg-desktop-portal-gnome", package_install)
-        result = portal.read_text()
-        self.assertIn("ScreenCast=custom;", result)
-        self.assertIn("FileChooser=gtk;", result)
+        package_events = [event for event in self.machine["events"] if event[:3] == ("sudo", "pacman", "-S")]
+        self.assertTrue(any("xdg-desktop-portal-gnome" in event for event in package_events))
+        self.assertEqual(portal.read_bytes(), (REPO / "xdg-desktop-portal/niri-portals.conf").read_bytes())
 
-    def test_declining_default_portal_bundle_does_not_create_route_to_missing_backend(self) -> None:
+    def test_declining_default_profile_leaves_portal_configuration_unmodified(self) -> None:
         installer = self.installer(
             confirm=lambda prompt, default: False if "recommended desktop apps" in prompt.lower() else default
         )
         self.assertEqual(installer.install(), 0)
         portal = self.paths.config / "xdg-desktop-portal/niri-portals.conf"
-        result = portal.read_text()
-        self.assertIn("FileChooser=gtk;", result)
-        self.assertNotIn("ScreenCast=gnome;", result)
+        self.assertFalse(portal.exists())
         self.assertNotIn("xdg-desktop-portal-gnome", self.machine["packages"])
 
     def test_absent_optional_tools_do_not_block_clean_install(self) -> None:
@@ -376,14 +513,10 @@ class InstallerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "forbids external command runners"):
             SparrowInstaller(self.paths, REPO, testing=True, run=subprocess.run)
 
-    def test_niri_merge_has_one_marker_and_preserves_user_output(self) -> None:
-        original = 'output "DP-1" {\n    mode "1920x1080@60"\n}\n'
+    def test_niri_root_is_installed_as_the_tracked_file_not_synthesized(self) -> None:
         installer = self.installer()
-        merged = installer.merge_niri_root(original)
-        self.assertIn('output "DP-1"', merged)
-        self.assertIn('include "sparrow/entry.kdl"', merged)
-        self.assertEqual(installer.merge_niri_root(merged), merged)
-        self.assertEqual(SparrowInstaller._remove_niri_marker(merged), original)
+        _, planned, _ = installer._planned_niri(validate=False)
+        self.assertEqual(planned[self.paths.config / "niri/config.kdl"], (REPO / "niri/config.kdl").read_bytes())
 
     def test_fresh_niri_validation_can_wait_until_required_package_install(self) -> None:
         installer = self.installer()
@@ -424,16 +557,6 @@ class InstallerTests(unittest.TestCase):
         unit = installer._unit_payload(REPO / "quickshell/sparrow/systemd/sparrow-shell.service")
         self.assertIn(b"%h/config-alt/quickshell/sparrow", unit)
         self.assertNotIn(b"%h/.config/quickshell/sparrow", unit)
-
-    def test_existing_direct_fragment_includes_gain_missing_sparrow_fragments_only(self) -> None:
-        original = 'include "sparrow/appearance.kdl"\ninclude "sparrow/binds.kdl"\n'
-        installer = self.installer()
-        merged = installer.merge_niri_root(original)
-        block = merged.split("// >>> BEGIN SPARROW INSTALLER INCLUDES\n", 1)[1]
-        self.assertNotIn('include "sparrow/entry.kdl"', block)
-        self.assertNotIn('include "sparrow/session-defaults.kdl"', block)
-        self.assertNotIn('include "sparrow/cursor.kdl"', block)
-        self.assertNotIn('include "sparrow/appearance.kdl"', block)
 
     def test_conflict_is_preserved_when_user_declines(self) -> None:
         target = self.paths.config / "kitty/kitty.conf"
@@ -478,7 +601,7 @@ class InstallerTests(unittest.TestCase):
         second = self.installer()
         self.assertEqual(second.install(), 0)
         self.assertEqual(entry.resolve(), runtime)
-        self.assertEqual(root_config.read_text().count('include "sparrow/entry.kdl"'), 1)
+        self.assertEqual(root_config.read_text().count('include "sparrow/appearance.kdl"'), 1)
         self.assertEqual((self.paths.config / "xdg-desktop-portal/niri-portals.conf").read_text().count("FileChooser=gtk;"), 1)
 
         uninstaller = self.installer()
@@ -499,7 +622,7 @@ class InstallerTests(unittest.TestCase):
         self.assertFalse(self.paths.data.exists())
         self.assertFalse(self.paths.state.exists())
 
-    def test_existing_niri_and_portal_routes_survive_uninstall(self) -> None:
+    def test_replaced_niri_and_portal_files_restore_from_backup_on_uninstall(self) -> None:
         niri = self.paths.config / "niri/config.kdl"
         niri.parent.mkdir(parents=True)
         original_niri = 'output "DP-1" {\n    mode "1920x1080@60"\n}\n'
@@ -511,9 +634,8 @@ class InstallerTests(unittest.TestCase):
 
         installer = self.installer()
         self.assertEqual(installer.install(), 0)
-        self.assertIn('output "DP-1"', niri.read_text())
-        self.assertIn("ScreenCast=gnome;", portal.read_text())
-        self.assertIn("FileChooser=gtk;", portal.read_text())
+        self.assertEqual(niri.read_bytes(), (REPO / "niri/config.kdl").read_bytes())
+        self.assertEqual(portal.read_bytes(), (REPO / "xdg-desktop-portal/niri-portals.conf").read_bytes())
 
         self.assertEqual(self.installer().uninstall(), 0)
         self.assertEqual(niri.read_text(), original_niri)
@@ -528,7 +650,7 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(self.installer().uninstall(), 0)
         self.assertEqual(target.read_text(), "my later customization\n")
 
-    def test_uninstall_preserves_edits_inside_niri_merge_and_portal_route(self) -> None:
+    def test_uninstall_preserves_user_edits_to_replaced_niri_and_portal_files(self) -> None:
         niri = self.paths.config / "niri/config.kdl"
         niri.parent.mkdir(parents=True)
         original_niri = 'output "DP-1" {}\n'
@@ -538,7 +660,7 @@ class InstallerTests(unittest.TestCase):
         portal.write_text("[preferred]\norg.freedesktop.impl.portal.FileChooser=gnome;\n")
         self.assertEqual(self.installer().install(), 0)
 
-        niri.write_text(niri.read_text().replace('include "sparrow/entry.kdl"', 'include "sparrow/entry.kdl"\ninclude "user-extra.kdl"'))
+        niri.write_text(niri.read_text() + '\ninclude "user-extra.kdl"\n')
         portal.write_text(portal.read_text().replace("FileChooser=gtk;", "FileChooser=custom;"))
         self.assertEqual(self.installer().uninstall(), 0)
         self.assertIn('include "user-extra.kdl"', niri.read_text())

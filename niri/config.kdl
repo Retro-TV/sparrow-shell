@@ -1,14 +1,26 @@
-// Sparrow's portable Niri entry point.
-// Install as ~/.config/niri/config.kdl only after preserving/merging any
-// existing user configuration. Generated and user-managed fragments stay out
-// of the repository and are included only when present.
+// Sparrow Shell Niri foundation.
+// The active configuration stays here; Sparrow-controlled pieces live in sparrow/.
 
-// A single entry include lets the installer integrate Sparrow into an
-// existing user-owned config without replacing that file. Includes inside
-// sparrow/entry.kdl are relative to this managed fragment.
-include "sparrow/entry.kdl"
+include "sparrow/appearance.kdl"
+include optional=true "sparrow/generated-colors.kdl"
+include optional=true "sparrow/display-outputs.kdl"
+include "sparrow/window-rules.kdl"
+include "sparrow/binds.kdl"
+include optional=true "sparrow/user-binds.kdl"
+include optional=true "sparrow/display-binds.kdl"
+include "sparrow/input.kdl"
 
-// Fresh-install defaults only. When merging into an existing config, keep the
-// user's own cursor and miscellaneous Niri preferences instead.
-include "sparrow/session-defaults.kdl"
-include "sparrow/cursor.kdl"
+include optional=true "sparrow/cursor.kdl"
+
+hotkey-overlay {
+    skip-at-startup
+}
+
+// Ask clients to omit client-side decorations where possible so Niri's geometry is visible.
+prefer-no-csd
+
+screenshot-path "~/Pictures/Screenshots/Screenshot from %Y-%m-%d %H-%M-%S.png"
+
+animations {
+    // Keep Niri's scrolling-layout animations at their defaults.
+}

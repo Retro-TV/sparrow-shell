@@ -1,0 +1,61 @@
+{
+  "schema": 1,
+  "purpose": "File-level record of the known-good Niri/Quickshell desktop used as Sparrow's source of truth.",
+  "home_relative_sources": [
+    {"live": ".config/niri/config.kdl", "repo": "niri/config.kdl", "install": ".config/niri/config.kdl", "policy": "sanitize-generated-and-machine-comment"},
+    {"live": ".config/niri/config.kdl#cursor-block", "repo": "niri/sparrow/cursor.kdl", "install": ".config/niri/sparrow/cursor.kdl", "policy": "extract-exact-block; install-only-when-bibata-exists"},
+    {"live": ".config/niri/sparrow/appearance.kdl", "repo": "niri/sparrow/appearance.kdl", "install": ".config/niri/sparrow/appearance.kdl", "policy": "copy-with-generated-look-defaults-promoted"},
+    {"live": ".config/niri/sparrow/binds.kdl", "repo": "niri/sparrow/binds.kdl", "install": ".config/niri/sparrow/binds.kdl", "policy": "copy-with-rishot-home-path-sanitized-to-path"},
+    {"live": ".config/niri/sparrow/input.kdl", "repo": "niri/sparrow/input.kdl", "install": ".config/niri/sparrow/input.kdl", "policy": "copy-exact"},
+    {"live": ".config/niri/sparrow/window-rules.kdl", "repo": "niri/sparrow/window-rules.kdl", "install": ".config/niri/sparrow/window-rules.kdl", "policy": "copy-exact"},
+    {"live": ".config/kitty/kitty.conf", "repo": "kitty/kitty.conf", "install": ".config/kitty/kitty.conf", "policy": "copy-exact"},
+    {"live": ".config/fish/config.fish", "repo": "fish/config.fish", "install": ".config/fish/config.fish", "policy": "copy-exact"},
+    {"live": ".config/starship.toml", "repo": "starship/starship.toml", "install": ".config/starship.toml", "policy": "copy-exact"},
+    {"live": ".config/environment.d/90-cursor.conf", "repo": "environment.d/90-cursor.conf", "install": ".config/environment.d/90-cursor.conf", "policy": "copy-exact-when-bibata-exists"},
+    {"live": ".config/gtk-3.0/settings.ini", "repo": "gtk/settings.ini", "install": ".config/gtk-3.0/settings.ini", "policy": "copy-exact"},
+    {"live": ".config/systemd/user/sparrow-shell.service", "repo": "quickshell/sparrow/systemd/sparrow-shell.service", "install": ".config/systemd/user/sparrow-shell.service", "policy": "copy-exact"},
+    {"live": ".config/systemd/user/sparrow-idle.service", "repo": "quickshell/sparrow/systemd/sparrow-idle.service", "install": ".config/systemd/user/sparrow-idle.service", "policy": "copy-exact"},
+    {"live": ".config/systemd/user/sparrow-wallpaper.service", "repo": "quickshell/sparrow/systemd/sparrow-wallpaper.service", "install": ".config/systemd/user/sparrow-wallpaper.service", "policy": "copy-exact"},
+    {"live": ".config/systemd/user/sparrow-polkit-agent.service", "repo": "quickshell/sparrow/systemd/sparrow-polkit-agent.service", "install": ".config/systemd/user/sparrow-polkit-agent.service", "policy": "copy-exact-when-no-agent-exists"},
+    {"live": ".config/systemd/user/xdg-desktop-portal-gtk.service.d/10-sparrow-theme.conf", "repo": "quickshell/sparrow/systemd/xdg-desktop-portal-gtk.service.d/10-sparrow-theme.conf", "install": ".config/systemd/user/xdg-desktop-portal-gtk.service.d/10-sparrow-theme.conf", "policy": "copy-exact"},
+    {"live": ".config/xdg-desktop-portal/niri-portals.conf", "repo": "xdg-desktop-portal/niri-portals.conf", "install": ".config/xdg-desktop-portal/niri-portals.conf", "policy": "copy-with-unavailable-secret-route-removed-after-conflict-consent"},
+    {"live": ".config/sparrow/hyprlock.conf", "repo": "hyprlock/hyprlock.conf", "install": ".config/sparrow/hyprlock.conf", "policy": "copy-exact-fallback-only"},
+    {"live": ".local/share/applications/sparrow-files.desktop", "repo": "applications/sparrow-files.desktop", "install": ".local/share/applications/sparrow-files.desktop", "policy": "copy-exact"},
+    {"live": ".config/quickshell/sparrow", "repo": "quickshell/sparrow", "install": ".config/quickshell/sparrow", "policy": "copy-tree-exact-through-current-development-link"},
+    {"live": ".local/share/themes/Sparrow", "repo": "gtk/Sparrow", "install": ".local/share/themes/Sparrow", "policy": "copy-scaffold; generated-palette-css-is-regenerated"},
+    {"live": ".local/share/icons/Sparrow", "repo": "icons/Sparrow", "install": ".local/share/icons/Sparrow", "policy": "copy-scaffold; wallpaper-colored-icons-and-cache-are-generated"},
+    {"live": ".config/quickshell/sparrow/wallpapers/default.png", "repo": "quickshell/sparrow/wallpapers/default.png", "install": ".local/share/sparrow-shell/runtime/wallpapers/default.png", "policy": "copy-exact-portable-default"}
+  ],
+  "generated_or_host_state": [
+    ".config/niri/sparrow/generated-colors.kdl",
+    ".config/niri/sparrow/display-outputs.kdl",
+    ".config/niri/sparrow/display-binds.kdl",
+    ".config/niri/sparrow/user-binds.kdl",
+    ".config/niri/sparrow/user-input.kdl",
+    ".config/niri/sparrow/user-appearance.kdl (mutable Look output; canonical defaults live in appearance.kdl)",
+    ".config/niri/sparrow/*.backup* and *.bak (operator recovery copies)",
+    ".config/kitty/sparrow-colors.conf",
+    ".config/matugen/config.toml (legacy Hyprland-only config; not called by the active wallpaper pipeline)",
+    ".local/state/sparrow-shell/**",
+    ".cache/sparrow-shell/**",
+    ".local/share/themes/Sparrow generated Matugen output",
+    ".local/share/icons/Sparrow generated SVGs and icon-theme.cache",
+    "selected wallpaper, wallpaper map/directory/shuffle bag and video still",
+    "Niri display output names, positions, modes, scales and focus designation",
+    "Fish variables/history, recordings, runtime logs and caches",
+    ".config/sparrow/mocha.conf (stale unused legacy color values; no active caller)",
+    ".config/rishot/config.json and Rishot state (separate application/user choices)",
+    ".config/quickshell/Bar.qml and .config/quickshell/shell.qml (sibling files not loaded by Sparrow services)"
+  ],
+  "explicit_sanitizations": [
+    "Promote current canonical Look values from generated user-appearance.kdl into static appearance.kdl; do not seed a generated mutable fragment on fresh install.",
+    "Remove the explicit Secret=gnome-keyring portal route because neither gnome-keyring nor oo7-portal exists in the canonical reference environment and Sparrow has no Secret portal dependency.",
+    "Normalize the live screenshot binding's $HOME/.local/bin/rishot command to the portable rishot command resolved through PATH."
+  ],
+  "not_deployed": [
+    ".config/quickshell/Bar.qml and .config/quickshell/shell.qml (not used by either active Sparrow service)",
+    ".config/hypr/** (inactive legacy Hyprland files)",
+    ".local/bin/rishot and .local/share/rishot/** (separately installed upstream application)",
+    "personal wallpaper library and current selection"
+  ]
+}

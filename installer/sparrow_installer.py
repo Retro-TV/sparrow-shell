@@ -433,47 +433,6 @@ class SparrowInstaller:
         self.changed.append(str(path))
         return True
 
-    def write_merged_file(self, path: Path, content: bytes, *, role: str, merge_role: str) -> bool:
-        old_record = self.managed.get(str(path))
-        current = path.read_text(encoding="utf-8") if path.is_file() else ""
-        wanted = content.decode()
-        if current == wanted:
-            return True
-        if merge_role == "portal" and path.is_file():
-            route = self._portal_filechooser_route(current)
-            previously_managed = bool(old_record and old_record.get("mergeRole") == "portal")
-            if (route is not None and route != "gtk;") or (previously_managed and route != "gtk;"):
-                if not self._ask_replace(path):
-                    self.output(f"Preserved existing FileChooser portal choice: {path}")
-                    return False
-        if old_record and old_record.get("kind") == "merge":
-            # The merge builder only changes Sparrow's marker/key; an edited or
-            # malformed marker is never silently overwritten.
-            if merge_role == "niri" and MARKER_START in current and MARKER_END not in current:
-                raise RuntimeError(f"incomplete Sparrow merge marker in {path}")
-        elif path.exists() and not self._ask_replace(path):
-            self.output(f"Preserved existing file; skipped {role}: {path}")
-            return False
-        self._snapshot_once(path)
-        initial = self._initial_snapshot(path) if old_record is None else old_record.get("initial", {"exists": False})
-        digest = hashlib.sha256(content).hexdigest()
-        if not self.dry_run:
-            atomic_write(path, content)
-        expected_merge = None
-        if merge_role == "niri":
-            match = re.search(
-                r"(?m)^" + re.escape(MARKER_START) + r"\n.*?^" + re.escape(MARKER_END) + r"\n?",
-                content.decode(), re.S,
-            )
-            expected_merge = match.group(0) if match else None
-        self.managed[str(path)] = {
-            "kind": "merge", "sha256": digest, "role": role, "initial": initial,
-            "mergeRole": merge_role,
-            "mergeExpected": expected_merge,
-        }
-        self.changed.append(str(path))
-        return True
-
     def package_sets(self) -> dict:
         try:
             sets = json.loads((self.repo / "installer/package-sets.json").read_text(encoding="utf-8"))
@@ -597,13 +556,6 @@ class SparrowInstaller:
             return False
         if self.confirm("Install Sparrow's recommended desktop apps, fonts, GTK theme and portal integrations?", True):
             defaults = list(sets["defaults"])
-            existing_screencast = self._portal_route(
-                self.paths.config / "xdg-desktop-portal/niri-portals.conf",
-                "org.freedesktop.impl.portal.ScreenCast",
-            )
-            if existing_screencast and existing_screencast != "gnome;":
-                defaults.remove("xdg-desktop-portal-gnome")
-                self.output(f"Preserving the existing ScreenCast portal route ({existing_screencast}); skipping the GNOME portal package.")
             agent_exists = self.has_existing_polkit_agent()
             if not agent_exists:
                 defaults.append(sets["polkit_agent"]["package"])
@@ -705,10 +657,6 @@ class SparrowInstaller:
             (stage / "sparrow" / relative).unlink(missing_ok=True)
         return stage / "sparrow"
 
-    def _niri_expected_directives(self) -> list[str]:
-        entry = (self.repo / "niri/sparrow/entry.kdl").read_text(encoding="utf-8")
-        return [line.strip() for line in entry.splitlines() if line.strip().startswith("include ")]
-
     def _detect_bibata(self) -> bool:
         if self.testing:
             return "Bibata-Modern-Ice" in self.test_machine.get("themes", set())
@@ -717,24 +665,6 @@ class SparrowInstaller:
             for root in (self.paths.data / "icons", Path("/usr/share/icons"), Path("/usr/local/share/icons"))
         )
 
-    def _has_cachyos_hello_skeleton_entry(self) -> bool:
-        if self.testing:
-            return bool(self.test_machine.get("cachyos_hello_autostart", True))
-        source = Path("/etc/skel/.config/autostart/cachyos-hello.desktop")
-        try:
-            return self._is_cachyos_hello_desktop(source.read_text(encoding="utf-8"))
-        except OSError:
-            return False
-
-    @staticmethod
-    def _is_cachyos_hello_desktop(content: str) -> bool:
-        section = re.search(r"(?ms)^\[Desktop Entry\]\s*\n(.*?)(?=^\[|\Z)", content)
-        if not section:
-            return False
-        values = dict(re.findall(r"(?m)^([A-Za-z][A-Za-z0-9]*)\s*=\s*(.*?)\s*$", section.group(1)))
-        exec_command = values.get("Exec", "").split("%", 1)[0].strip()
-        return values.get("Name") == "CachyOS Hello" and exec_command == "/usr/bin/cachyos-hello"
-
     @staticmethod
     def _desktop_hidden_value(content: str) -> str | None:
         section = re.search(r"(?ms)^\[Desktop Entry\]\s*\n(.*?)(?=^\[|\Z)", content)
@@ -742,20 +672,6 @@ class SparrowInstaller:
             return None
         match = re.search(r"(?m)^Hidden\s*=\s*(.*?)\s*$", section.group(1))
         return match.group(1).lower() if match else None
-
-    @staticmethod
-    def _merge_desktop_hidden(content: str) -> str:
-        if not content:
-            return "[Desktop Entry]\nHidden=true\n"
-        section = re.search(r"(?ms)^\[Desktop Entry\]\s*\n(.*?)(?=^\[|\Z)", content)
-        if not section:
-            return content.rstrip() + "\n\n[Desktop Entry]\nHidden=true\n"
-        match = re.search(r"(?m)^Hidden\s*=.*$", section.group(1))
-        if match:
-            updated = section.group(1)[:match.start()] + "Hidden=true" + section.group(1)[match.end():]
-        else:
-            updated = section.group(1).rstrip("\n") + "\nHidden=true\n"
-        return content[:section.start(1)] + updated + content[section.end(1):]
 
     def _icon_theme_user_value(self) -> tuple[bool, str | None]:
         if self.testing:
@@ -857,112 +773,18 @@ class SparrowInstaller:
                 return ""
         return result
 
-    def _apply_cachyos_hello_override(self, path: Path) -> None:
-        current = path.read_text(encoding="utf-8") if path.is_file() else ""
-        old_record = self.managed.get(str(path))
-        if old_record and old_record.get("mergeRole") == "desktop-hidden":
-            if not path.exists():
-                self.managed.pop(str(path), None)
-                self.output(f"Preserved the user's removal of the CachyOS Hello override: {path}")
-                return
-            if current and self._desktop_hidden_value(current) != "true":
-                self.managed.pop(str(path), None)
-                self.output(f"Preserved user-edited CachyOS Hello autostart: {path}")
-                return
-        elif current:
-            if not self._is_cachyos_hello_desktop(current):
-                self.output(f"Preserved unrelated user autostart with the CachyOS Hello desktop ID: {path}")
-                return
-            # Explicit Hidden=false is treated as a user choice to keep it.
-            if self._desktop_hidden_value(current) == "false":
-                self.output(f"Preserved explicit CachyOS Hello autostart choice: {path}")
-                return
-            if self._desktop_hidden_value(current) == "true":
-                return
-        wanted = self._merge_desktop_hidden(current)
-        if wanted == current:
-            return
-        self._snapshot_once(path)
-        initial = self._initial_snapshot(path) if old_record is None else old_record.get("initial", {"exists": False})
-        if not self.dry_run:
-            atomic_write(path, wanted.encode())
-        self.managed[str(path)] = {
-            "kind": "merge", "role": "CachyOS Hello autostart suppression",
-            "initial": initial, "mergeRole": "desktop-hidden", "mergeExpected": "Hidden=true",
-        }
-        self.changed.append(str(path))
-        self.output("Suppressed only CachyOS Hello through the Sparrow user's XDG autostart override.")
-
-    def _niri_directives_to_add(self, existing: str) -> list[str]:
-        expected = self._niri_expected_directives()
-        noncomment = [line.strip() for line in existing.splitlines() if line.strip() and not line.lstrip().startswith("//")]
-        present = {line for line in noncomment if line.startswith("include ") and '"sparrow/' in line}
-        entry_line = 'include "sparrow/entry.kdl"'
-        if entry_line in present:
-            return []
-        if present:
-            return [line for line in expected if line not in present]
-        return ['include "sparrow/entry.kdl"']
-
-    def merge_niri_root(self, existing: str) -> str:
-        if MARKER_START in existing:
-            start = existing.index(MARKER_START)
-            end = existing.find(MARKER_END, start)
-            if end < 0:
-                raise RuntimeError("Niri installer marker is incomplete; refusing to edit the user's root config.")
-            additions = self._niri_directives_to_add(existing)
-            if not additions:
-                return existing
-            before_end = existing[:end]
-            if before_end and not before_end.endswith("\n"):
-                before_end += "\n"
-            result = before_end + "\n".join(additions) + "\n" + existing[end:]
-            return result
-        directives = self._niri_directives_to_add(existing)
-        if not directives:
-            return existing
-        block = f"{MARKER_START}\n" + "\n".join(directives) + f"\n{MARKER_END}\n"
-        prefix = existing
-        if prefix and not prefix.endswith("\n"):
-            prefix += "\n"
-        return prefix + block
-
-    def merge_portal(self, existing: str, *, include_screencast: bool) -> str:
-        routes = {
-            "org.freedesktop.impl.portal.FileChooser": "gtk;",
-        }
-        if include_screencast:
-            routes["org.freedesktop.impl.portal.ScreenCast"] = "gnome;"
-        section_pattern = re.compile(r"(?ms)^\[preferred\]\s*\n(.*?)(?=^\[|\Z)")
-        match = section_pattern.search(existing)
-        if match:
-            section = match.group(1)
-            for key, value in routes.items():
-                key_pattern = re.compile(rf"(?m)^{re.escape(key)}\s*=.*$")
-                found = key_pattern.search(section)
-                if found:
-                    if key.endswith("FileChooser") and found.group(0).split("=", 1)[1].strip() != value:
-                        section = key_pattern.sub(f"{key}={value}", section, count=1)
-                else:
-                    section += f"{key}={value}\n"
-            return existing[:match.start(1)] + section + existing[match.end(1):]
-        tail = "" if not existing or existing.endswith("\n") else "\n"
-        route_lines = "".join(f"{key}={value}\n" for key, value in routes.items())
-        return existing + tail + f"\n[preferred]\n{route_lines}"
-
     def _planned_niri(self, *, validate: bool = True) -> tuple[Path, dict[Path, bytes], bytes]:
         niri_home = self.paths.config / "niri"
         planned: dict[Path, bytes] = {}
+        root_source = self.repo / "niri/config.kdl"
         if niri_home.exists():
-            # Niri configs are small; preserve symlinks and host/user fragments for staged validation.
+            # Validate the tracked Sparrow config alongside host-local generated files.
             with tempfile.TemporaryDirectory(prefix="sparrow-niri-stage-") as temp_name:
                 stage_home = Path(temp_name) / "niri"
                 shutil.copytree(niri_home, stage_home, symlinks=True)
                 root = stage_home / "config.kdl"
-                if not root.exists():
-                    root.write_bytes((self.repo / "niri/config.kdl").read_bytes())
-                else:
-                    root.write_text(self.merge_niri_root(root.read_text(encoding="utf-8")), encoding="utf-8")
+                root.parent.mkdir(parents=True, exist_ok=True)
+                root.write_bytes(root_source.read_bytes())
                 for source in sorted((self.repo / "niri/sparrow").glob("*.kdl")):
                     dest = stage_home / "sparrow" / source.name
                     if source.name == "cursor.kdl" and not self.bibata_available:
@@ -988,10 +810,7 @@ class SparrowInstaller:
                 else:
                     self.output("Staged Niri validation is deferred until after the approved package step and before deployment.")
             root_path = niri_home / "config.kdl"
-            if root_path.exists():
-                root_text = self.merge_niri_root(root_path.read_text(encoding="utf-8"))
-            else:
-                root_text = (self.repo / "niri/config.kdl").read_text(encoding="utf-8")
+            root_text = root_source.read_text(encoding="utf-8")
         else:
             with tempfile.TemporaryDirectory(prefix="sparrow-niri-stage-") as temp_name:
                 stage_home = Path(temp_name) / "niri"
@@ -1009,7 +828,7 @@ class SparrowInstaller:
                 else:
                     self.output("Staged Niri validation is deferred until after the approved package step and before deployment.")
             root_path = niri_home / "config.kdl"
-            root_text = (self.repo / "niri/config.kdl").read_text(encoding="utf-8")
+            root_text = root_source.read_text(encoding="utf-8")
         planned[root_path] = root_text.encode()
         return root_path, planned, root_text.encode()
 
@@ -1056,21 +875,18 @@ class SparrowInstaller:
             (self.repo / "kitty/kitty.conf", self.paths.config / "kitty/kitty.conf", "Kitty defaults"),
             (self.repo / "fish/config.fish", self.paths.config / "fish/config.fish", "Fish defaults"),
             (self.repo / "starship/starship.toml", self.paths.config / "starship.toml", "Starship defaults"),
+            (self.repo / "gtk/settings.ini", self.paths.config / "gtk-3.0/settings.ini", "GTK icon-theme setting"),
             (self.repo / "applications/sparrow-files.desktop", self.paths.data / "applications/sparrow-files.desktop", "Sparrow Files desktop entry"),
             (self.repo / "hyprlock/hyprlock.conf", self.paths.config / "sparrow/hyprlock.conf", "optional Hyprlock fallback config"),
         ]
-        if self._has_cachyos_hello_skeleton_entry():
-            hello_path = self.paths.config / "autostart/cachyos-hello.desktop"
-            plan.append((hello_path, b"[Desktop Entry]\nHidden=true\n", "CachyOS Hello autostart suppression", 0o644))
         if self.bibata_available:
             user_files.append((self.repo / "environment.d/90-cursor.conf", self.paths.config / "environment.d/90-cursor.conf", "recommended cursor defaults"))
         for source, destination, label in user_files:
             plan.append((destination, source.read_bytes(), label, source.stat().st_mode & 0o777))
-        portal = self.paths.config / "xdg-desktop-portal/niri-portals.conf"
-        original_portal = portal.read_text(encoding="utf-8") if portal.is_file() else ""
-        gnome_portal_installed = "xdg-desktop-portal-gnome" in self.installed_packages()
-        merged_portal = self.merge_portal(original_portal, include_screencast=gnome_portal_installed)
-        plan.append((portal, merged_portal.encode(), "Sparrow portal route merge", 0o644))
+        if not self.default_profile_skipped:
+            portal = self.paths.config / "xdg-desktop-portal/niri-portals.conf"
+            portal_source = self.repo / "xdg-desktop-portal/niri-portals.conf"
+            plan.append((portal, portal_source.read_bytes(), "Niri portal routing", 0o644))
         return plan
 
     def _validate_units(self, plan: list[tuple[Path, bytes, str, int]]) -> None:
@@ -1110,19 +926,7 @@ class SparrowInstaller:
 
     def _apply_plan(self, plan: list[tuple[Path, bytes, str, int]]) -> None:
         for path, content, role, mode in plan:
-            if role == "Niri root config" and path.exists():
-                old_text = path.read_text(encoding="utf-8")
-                new_text = content.decode()
-                if old_text != new_text and MARKER_START in new_text:
-                    self.write_merged_file(path, content, role=role, merge_role="niri")
-                else:
-                    self.write_file(path, content, mode=mode, role=role)
-            elif role == "Sparrow portal route merge":
-                self.write_merged_file(path, content, role=role, merge_role="portal")
-            elif role == "CachyOS Hello autostart suppression":
-                self._apply_cachyos_hello_override(path)
-            else:
-                self.write_file(path, content, mode=mode, role=role)
+            self.write_file(path, content, mode=mode, role=role)
 
     def _save_manifest(self) -> None:
         if self.dry_run:
@@ -1174,12 +978,12 @@ class SparrowInstaller:
                 candidate = next(data for path, data in niri_plan.items() if path == existing_niri)
                 root_changes = candidate.decode() != existing_niri.read_text(encoding="utf-8")
                 if root_changes and self.dry_run:
-                    self.output("  Niri root: would append/update only Sparrow's marked include block.")
+                    self.output("  Niri root: would install the tracked Sparrow config (existing file is backed up first).")
                 elif root_changes and not self._ask_replace(existing_niri):
                     self.output("Stopped without changing any Sparrow or Niri files.")
                     return 2
                 if root_changes and not self.dry_run and os.environ.get("XDG_CURRENT_DESKTOP", "").lower() == "niri":
-                    if not self.confirm("Niri watches its config: applying the validated include merge will update the current session. Continue?", False):
+                    if not self.confirm("Niri watches its config: replacing it with Sparrow's validated config will update the current session. Continue?", False):
                         self.output("Stopped before changing Niri or Sparrow files.")
                         return 2
             if self.dry_run:
@@ -1444,26 +1248,6 @@ class SparrowInstaller:
             # Remove only an otherwise empty section created by Sparrow.
             result = re.sub(r"(?m)^\[preferred\]\s*\n(?=\[|\Z)", "", result)
         return result
-
-    @staticmethod
-    def _portal_filechooser_route(content: str) -> str | None:
-        preferred = re.search(r"(?ms)^\[preferred\]\s*\n(.*?)(?=^\[|\Z)", content)
-        if not preferred:
-            return None
-        match = re.search(r"(?m)^org\.freedesktop\.impl\.portal\.FileChooser\s*=\s*(.*)$", preferred.group(1))
-        return match.group(1).strip() if match else None
-
-    @staticmethod
-    def _portal_route(path: Path, interface: str) -> str | None:
-        try:
-            content = path.read_text(encoding="utf-8")
-        except OSError:
-            return None
-        preferred = re.search(r"(?ms)^\[preferred\]\s*\n(.*?)(?=^\[|\Z)", content)
-        if not preferred:
-            return None
-        match = re.search(rf"(?m)^{re.escape(interface)}\s*=\s*(.*)$", preferred.group(1))
-        return match.group(1).strip() if match else None
 
 
 def main(argv: list[str] | None = None) -> int:

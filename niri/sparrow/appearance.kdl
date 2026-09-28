@@ -4,14 +4,16 @@ layout {
     // Let the backdrop wallpaper show through the scaled workspace in Overview.
     background-color "transparent"
 
-    // Niri applies gaps on every window edge. Matching outer struts make
-    // outer spacing (strut + gap) equal inner spacing (2*gaps).
+    // One Niri gap supplies both the inner seam and the three unobstructed
+    // outer edges. 8 logical px is a clean 10 physical-pixel baseline
+    // at the reference output's 1.25 scale. The negative top strut cancels
+    // Niri's top gap so the pill's exclusive zone supplies that same gap.
     gaps 8
     struts {
-        left 8
-        right 8
+        left 0
+        right 0
         top -8
-        bottom 8
+        bottom 0
     }
 
     center-focused-column "never"

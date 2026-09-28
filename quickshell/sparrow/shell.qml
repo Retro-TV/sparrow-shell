@@ -34,20 +34,24 @@ ShellRoot {
     property bool autoOnboardingOpened: false
     property real niriLayoutGaps: 8
     property real niriTopStrut: 0
+    property bool niriHasLegacyOuterStruts: false
 
     readonly property string niriSparrowConfigPath: (Quickshell.env("XDG_CONFIG_HOME")
         || (Quickshell.env("HOME") + "/.config")) + "/niri/sparrow/"
 
     function refreshNiriSpacing() {
-        var gapsMatch = userAppearanceFile.text().match(/^    gaps (-?[0-9]+(?:\\.[0-9]+)?)$/m);
+        root.niriHasLegacyOuterStruts = /^        (?:left|right|bottom) (?:[1-9][0-9]*(?:\.[0-9]+)?|0\.(?:[0-9]*[1-9][0-9]*))$/m
+            .test(userAppearanceFile.text());
+
+        var gapsMatch = userAppearanceFile.text().match(/^    gaps (-?[0-9]+(?:\.[0-9]+)?)$/m);
         if (!gapsMatch)
-            gapsMatch = appearanceFile.text().match(/^    gaps (-?[0-9]+(?:\\.[0-9]+)?)$/m);
+            gapsMatch = appearanceFile.text().match(/^    gaps (-?[0-9]+(?:\.[0-9]+)?)$/m);
         if (gapsMatch)
             root.niriLayoutGaps = Number(gapsMatch[1]);
 
-        var strutMatch = userAppearanceFile.text().match(/^        top (-?[0-9]+(?:\\.[0-9]+)?)$/m);
+        var strutMatch = userAppearanceFile.text().match(/^        top (-?[0-9]+(?:\.[0-9]+)?)$/m);
         if (!strutMatch)
-            strutMatch = appearanceFile.text().match(/^        top (-?[0-9]+(?:\\.[0-9]+)?)$/m);
+            strutMatch = appearanceFile.text().match(/^        top (-?[0-9]+(?:\.[0-9]+)?)$/m);
         if (strutMatch)
             root.niriTopStrut = Number(strutMatch[1]);
         else
@@ -259,9 +263,12 @@ ShellRoot {
             readonly property real s: modelData ? (modelData.height / 1080) * Flags.uiScale : 1
             readonly property real topGap: 8 * Flags.topGap * s
             readonly property real restHeight: 38 * s
-            readonly property real appGap: 8 * Flags.appGap * s
+            // Preserve the old visible pill clearance until Look saves the
+            // canonical geometry, then use the one Niri logical-pixel Gap.
+            readonly property real appGap: root.niriHasLegacyOuterStruts
+                ? 8 * Flags.appGap * s : root.niriLayoutGaps
 
-            /** Niri adds layout struts and its regular outer gap after a layer's exclusive zone. Subtract those configured values so the visible app gap stays exactly appGap. */
+            /** Niri applies top struts and its regular layout gap after the layer's exclusive zone. Cancel those terms so the visible pill-to-window seam is exactly one layout gap. */
             readonly property real reservedH: Math.max(0,
                 restHeight + topGap + appGap - root.niriTopStrut - root.niriLayoutGaps)
 

@@ -129,8 +129,9 @@ Singleton {
             property string uiFont: ""
             property real pillOpacity: 1.0
             /** Screen-edge gap as a fraction of the 8px scaled spacing unit. 0 sits the pill flush to the screen edge. */
-            property real topGap: 1.0
-            /** Pill-to-window gap as a fraction of the same scaled 8px spacing unit. 0 tucks the windows flush under the pill. */
+            property real topGap: 1.1
+            // Legacy Pill-to-window spacing retained for migration of old
+            // user-appearance.kdl files; new spacing uses Look's Niri Gap.
             property real appGap: 1.0
             property int recordCountdown: 5
             property string recordDir: ""

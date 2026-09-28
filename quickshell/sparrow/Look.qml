@@ -15,7 +15,7 @@ SettingsSurface {
     readonly property string preferencesPath: (Quickshell.env("XDG_CONFIG_HOME")
         || (Quickshell.env("HOME") + "/.config")) + "/niri/sparrow/user-appearance.kdl"
     property string preferencesText: ""
-    property int gaps: 8
+    property real gaps: 8
     property int cornerRadius: 12
     property int borderWidth: 2
     property bool shadowsEnabled: true
@@ -26,7 +26,6 @@ SettingsSurface {
     property int pendingRequestId: -1
     property var base: ({})
     property var pillGapControl: null
-    property var appGapControl: null
     property var pillOpacityControl: null
 
     readonly property var animationOptions: [
@@ -48,12 +47,11 @@ SettingsSurface {
         r.push({ item: animationRow, kind: "seg", vals: ["off", "fast", "normal", "smooth"],
             get: function () { return root.animationPreset; }, set: function (v) { root.animationPreset = v; root.scheduleWrite(); } });
         r.push({ item: pillGapRow, kind: "scrub", bump: function (d) { if (root.pillGapControl) root.pillGapControl.bump(d); } });
-        r.push({ item: appGapRow, kind: "scrub", bump: function (d) { if (root.appGapControl) root.appGapControl.bump(d); } });
         r.push({ item: pillOpacityRow, kind: "scrub", bump: function (d) { if (root.pillOpacityControl) root.pillOpacityControl.bump(d); } });
         return r;
     }
 
-    function readInt(text, pattern, fallback) {
+    function readNumber(text, pattern, fallback) {
         var match = text.match(pattern);
         return match ? Number(match[1]) : fallback;
     }
@@ -61,10 +59,13 @@ SettingsSurface {
     function seed() {
         root.preferencesText = preferencesFile.text();
         var t = root.preferencesText;
-        root.gaps = readInt(t, /^    gaps ([0-9]+)$/m, 8);
-        root.borderWidth = readInt(t, /^        width ([0-9]+)$/m, 2);
-        root.shadowSoftness = readInt(t, /^        softness ([0-9]+)$/m, 12);
-        root.cornerRadius = readInt(t, /^    geometry-corner-radius ([0-9]+)$/m, 12);
+        root.gaps = readNumber(t, /^    gaps ([0-9]+(?:\.[0-9]+)?)$/m, 8);
+        var hasLegacyOuterStruts = /^        (?:left|right|bottom) (?:[1-9][0-9]*(?:\.[0-9]+)?|0\.(?:[0-9]*[1-9][0-9]*))$/m.test(t);
+        if (hasLegacyOuterStruts)
+            root.gaps = Math.round(8 * Flags.appGap * root.s * 10) / 10;
+        root.borderWidth = readNumber(t, /^        width ([0-9]+)$/m, 2);
+        root.shadowSoftness = readNumber(t, /^        softness ([0-9]+)$/m, 12);
+        root.cornerRadius = readNumber(t, /^    geometry-corner-radius ([0-9]+)$/m, 12);
         var shadow = t.match(/^        (on|off)$/m);
         root.shadowsEnabled = !shadow || shadow[1] === "on";
         if (/^    off$/m.test(t))
@@ -84,7 +85,6 @@ SettingsSurface {
             borderWidth: root.borderWidth,
             shadowSoftness: root.shadowSoftness,
             topGap: Flags.topGap,
-            appGap: Flags.appGap,
             pillOpacity: Flags.pillOpacity
         };
         root.seeded = true;
@@ -98,10 +98,10 @@ SettingsSurface {
             + "layout {\n"
             + "    gaps " + gaps + "\n"
             + "    struts {\n"
-            + "        left " + gaps + "\n"
-            + "        right " + gaps + "\n"
+            + "        left 0\n"
+            + "        right 0\n"
             + "        top " + (-gaps) + "\n"
-            + "        bottom " + gaps + "\n"
+            + "        bottom 0\n"
             + "    }\n"
             + "    border {\n"
             + "        width " + borderWidth + "\n"
@@ -312,11 +312,6 @@ SettingsSurface {
                     ScrubValue { s: root.s; value: Flags.topGap; openValue: root.base.topGap; from: 0; to: 2; step: 0.1; decimals: 1
                         Component.onCompleted: root.pillGapControl = this
                         onEdited: v => Flags.topGap = v }
-                }
-                FieldRow { id: appGapRow; label: "App gap"; caption: "Space under the pill"
-                    ScrubValue { s: root.s; value: Flags.appGap; openValue: root.base.appGap; from: 0; to: 2; step: 0.1; decimals: 1
-                        Component.onCompleted: root.appGapControl = this
-                        onEdited: v => Flags.appGap = v }
                 }
                 FieldRow { id: pillOpacityRow; label: "Pill opacity"
                     ScrubValue { s: root.s; value: Flags.pillOpacity; openValue: root.base.pillOpacity; from: 0.55; to: 1; step: 0.05; decimals: 2

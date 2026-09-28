@@ -6,6 +6,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
 from sparrow_installer import SparrowInstaller, XdgPaths
 
@@ -33,6 +34,12 @@ class InstallerTests(unittest.TestCase):
             "missing_after_install": set(),
             "existing_polkit_agent": False,
             "pacman_failure": False,
+            "pacman_failure_exit_code": 1,
+            "pacman_query_failure": False,
+            "pacman_transaction_count": 0,
+            "interrupt_at_transaction": None,
+            "interrupt_at_prompt": False,
+            "invocations": [],
             "events": [],
         }
 
@@ -102,10 +109,120 @@ class InstallerTests(unittest.TestCase):
 
     def test_pacman_failure_stops_before_configuration_deployment(self) -> None:
         self.machine["pacman_failure"] = True
+        self.machine["pacman_failure_exit_code"] = 42
         installer = self.installer()
-        self.assertEqual(installer.install(), 2)
+        self.assertEqual(installer.install(), 42)
         self.assertFalse(self.paths.config.exists())
         self.assertFalse(any(event[0] == "niri" for event in self.machine["events"]))
+        self.assertTrue(any("failed with exit status" in message for message in self.messages))
+
+    def test_default_package_failure_stops_without_continuing_to_optional_prompt_or_deploying(self) -> None:
+        self.machine["pacman_failure_at_transaction"] = 2
+        installer = self.installer()
+        self.assertEqual(installer.install(), 1)
+        self.assertFalse(self.paths.config.exists())
+        self.assertFalse(any("Choose optional feature packages" in message for message in self.messages))
+        self.assertTrue(any("failed with exit status" in message for message in self.messages))
+
+    def test_package_command_inherits_terminal_io_instead_of_capturing_progress(self) -> None:
+        installer = self.installer()
+        self.machine["commands"].update({"sudo", "pacman"})
+        self.machine["packages"].update(installer.package_sets()["required"])
+        installer._installed_package_cache = None
+        self.assertTrue(installer._install_package_list(["kitty"], label="stdio test"))
+        args, kwargs = next(
+            (args, kwargs)
+            for args, kwargs in reversed(self.machine["invocations"])
+            if args[:3] == ("sudo", "pacman", "-S")
+        )
+        self.assertEqual(args[:4], ("sudo", "pacman", "-S", "--needed"))
+        self.assertNotIn("stdout", kwargs)
+        self.assertNotIn("stderr", kwargs)
+        self.assertNotIn("text", kwargs)
+        self.assertTrue(any("Starting pacman transaction" in message for message in self.messages))
+        self.assertTrue(any("completed successfully" in message for message in self.messages))
+
+    def test_production_command_runner_receives_inherited_stdio_options(self) -> None:
+        calls = []
+
+        def inert_runner(args, **kwargs):
+            calls.append((tuple(args), dict(kwargs)))
+            return subprocess.CompletedProcess(args, 0)
+
+        installer = SparrowInstaller(self.paths, REPO, testing=False, run=inert_runner, output=self.messages.append)
+        installer._command(["sudo", "pacman", "-S", "--needed", "kitty"], inherit_stdio=True)
+        args, kwargs = calls[0]
+        self.assertEqual(args[:3], ("sudo", "pacman", "-S"))
+        self.assertNotIn("stdout", kwargs)
+        self.assertNotIn("stderr", kwargs)
+        self.assertNotIn("stdin", kwargs)
+        self.assertNotIn("text", kwargs)
+
+    def test_interrupted_default_transaction_is_resumable_without_deployment(self) -> None:
+        self.machine["interrupt_at_transaction"] = 2
+        first = self.installer()
+        self.assertEqual(first.install(), 130)
+        self.assertTrue(set(first.package_sets()["required"]).issubset(self.machine["packages"]))
+        self.assertFalse(self.paths.config.exists())
+        self.assertTrue(any("Pacman transaction for Default desktop profile was interrupted" in message for message in self.messages))
+        self.assertFalse(any("Choose optional feature packages" in message for message in self.messages))
+
+        self.machine["interrupt_at_transaction"] = None
+        resumed = self.installer()
+        self.assertEqual(resumed.install(), 0)
+        self.assertTrue((self.paths.config / "niri/config.kdl").is_file())
+        transactions = [event for event in self.machine["events"] if event[:3] == ("sudo", "pacman", "-S")]
+        self.assertEqual(len(transactions), 3)
+        self.assertTrue(any("Required Sparrow runtime: already installed" in message for message in self.messages))
+        self.assertTrue((self.paths.config / "systemd/user/sparrow-shell.service").is_file())
+
+    def test_prompt_interrupt_is_clean_and_does_not_traceback_or_deploy(self) -> None:
+        def interrupt_prompt(_prompt, _default):
+            raise KeyboardInterrupt
+        installer = self.installer(confirm=interrupt_prompt)
+        self.assertEqual(installer.install(), 130)
+        self.assertTrue(any(message == "Installation cancelled by user. No further Sparrow changes were made." for message in self.messages))
+        self.assertFalse(any("Traceback" in message for message in self.messages))
+        self.assertFalse(self.paths.config.exists())
+
+    def test_pacman_unavailable_is_reported_before_queries_or_deployment(self) -> None:
+        self.machine["commands"].discard("pacman")
+        installer = self.installer()
+        self.assertEqual(installer.install(), 2)
+        self.assertTrue(any("pacman is unavailable" in message for message in self.messages))
+        self.assertFalse(self.paths.config.exists())
+
+    def test_pacman_query_failure_does_not_assume_everything_is_missing(self) -> None:
+        self.machine["pacman_query_failure"] = True
+        installer = self.installer()
+        self.assertEqual(installer.install(), 1)
+        self.assertFalse(any(event[:3] == ("sudo", "pacman", "-S") for event in self.machine["events"]))
+        self.assertFalse(self.paths.config.exists())
+
+    def test_sudo_unavailable_stops_after_consent_without_deployment(self) -> None:
+        self.machine["commands"].discard("sudo")
+        installer = self.installer()
+        self.assertEqual(installer.install(), 1)
+        self.assertTrue(any("sudo is unavailable" in message for message in self.messages))
+        self.assertFalse(self.paths.config.exists())
+
+    def test_malformed_package_set_is_rejected_before_transactions(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="sparrow-invalid-manifest-") as temp:
+            repository = Path(temp)
+            package_dir = repository / "installer"
+            package_dir.mkdir()
+            (package_dir / "package-sets.json").write_text('{"required": "sudo pacman"}', encoding="utf-8")
+            installer = SparrowInstaller(self.paths, repository, testing=True, test_machine=self.machine, output=self.messages.append)
+            with self.assertRaisesRegex(ValueError, "required.*list"):
+                installer.package_sets()
+        self.assertEqual(self.machine["events"], [])
+
+    def test_uninstall_after_interrupted_package_stage_is_safe_noop(self) -> None:
+        self.machine["interrupt_at_transaction"] = 2
+        self.assertEqual(self.installer().install(), 130)
+        self.assertEqual(self.installer().uninstall(), 0)
+        self.assertFalse(self.paths.config.exists())
+        self.assertFalse(self.paths.state.exists())
 
     def test_existing_polkit_agent_is_preserved_and_sparrow_agent_is_not_staged(self) -> None:
         self.machine["existing_polkit_agent"] = True
@@ -185,6 +302,21 @@ class InstallerTests(unittest.TestCase):
         installer = self.installer()
         self.assertFalse(installer._confirm("Install required packages?", True))
         self.assertTrue(any("without an interactive terminal" in line for line in self.messages))
+
+    def test_full_noninteractive_install_stops_before_package_transaction(self) -> None:
+        installer = SparrowInstaller(self.paths, REPO, testing=True, test_machine=self.machine, output=self.messages.append)
+        with mock.patch("sys.stdin.isatty", return_value=False):
+            self.assertEqual(installer.install(), 2)
+        self.assertFalse(any(event[:3] == ("sudo", "pacman", "-S") for event in self.machine["events"]))
+        self.assertFalse(self.paths.config.exists())
+
+    def test_preinstalled_package_group_is_skipped_without_transaction(self) -> None:
+        installer = self.installer()
+        self.machine["packages"].add("kitty")
+        self.machine["commands"].add("kitty")
+        self.assertTrue(installer._install_package_list(["kitty"], label="already present"))
+        self.assertEqual(self.machine["pacman_transaction_count"], 0)
+        self.assertTrue(any("already installed" in message for message in self.messages))
 
     def test_installed_units_follow_custom_xdg_config_home(self) -> None:
         paths = XdgPaths(

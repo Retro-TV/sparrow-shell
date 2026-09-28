@@ -21,7 +21,16 @@ if ! command -v python3 >/dev/null 2>&1; then
     printf '%s' 'Python is needed to run Sparrow Installer. Install it now with sudo pacman? [y/N] '
     read -r answer
     case "${answer,,}" in
-        y|yes) sudo pacman -S --needed python ;;
+        y|yes)
+            printf '%s\n' 'Starting pacman transaction to install the Sparrow Installer runtime (python).'
+            if sudo pacman -S --needed python; then
+                printf '%s\n' 'Python bootstrap completed; starting Sparrow Installer.'
+            else
+                status=$?
+                printf 'Python bootstrap failed or was interrupted (exit status %s). No Sparrow files were changed.\n' "$status" >&2
+                exit "$status"
+            fi
+            ;;
         *) printf '%s\n' 'No changes made. Install Python with: sudo pacman -S --needed python' >&2; exit 1 ;;
     esac
 fi

@@ -119,6 +119,17 @@ class XdgPaths:
         )
 
 
+class PackageTransactionError(RuntimeError):
+    """A requested package transaction did not complete successfully."""
+
+    def __init__(self, message: str, exit_code: int = 1) -> None:
+        super().__init__(message)
+        code = int(exit_code)
+        # subprocess uses negative codes for signal termination; expose the
+        # conventional shell status (128 + signal) instead of losing it as 1.
+        self.exit_code = min(128 + abs(code), 255) if code < 0 else max(1, min(code, 255))
+
+
 class SparrowInstaller:
     def __init__(
         self,
@@ -147,6 +158,11 @@ class SparrowInstaller:
             "missing_after_install": set(),
             "existing_polkit_agent": False,
             "pacman_failure": False,
+            "pacman_query_failure": False,
+            "pacman_transaction_count": 0,
+            "interrupt_at_transaction": None,
+            "interrupt_at_prompt": False,
+            "invocations": [],
             "events": [],
         }
         self.run = run or (self._test_run if testing else subprocess.run)
@@ -166,6 +182,9 @@ class SparrowInstaller:
         self._installed_package_cache: set[str] | None = None
         self.install_polkit_agent = False
         self.bibata_available = False
+        self.skipped_optional_groups: list[str] = []
+        self.default_profile_skipped = False
+        self.missing_manual: list[str] = []
 
     def _which(self, executable: str) -> str | None:
         if self.testing:
@@ -175,6 +194,7 @@ class SparrowInstaller:
     def _test_run(self, args: list[str], **kwargs) -> subprocess.CompletedProcess:
         """A closed command simulator: installer tests never dispatch to the host."""
         self.test_machine["events"].append(tuple(args))
+        self.test_machine["invocations"].append((tuple(args), dict(kwargs)))
         text_result = kwargs.get("text", True)
         stdout = ""
         stderr = ""
@@ -196,18 +216,25 @@ class SparrowInstaller:
             "xdg-utils": {"xdg-open"}, "libnotify": {"notify-send"},
         }
         if args[:2] == ["pacman", "-Qq"]:
-            stdout = "\n".join(sorted(self.test_machine["packages"]))
-        elif args[:3] == ["sudo", "pacman", "-S"]:
-            if self.test_machine["pacman_failure"]:
-                code, stderr = 1, "simulated pacman transaction failure"
+            if self.test_machine["pacman_query_failure"]:
+                code, stderr = 1, "simulated pacman query failure"
             else:
-                packages = args[4:]
-                self.test_machine["packages"].update(packages)
-                for package in packages:
-                    self.test_machine["commands"].update(package_binaries.get(package, set()))
-                    if package == "python-pillow":
-                        self.test_machine["modules"].add("PIL.Image")
-                self.test_machine["commands"].difference_update(self.test_machine["missing_after_install"])
+                stdout = "\n".join(sorted(self.test_machine["packages"]))
+        elif args[:3] == ["sudo", "pacman", "-S"]:
+            self.test_machine["pacman_transaction_count"] += 1
+            transaction = self.test_machine["pacman_transaction_count"]
+            packages = args[4:]
+            if self.test_machine["interrupt_at_transaction"] == transaction:
+                # Model pacman having committed a subset before Ctrl+C. A
+                # rerun must query and skip these installed packages.
+                partial_count = max(1, len(packages) // 3)
+                self._simulate_package_install(packages[:partial_count], package_binaries)
+                raise KeyboardInterrupt
+            if self.test_machine["pacman_failure"] or self.test_machine.get("pacman_failure_at_transaction") == transaction:
+                code = int(self.test_machine.get("pacman_failure_exit_code", 1))
+                stderr = "simulated pacman transaction failure"
+            else:
+                self._simulate_package_install(packages, package_binaries)
         elif args and args[0] == "niri" and "validate" in args:
             if "niri" not in self.test_machine["commands"]:
                 code, stderr = 127, "simulated niri executable is missing"
@@ -236,6 +263,14 @@ class SparrowInstaller:
             raise AssertionError(f"Test runner refused to execute unmodelled host command: {args!r}")
         return subprocess.CompletedProcess(args, code, stdout if text_result else stdout.encode(), stderr if text_result else stderr.encode())
 
+    def _simulate_package_install(self, packages: list[str], package_binaries: dict[str, set[str]]) -> None:
+        self.test_machine["packages"].update(packages)
+        for package in packages:
+            self.test_machine["commands"].update(package_binaries.get(package, set()))
+            if package == "python-pillow":
+                self.test_machine["modules"].add("PIL.Image")
+        self.test_machine["commands"].difference_update(self.test_machine["missing_after_install"])
+
     def _confirm(self, prompt: str, default: bool = False) -> bool:
         if not sys.stdin.isatty():
             self.output("Cannot ask for consent without an interactive terminal; treating this prompt as declined.")
@@ -253,11 +288,24 @@ class SparrowInstaller:
         except (OSError, ValueError, AttributeError):
             return {}
 
-    def _command(self, args: list[str], *, check: bool = False) -> subprocess.CompletedProcess:
-        self.output("+ " + " ".join(args))
+    def _command(
+        self,
+        args: list[str],
+        *,
+        check: bool = False,
+        inherit_stdio: bool = False,
+    ) -> subprocess.CompletedProcess:
+        if not inherit_stdio:
+            self.output("+ " + " ".join(args))
         if self.dry_run and self._is_mutating_command(args):
             self.output("  (dry-run: command not executed)")
             return subprocess.CompletedProcess(args, 0, "", "")
+        if inherit_stdio:
+            # Keep pacman's normal terminal UI and sudo's controlling TTY.
+            # subprocess.run waits for the child and inherits stdin/stdout/stderr.
+            sys.stdout.flush()
+            sys.stderr.flush()
+            return self.run(args, check=check)
         return self.run(args, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=check)
 
     @staticmethod
@@ -423,37 +471,87 @@ class SparrowInstaller:
         return True
 
     def package_sets(self) -> dict:
-        return json.loads((self.repo / "installer/package-sets.json").read_text(encoding="utf-8"))
+        try:
+            sets = json.loads((self.repo / "installer/package-sets.json").read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            raise ValueError(f"Cannot read valid installer/package-sets.json: {error}") from error
+        if not isinstance(sets, dict):
+            raise ValueError("Installer package set must be a JSON object.")
+        package_pattern = re.compile(r"^[A-Za-z0-9@._+:-]+$")
+        for key in ("required", "defaults"):
+            values = sets.get(key)
+            if not isinstance(values, list) or any(not isinstance(item, str) or not package_pattern.fullmatch(item) for item in values):
+                raise ValueError(f"Installer package set '{key}' must be a list of valid package names.")
+        optional = sets.get("optional")
+        if not isinstance(optional, dict) or any(
+            not isinstance(group, str)
+            or not isinstance(values, list)
+            or any(not isinstance(item, str) or not package_pattern.fullmatch(item) for item in values)
+            for group, values in optional.items()
+        ):
+            raise ValueError("Installer package set 'optional' must map group names to lists of valid package names.")
+        for key in ("required_executables", "platform_executables"):
+            values = sets.get(key, [])
+            if not isinstance(values, list) or any(not isinstance(item, str) or not package_pattern.fullmatch(item) for item in values):
+                raise ValueError(f"Installer package set '{key}' must be a list of executable names.")
+        modules = sets.get("required_python_modules", [])
+        if not isinstance(modules, list) or any(not isinstance(item, str) or not re.fullmatch(r"[A-Za-z0-9_.]+", item) for item in modules):
+            raise ValueError("Installer package set 'required_python_modules' must contain valid module names.")
+        polkit = sets.get("polkit_agent")
+        if not isinstance(polkit, dict) or any(not isinstance(polkit.get(key), str) for key in ("package", "executable")):
+            raise ValueError("Installer package set 'polkit_agent' must specify a package and executable.")
+        return sets
 
     def installed_packages(self) -> set[str]:
-        if self.testing:
-            return set(self.test_machine["packages"])
         if self._installed_package_cache is not None:
             return self._installed_package_cache
         result = self._command(["pacman", "-Qq"])
         if result.returncode:
-            self._installed_package_cache = set()
-        else:
-            self._installed_package_cache = set(result.stdout.splitlines())
+            raise PackageTransactionError(
+                "Could not query installed packages with pacman -Qq: " + (result.stderr or "unknown pacman error"),
+                result.returncode,
+            )
+        self._installed_package_cache = set(result.stdout.splitlines())
         return self._installed_package_cache
 
     def _install_package_list(self, packages: list[str], *, label: str, required: bool = False) -> bool:
         missing = sorted(set(packages) - self.installed_packages())
         if not missing:
-            self.output(f"{label}: already present")
+            self.output(f"{label}: already installed")
             return True
-        self.output(f"{label} missing: " + " ".join(missing))
+        self.output(f"{label} packages to install ({len(missing)}): " + " ".join(missing))
         if not self.confirm(f"Install these official repository packages with pacman?", required):
-            self.output(f"{label} package installation was declined; dependent features will remain unavailable until installed.")
+            self.output(f"Skipped {label}; dependent apps/features remain unavailable until installed.")
             return False
         if self._which("sudo") is None:
-            self.output("sudo is unavailable. Install manually: sudo pacman -S --needed " + " ".join(missing))
-            return False
-        result = self._command(["sudo", "pacman", "-S", "--needed", *missing])
+            raise PackageTransactionError("sudo is unavailable; install manually with: sudo pacman -S --needed " + " ".join(missing))
+        if self._which("pacman") is None:
+            raise PackageTransactionError("pacman is unavailable; cannot install package group " + label)
+        self.output(f"Starting pacman transaction for {label}.")
+        try:
+            result = self._command(["sudo", "pacman", "-S", "--needed", *missing], inherit_stdio=True)
+        except KeyboardInterrupt:
+            self._installed_package_cache = None
+            self.output(f"Pacman transaction for {label} was interrupted.")
+            raise
         if result.returncode:
-            self.output(result.stderr or f"Package installation failed ({result.returncode}).")
-            return False
+            self._installed_package_cache = None
+            raise PackageTransactionError(
+                f"Pacman transaction for {label} failed with exit status {result.returncode}. "
+                "No Sparrow files were deployed; resolve the package issue and rerun the installer.",
+                result.returncode,
+            )
         self._installed_package_cache = None
+        still_missing = sorted(set(missing) - self.installed_packages())
+        if still_missing:
+            raise PackageTransactionError(
+                f"Pacman returned success for {label}, but package verification still finds these missing: "
+                + ", ".join(still_missing)
+                + ". No Sparrow files were deployed; rerun after resolving the package state."
+            )
+        self._installed_package_cache = None
+        self.output(f"Pacman transaction for {label} completed successfully.")
+        self.output(f"Verified all {len(missing)} requested {label} package(s) are installed.")
         return True
 
     def resolve_packages(self) -> bool:
@@ -466,6 +564,9 @@ class SparrowInstaller:
             os_release = Path("/etc/os-release").read_text(errors="replace").lower()
         if not any(name in os_release for name in ("id=arch", "id=cachyos", "id_like=arch")):
             self.output("Sparrow targets Arch/CachyOS; refusing to install on an unverified distribution.")
+            return False
+        if self._which("pacman") is None:
+            self.output("pacman is unavailable; install/repair pacman before running Sparrow Installer.")
             return False
         sets = self.package_sets()
         installed = self.installed_packages()
@@ -503,19 +604,32 @@ class SparrowInstaller:
             if not agent_exists:
                 defaults.append(sets["polkit_agent"]["package"])
             if not self._install_package_list(defaults, label="Default desktop profile"):
-                self.output("Continuing without the full default app bundle. Super+T/E/F require Kitty/Thunar/Firefox; pavucontrol, themed Thunar, and the GTK portal styling may also be unavailable.")
+                self.default_profile_skipped = True
+                self.output("Recommended desktop bundle declined. App shortcuts/integrations for uninstalled apps will be unavailable.")
             if not agent_exists:
                 self.install_polkit_agent = self._which(sets["polkit_agent"]["executable"]) is not None
                 if not self.install_polkit_agent:
                     self.output("No graphical Polkit agent was detected or installed; privileged prompts will not have a Sparrow agent.")
-        elif not self.has_existing_polkit_agent():
-            self.output("Default apps/Polkit were declined and no existing Polkit agent was detected; privileged prompts will not be shown graphically.")
+        else:
+            self.default_profile_skipped = True
+            if not self.has_existing_polkit_agent():
+                self.output("Default apps/Polkit were declined and no existing Polkit agent was detected; privileged prompts will not be shown graphically.")
         optional = sets["optional"]
         if self.confirm("Choose optional feature packages (recording, Night Light, visualizer, hardware integrations)?", False):
             for group, packages in optional.items():
                 if self.confirm(f"  Include optional group '{group}' ({', '.join(packages)})?", False):
-                    self._install_package_list(packages, label=f"Optional {group}")
+                    if not self._install_package_list(packages, label=f"Optional {group}"):
+                        self.skipped_optional_groups.append(group)
+                else:
+                    self.skipped_optional_groups.append(group)
+        else:
+            self.skipped_optional_groups.extend(optional)
         self.output("No AUR packages are installed by Sparrow. Manual AUR notes: " + "; ".join(f"{k}: {v}" for k, v in sets["aur_manual"].items()))
+        for executable, label in (("rishot", "Rishot screenshots"), ("mpvpaper", "video wallpaper playback")):
+            if self._which(executable) is None:
+                self.missing_manual.append(label)
+        if not bibata_available:
+            self.missing_manual.append("Bibata Modern Ice cursor (manual AUR)")
         if self._which("rishot") is None:
             self.output("Screenshot shortcut Super+Shift+S requires the separate Rishot application; install it manually from its upstream-supported source.")
         if not bibata_available:
@@ -853,19 +967,18 @@ class SparrowInstaller:
 
     def install(self) -> int:
         try:
+            self.output("[1/6] Checking installer inputs and source syntax")
             self._validate_sources()
             self.bibata_available = self._detect_bibata()
             # Planning may stage config text, but package-dependent validation
             # is intentionally deferred until after the approved transaction.
             _, niri_plan, _ = self._planned_niri(validate=False)
             plan = self._build_file_plan(niri_plan)
-            self.output("\nSparrow install plan:")
-            self.output(f"  Runtime copy: {self.paths.data / 'sparrow-shell/runtime'}")
-            self.output(f"  Stable Quickshell entry: {self.paths.config / 'quickshell/sparrow'}")
-            for path, _, role, _ in plan:
-                self.output(f"  {role}: {path}")
-            self.output("  Polkit agent unit: conditional on the default profile and no existing graphical agent")
-            self.output("  Existing user state, wallpapers, generated palettes, caches, and monitor layout: preserve")
+            self.output("Planned: portable runtime, Niri defaults, user services, scoped portal/GTK integration, and selected desktop defaults.")
+            self.output("User state, wallpapers, generated palettes, caches, and monitor layout will be preserved.")
+            if self.dry_run:
+                for path, _, role, _ in plan:
+                    self.output(f"  {role}: {path}")
             existing_niri = self.paths.config / "niri/config.kdl"
             if existing_niri.exists():
                 candidate = next(data for path, data in niri_plan.items() if path == existing_niri)
@@ -880,6 +993,7 @@ class SparrowInstaller:
                         self.output("Stopped before changing Niri or Sparrow files.")
                         return 2
             if self.dry_run:
+                self.output("[2/6] Checking package availability (dry-run; no transactions)")
                 if not self.resolve_packages():
                     return 2
                 self.output("Dry run complete; no files, packages, services, or user settings changed.")
@@ -888,14 +1002,17 @@ class SparrowInstaller:
             # install it before validating the staged Niri graph, but validate
             # before modifying any user configuration. Shared packages are
             # intentionally never removed on a later deployment failure.
+            self.output("[2/6] Resolving required, recommended, and optional packages")
             if not self.resolve_packages():
                 self.output("Required packages were declined or unavailable; no Sparrow files were deployed.")
                 return 2
             _, niri_plan, _ = self._planned_niri(validate=True)
             plan = self._build_file_plan(niri_plan)
+            self.output("[3/6] Validating staged Niri configuration and Sparrow services")
             self._validate_units(plan)
             self.backup_root.mkdir(parents=True, exist_ok=True, mode=0o700)
             # Runtime copy and entrypoint are staged before all integrations.
+            self.output("[4/6] Deploying Sparrow runtime and selected configuration")
             runtime_src = self._runtime_stage_source()
             runtime_dest = self.paths.data / "sparrow-shell/runtime"
             try:
@@ -925,18 +1042,39 @@ class SparrowInstaller:
             for relative, source in legal_sources:
                 if source.is_file():
                     self.write_file(notices / relative, source.read_bytes(), role="license/attribution notice")
+            self.output("[5/6] Verifying the installed Niri configuration")
             self._validate_installed_niri()
+            self.output("[6/6] Enabling session integration and saving installer state")
             self._activate_units()
             self._save_manifest()
+        except KeyboardInterrupt:
+            self._installed_package_cache = None
+            if not self.dry_run:
+                self._rollback()
+            self.output("Installation cancelled by user. No further Sparrow changes were made.")
+            self.output("Any packages completed by pacman remain installed; rerun the installer to resume. Do not remove pacman lock files manually.")
+            return 130
+        except PackageTransactionError as error:
+            self.output(f"Install stopped: {error}")
+            if not self.dry_run:
+                self._rollback()
+            return error.exit_code
         except Exception as error:
             self.output(f"Install failed; rolling back changed files: {error}")
             if not self.dry_run:
                 self._rollback()
             return 1
-        self.output(f"Install complete. Backups and restore manifest: {self.backup_root}")
+        self.output(f"Sparrow installation succeeded. Backups and restore manifest: {self.backup_root}")
         self.output("Units were enabled but not started or restarted. Log out and back into Niri to test startup.")
         self.output("Portal routing/theme changes are not applied to already-running portal processes; they take effect after the next session start.")
-        self.output("Do not select the Sparrow desktop session from a display manager unless Niri is installed and available there.")
+        if self.default_profile_skipped:
+            self.output("Recommended desktop apps/integrations were skipped; some default shortcuts and app theming will be unavailable.")
+        if self.skipped_optional_groups:
+            self.output("Optional groups skipped: " + ", ".join(self.skipped_optional_groups))
+        if self.missing_manual:
+            self.output("Manual/external items still missing: " + ", ".join(self.missing_manual) + ".")
+        self.output("Next: log out, choose Niri in your session menu, and log in. If no session menu exists, start `niri-session` from a TTY.")
+        self.output("Uninstall later with `./uninstall.sh`; recovery state is kept under " + str(self.state_root) + ".")
         return 0
 
     def _validate_installed_niri(self) -> None:
@@ -1143,7 +1281,11 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("run as your normal user; Sparrow uses sudo only for approved package installation")
         installer = SparrowInstaller(dry_run=args.dry_run)
     if args.uninstall:
-        return installer.uninstall(stop_now=args.stop_now, restore=not args.remove_instead_of_restore)
+        try:
+            return installer.uninstall(stop_now=args.stop_now, restore=not args.remove_instead_of_restore)
+        except KeyboardInterrupt:
+            print("Uninstall cancelled by user; no further files or services will be changed.", file=sys.stderr)
+            return 130
     return installer.install()
 
 

@@ -45,6 +45,28 @@ cd sparrow-shell
 ./install.sh
 ```
 
+### Package transaction visibility and safe retry
+
+The installer now runs every real pacman transaction with inherited terminal
+stdin/stdout/stderr, so sudo prompts, pacman's confirmation, download progress,
+hooks, and errors remain visible. It announces each package list and transaction
+start/completion. A non-zero pacman result stops installation with that status;
+it does not continue to optional prompts or deploy Sparrow.
+
+If Ctrl+C is used during a transaction, wait for the installer to return to the
+shell. The interrupted pacman operation may already have installed some
+packages; this is expected and recoverable. Do not delete `/var/lib/pacman/db.lck`
+or kill processes manually. Rerun `./install.sh`: it queries `pacman -Qq`,
+skips packages already present, and offers the remaining packages again. The
+installer deploys no Sparrow configuration, services, or manifest until package
+resolution and staged validation have succeeded. Pacman-installed packages are
+not rolled back if a later Sparrow deployment step fails.
+
+If a transaction appears idle, use the visible pacman output to determine
+whether it is downloading, waiting for a confirmation/password, or reporting an
+error. Do not assume the package manager is stuck, and do not start a second
+pacman transaction while one is active.
+
 If the repository is already cloned on the test machine, verify it is the
 intended revision before running `./install.sh`; do not copy the development
 checkout's live config or state into the test home.

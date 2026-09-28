@@ -32,7 +32,7 @@ ShellRoot {
     property string peekMon: ""
     property var readyPillScreens: ({})
     property bool autoOnboardingOpened: false
-    property real niriLayoutGaps: 6
+    property real niriLayoutGaps: 8
     property real niriTopStrut: 0
 
     readonly property string niriSparrowConfigPath: (Quickshell.env("XDG_CONFIG_HOME")

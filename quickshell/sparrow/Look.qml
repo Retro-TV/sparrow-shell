@@ -15,7 +15,7 @@ SettingsSurface {
     readonly property string preferencesPath: (Quickshell.env("XDG_CONFIG_HOME")
         || (Quickshell.env("HOME") + "/.config")) + "/niri/sparrow/user-appearance.kdl"
     property string preferencesText: ""
-    property int gaps: 6
+    property int gaps: 8
     property int cornerRadius: 12
     property int borderWidth: 2
     property bool shadowsEnabled: true
@@ -61,7 +61,7 @@ SettingsSurface {
     function seed() {
         root.preferencesText = preferencesFile.text();
         var t = root.preferencesText;
-        root.gaps = readInt(t, /^    gaps ([0-9]+)$/m, 6);
+        root.gaps = readInt(t, /^    gaps ([0-9]+)$/m, 8);
         root.borderWidth = readInt(t, /^        width ([0-9]+)$/m, 2);
         root.shadowSoftness = readInt(t, /^        softness ([0-9]+)$/m, 12);
         root.cornerRadius = readInt(t, /^    geometry-corner-radius ([0-9]+)$/m, 12);
@@ -98,10 +98,10 @@ SettingsSurface {
             + "layout {\n"
             + "    gaps " + gaps + "\n"
             + "    struts {\n"
-            + "        left 12\n"
-            + "        right 12\n"
+            + "        left " + gaps + "\n"
+            + "        right " + gaps + "\n"
             + "        top " + (-gaps) + "\n"
-            + "        bottom 12\n"
+            + "        bottom " + gaps + "\n"
             + "    }\n"
             + "    border {\n"
             + "        width " + borderWidth + "\n"
@@ -279,7 +279,7 @@ SettingsSurface {
             spacing: 0
 
             Group { id: windowGroup; title: "Window"; open: true
-                FieldRow { id: gapsRow; label: "Gaps"
+                FieldRow { id: gapsRow; label: "Gap"
                     ScrubValue { id: gapsScrub; s: root.s; value: root.gaps; openValue: root.base.gaps; from: 0; to: 40; step: 1; unit: "px"
                         onEdited: v => { root.gaps = v; root.scheduleWrite(); } }
                 }

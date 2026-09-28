@@ -49,6 +49,7 @@
   ],
   "explicit_sanitizations": [
     "Promote current canonical Look values from generated user-appearance.kdl into static appearance.kdl; do not seed a generated mutable fragment on fresh install.",
+    "Adjust canonical Niri gap defaults from the captured desktop geometry: matching side/bottom struts equalize Niri's per-window inner gaps and outer work-area gaps; Look derives those struts from its single Gap value.",
     "Remove the explicit Secret=gnome-keyring portal route because neither gnome-keyring nor oo7-portal exists in the canonical reference environment and Sparrow has no Secret portal dependency.",
     "Normalize the live screenshot binding's $HOME/.local/bin/rishot command to the portable rishot command resolved through PATH."
   ],

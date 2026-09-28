@@ -859,10 +859,10 @@ def _safe_user_appearance(content: str) -> bool:
         r"layout \{\n"
         r"    gaps (?P<gaps>0|[1-9][0-9]*)\n"
         r"    struts \{\n"
-        r"        left 12\n"
-        r"        right 12\n"
+        r"        left (?P<left_strut>0|[1-9][0-9]*)\n"
+        r"        right (?P<right_strut>0|[1-9][0-9]*)\n"
         r"        top (?P<top_strut>-?(?:0|[1-9][0-9]*))\n"
-        r"        bottom 12\n"
+        r"        bottom (?P<bottom_strut>0|[1-9][0-9]*)\n"
         r"    \}\n"
         r"    border \{\n"
         r"        width (?P<border>0|[1-9][0-9]*)\n"
@@ -887,7 +887,10 @@ def _safe_user_appearance(content: str) -> bool:
     values = {key: int(match.group(key)) for key in ("gaps", "border", "softness", "radius")}
     return (
         0 <= values["gaps"] <= 40
+        and int(match.group("left_strut")) == values["gaps"]
+        and int(match.group("right_strut")) == values["gaps"]
         and int(match.group("top_strut")) == -values["gaps"]
+        and int(match.group("bottom_strut")) == values["gaps"]
         and 0 <= values["border"] <= 8
         and 0 <= values["softness"] <= 50
         and 0 <= values["radius"] <= 30

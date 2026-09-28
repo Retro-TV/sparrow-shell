@@ -4,14 +4,14 @@ layout {
     // Let the backdrop wallpaper show through the scaled workspace in Overview.
     background-color "transparent"
 
-    // Default global spacing; Sparrow Look stores user overrides separately.
-    gaps 6
-    // Balance the pill's top gap against the app gap at the default scale.
+    // Niri applies gaps on every window edge. Matching outer struts make
+    // outer spacing (strut + gap) equal inner spacing (2*gaps).
+    gaps 8
     struts {
-        left 12
-        right 12
-        top -6
-        bottom 12
+        left 8
+        right 8
+        top -8
+        bottom 8
     }
 
     center-focused-column "never"

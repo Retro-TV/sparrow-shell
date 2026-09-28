@@ -2,8 +2,9 @@
 
 This inventory is based on active QML, scripts, systemd units and the current
 Niri binds. `installer/package-sets.json` is the exact set offered by Installer
-v1; this document explains runtime rationale and dependencies not selected
-for automatic installation.
+v1. Required packages are validated after their approved pacman transaction;
+recommended desktop packages are a separate opt-in bundle, optional controls
+remain optional, and AUR/upstream projects are never installed automatically.
 Arch package names are shown in backticks; names marked AUR are not official
 repository packages. Core means needed for the corresponding Sparrow session
 or surface, not that every feature-specific binary must be installed for the
@@ -21,6 +22,7 @@ shell to start.
 | `findutils`, `coreutils`, `grep`, `gawk`, `sed`, `procps-ng`, `util-linux` | Base commands used by scripts (`find`, `timeout`, `pgrep`, `flock`, `shuf`, text processing, filesystem utilities). |
 | `pipewire`, `wireplumber` | Quickshell PipeWire service, mixer/OSD, Cava source, recording audio; `wpctl` comes from WirePlumber and `pw-dump` from PipeWire. |
 | `gtk3` | `gtk-launch` starts selected `.desktop` entries in Sparrow Launcher. Ordinary desktop-entry discovery is not a package manager. |
+| Arch/CachyOS base session | `systemctl`, `systemd-analyze`, `env`, `gio`, and `udevadm` come from the existing systemd/glib/base installation; the installer checks the commands needed for session and config validation. |
 | `systemd` and `dbus` | User services, graphical-session target, session bus and Quickshell desktop-service integration. |
 | `pam` | System PAM stack used by Quickshell's primary secure session lock. |
 | `polkit` plus one graphical authentication agent | The daemon alone cannot display authorization prompts. Sparrow recommends `lxqt-policykit` only when the user has no existing agent; preserve an existing agent rather than starting a second. |
@@ -37,14 +39,15 @@ components. Sparrow's video preview additionally uses `qt6-multimedia` and
 | `matugen` | Required for wallpaper-derived palette generation. This host currently has the AUR `matugen-bin`; Arch Extra provides `matugen`, which is the preferred portable package name. |
 | `python-pillow` | Required by `scripts/wallcolors.py` for palette image processing. |
 | `mpvpaper` | Optional; enables video wallpaper playback while awww still supplies the still frame/backdrop. |
-| `ffmpeg` | Required by wallpaper thumbnail/still generation and recording thumbnail work; used for video wallpaper extraction and supported preview formats. |
+| `ffmpeg` | Recommended default bundle: Wallpaper-picker thumbnails, wallpaper dimensions/stills, and recording thumbnails use it. Images and the shell still work without it, but those previews/helpers are degraded. |
 | `imagemagick` | Optional wallpaper-search image format identification and Rishot multi-monitor stitching/metadata handling. |
 | `hyprlock` | Optional fallback only. The primary lock is Sparrow's Quickshell `WlSessionLock` + PAM flow; `sparrow-lock` invokes Hyprlock only when Sparrow lock IPC is unavailable. |
-| `gpu-screen-recorder` | Required for Sparrow's Recorder capture/record operation. |
-| `slurp` | Used for Niri's recorder region/window selection helper. |
-| `python-gobject` | Used by the recording folder-selection helper (`gi.repository.Gio/GLib`). |
-| `xdg-desktop-portal`, `xdg-desktop-portal-gtk`, compatible session backend | Recording folder selection calls FileChooser. The tracked `xdg-desktop-portal/niri-portals.conf.fragment` contributes only `FileChooser=gtk`; merge it into the user's existing Niri portal config. GTK theme remains scoped to the GTK portal service. |
-| `lxqt-policykit` (recommended default agent) | Provides `/usr/bin/lxqt-policykit-agent`; Sparrow's user unit starts it in Niri only when no recognized Polkit agent is already running. Optional if the user already has an agent. |
+| `gpu-screen-recorder` | Optional; required only for Sparrow's Recorder capture/record operation. The UI explains unavailable capture when absent. |
+| `slurp` | Optional; used for Niri's recorder region/window selection helper. |
+| `python-gobject` | Recommended default bundle; used by the recording folder-selection helper (`gi.repository.Gio/GLib`) when Recorder is installed. |
+| `xdg-desktop-portal`, `xdg-desktop-portal-gtk` | Recommended default integration; recording folder selection calls FileChooser. Sparrow merges `FileChooser=gtk;` into the Niri portal config; GTK theme remains scoped to the GTK portal service. |
+| `xdg-desktop-portal-gnome` | Recommended Niri screen-sharing backend in the default bundle. Sparrow adds `ScreenCast=gnome;` only when the package is installed and no route is selected; if another route is configured, it is preserved and the GNOME backend package is skipped. Niri documents this portal as its screencast path ([Niri screencasting](https://github.com/niri-wm/niri/wiki/Screencasting)). |
+| `lxqt-policykit` (conditional default agent) | Provides `/usr/bin/lxqt-policykit-agent`; included only when the default profile is accepted and no recognized existing Polkit agent is detected. Otherwise Sparrow preserves the existing choice and omits its service unit. |
 | `xdg-utils` | `xdg-open` integration used by Recorder for recordings and folders. |
 | `qt6-multimedia`, `qt6-multimedia-ffmpeg` | Needed for Sparrow's wallpaper video previews in the picker. |
 | `wlsunset` | Optional Night Light backend; status UI remains adaptive when absent. |
@@ -53,19 +56,20 @@ components. Sparrow's video preview additionally uses `qt6-multimedia` and
 | `networkmanager` | Wi-Fi surface uses `nmcli`; useful only with NetworkManager and a Wi-Fi adapter. |
 | `bluez`, `bluez-utils` | Bluetooth surface uses Quickshell BlueZ integration and `bluetoothctl`; requires the daemon and adapter. |
 | `upower` | Battery/peripheral status integration, when supported hardware is present. |
-| `curl` | Weather lookup and optional online wallpaper search/download/preview. |
+| `curl` | Recommended default bundle: weather and online wallpaper search/download/preview. The local wallpaper flow does not depend on network access. |
+| `wl-clipboard` | Recommended default bundle; Launcher copies calculator results with `wl-copy`. Rishot also uses it for its separate clipboard feature. |
 | `libnotify` | `notify-send` notices from Recorder and low-battery peripheral handling; Sparrow's internal notification UI does not use it. |
 | `brightnessctl` | Optional on systems with `/sys/class/backlight`; internal brightness UI is only exposed when hardware and tool are detected. |
 | `ddcutil` | Optional external DDC/CI display brightness controls in Mixer. Not installed on the audited host. |
 | `nvibrant` | Optional NVIDIA vibrance backend; Sparrow checks its executable and NVIDIA device before exposing it. Not installed on the audited host. |
 | `tumbler` | Optional system D-Bus thumbnail service for Thunar image previews. |
 | `adw-gtk-theme` | Provides the system-installed `adw-gtk3` GTK3/GTK4 bases used by Sparrow's generated, wallpaper-colored app themes (Thunar and the scoped pavucontrol launch). |
-| `bibata-cursor-theme-bin` (AUR) | Recommended default cursor asset; Niri and `environment.d/90-cursor.conf` select Bibata Modern Ice at size 24. The theme itself is not bundled. |
+| `bibata-cursor-theme-bin` (AUR) | Manual-only recommended cursor asset. Installer does not install an AUR helper or select a missing theme: without the theme it leaves Niri/system cursor defaults intact and prints the manual action. When present, Niri and `environment.d/90-cursor.conf` select Bibata Modern Ice at size 24. |
 
-The current live Bibata files identify themselves as version 2.0.6 and are an
-unowned copy under `~/.local/share/icons/Bibata-Modern-Ice`. The AUR package
-currently offers the same named theme variant from upstream v2.0.7; fresh
-installations should use that package rather than copy this host's local files.
+The Bibata upstream install guide recommends AUR package
+`bibata-cursor-theme-bin` for Arch. Sparrow does not build it or invoke an AUR
+helper; review the AUR PKGBUILD and build it manually with `makepkg -si` if
+desired.
 Inter and JetBrains Mono Nerd Font are installed on the audited host. Sparrow
 has no decorative CJK glyph mode or Zen Kaku font dependency.
 
@@ -113,27 +117,28 @@ is a KDE/KWin capture path and is not required for Niri.
 | `kitty`, `fish`, `starship` | Shipped terminal and shell defaults; not required to run Quickshell. `zoxide` and `fastfetch` are optional Fish conveniences. |
 | `ttf-jetbrains-mono-nerd` | Provides the selected Kitty face and Starship's Nerd Font symbols. |
 | `thunar` | Current default file manager, not a Sparrow runtime requirement. `tumbler` adds image thumbnails; `adw-gtk-theme` supplies the system GTK3 theme base used for Sparrow's generated Thunar theme. |
-| `pavucontrol` | Optional advanced audio-control desktop app, not required by Sparrow's native Mixer. If installed and launched from Sparrow Launcher, only this GTK4 application receives `GTK_THEME=Sparrow`. |
+| `pavucontrol` | Recommended default advanced audio-control app, not required by Sparrow's native Mixer. If installed and launched from Sparrow Launcher, only this GTK4 application receives `GTK_THEME=Sparrow`. |
 | `firefox` | Ordinary default browser binding only; Sparrow does not ship or apply a Firefox theme. |
+| `curl`, `wl-clipboard`, `ffmpeg` | Recommended support tools for Weather/wallpaper search, Launcher copy, and wallpaper/recording previews. |
 
 The only browser-related runtime work is optional wallpaper search/download.
 
 ## Not core / not included
 
-- `ddcutil`, `nvibrant`, `wlsunset`, `cava`, `mpvpaper`, and Rishot are optional;
-  it is separately installed as described above. The cursor package is a
-  recommended default, but users may select a different installed cursor.
+- `ddcutil`, `nvibrant`, `wlsunset`, `cava`, `mpvpaper`, and Recorder packages
+  are optional; Rishot is separately installed as described above. Bibata is
+  manual AUR: when absent, Sparrow does not configure an unavailable cursor.
 - `gvfs` is recommended for Thunar's removable-volume and remote-location
   integration; it is not required for opening local folders or basic file
   operations. `zoxide` is optional for the reference Fish shell.
 - Sparrow does not install packages, manage pacman/AUR, bundle a browser,
   terminal, file manager, personal wallpapers, monitor setup, generated theme
   files, personal Hyprlock configuration or Rishot source.
-- A Wayland session portal backend is a session integration dependency, not a
-  reason to replace the user's portal routing. Sparrow's repository fragment
-  supplies only the GTK FileChooser preference; preserve ScreenCast,
-  RemoteDesktop, Screenshot, Secret, and other backend choices. Niri's
-  recommended GNOME ScreenCast backend is a separate optional capability.
+- The recommended default profile includes GNOME's portal backend for standard
+  Niri screencasting. Sparrow preserves any existing ScreenCast route and only
+  adds GNOME if the backend is installed and no route is selected. If the
+  default bundle is declined, Sparrow does not route ScreenCast to an absent
+  backend. FileChooser goes to GTK; other portal choices remain untouched.
 
 ## Installer v1 package policy
 

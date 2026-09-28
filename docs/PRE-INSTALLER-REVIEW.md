@@ -18,7 +18,7 @@ Live read-only snapshot:
 - Niri 26.04 and Quickshell 0.3.1 are active. Sparrow main, idle, and wallpaper user services are active; `qs list --all` showed exactly the main and idle Quickshell instances.
 - `~/.config/quickshell/sparrow` resolves to this checkout in development. That is the intended developer symlink, not a portable install destination.
 - `~/.config/niri/config.kdl` is a regular user-owned file, not a repository symlink. The live `~/.config/niri/sparrow/` contains both Sparrow-managed defaults and machine/user-generated fragments and backups.
-- The active user portal config routes FileChooser to GTK and retains GNOME ScreenCast/RemoteDesktop/Screenshot plus its existing Secret choice. The repository now carries a merge-only FileChooser fragment; the user config remains untouched.
+- The active user portal config routes FileChooser to GTK and retains GNOME ScreenCast/RemoteDesktop/Screenshot plus its existing Secret choice. Installer v1 now merges GTK FileChooser and adds GNOME ScreenCast only when its backend is installed and no ScreenCast route exists; the live user config remains untouched.
 - `polkitd` and `sparrow-polkit-agent.service` are running. `lxqt-policykit-agent` is owned by `lxqt-policykit 2.4.0-1.1`; its listener registered. The journal's Oxygen fallback-icon warning is non-fatal; no privileged prompt was triggered. The user-owned Secret route still names absent `gnome-keyring`, unchanged and outside this task.
 - Current-boot `sparrow-shell.service` warning/error query returned no entries. Niri config validation passed. These are snapshots, not fresh-install simulation or interaction tests.
 
@@ -57,7 +57,7 @@ Classifications: **CORE** is required for the Sparrow Niri desktop; **DEFAULT AP
 | Kitty / Fish / Starship | DEFAULT APP | Tracked defaults configure Kitty with generated palette include, Fish shell setup, and Starship directory/Git prompt. `zoxide` and `fastfetch` are optional Fish conveniences. Current prompt colors rely on palette-indexed ANSI colors, while Kitty consumes generated palette directly. |
 | Thunar | DEFAULT APP | The default file manager (`sparrow-files.desktop`), opened with Sparrow GTK theme. `tumbler` provides thumbnails, `gvfs`/UDisks integration supports removable/remote locations. Archive context-menu support is not installed on this host and is a user-choice add-on, not core. Existing Thunar instances not live-refreshing wallpaper colors is an accepted limitation. |
 | Firefox | DEFAULT APP | Niri default browser shortcut only. Browser theme integration is explicitly out of scope; ordinary `.desktop` launch is independent. |
-| GTK portal/file chooser | FEATURE DEPENDENCY | Recording directory picker uses XDG FileChooser. Repository merge fragment supplies only GTK selection; GTK theme is scoped to the portal service. |
+| GTK portal/file chooser | FEATURE DEPENDENCY | Recording directory picker uses XDG FileChooser. Installer merges GTK selection; GTK theme is scoped to the portal service. |
 | Screen sharing portal | OPTIONAL desktop infrastructure | Niri’s documented screen-cast path uses PipeWire + `xdg-desktop-portal-gnome`; upstream also documents GTK FileChooser routing when Nautilus is not wanted. The active live route uses GNOME for ScreenCast/RemoteDesktop/Screenshot, but that config is user-owned and not tracked. |
 | Polkit authentication | DEFAULT SESSION INTEGRATION | The host's guarded Niri-session unit runs the official `lxqt-policykit` agent; listener registration was confirmed. Installers must preserve an existing user agent/autostart and avoid duplicates. |
 | Secret portal/keyring | OPTIONAL desktop infrastructure | Live preference routes Secret to `gnome-keyring`, but neither keyring nor `oo7-portal` is installed here. Not required by Sparrow itself; the preference must be reconciled with the user’s actual secret-service choice. |
@@ -134,8 +134,8 @@ Niri’s current “Important Software” guide calls out portals, notification 
 | Finding | Type | Recommendation |
 |---|---|---|
 | Graphical Polkit agent | Resolved on current host | `lxqt-policykit` is installed; the enabled, guarded unit is active and registered its listener. The installer must keep the existing-agent/autostart check. |
-| GTK FileChooser route absent from repository | Resolved for current host; merge logic is installer work | `xdg-desktop-portal/niri-portals.conf.fragment` records only `org.freedesktop.impl.portal.FileChooser=gtk;`. The live config already routes FileChooser to GTK and preserves GNOME capture routes. A clean/populated merge test belongs to installer acceptance tests. |
-| Screen sharing depends on a screen-cast portal and PipeWire | Feature-specific desktop dependency | Offer/verify Niri’s GNOME portal route if screen sharing is in scope; GNOME portal may pull Nautilus on Arch. Do not conflate this with GTK FileChooser. Niri documents this dependency in its [screencasting guide](https://github.com/niri-wm/niri/wiki/Screencasting). |
+| GTK FileChooser route absent from repository | Resolved | Installer merges `org.freedesktop.impl.portal.FileChooser=gtk;` while preserving other portal routes. A clean/populated merge regression test covers it. |
+| Screen sharing depends on a screen-cast portal and PipeWire | Addressed in Installer v1 | Recommended default bundle includes Niri's GNOME backend only when no existing ScreenCast route is configured; routing is written only if that backend is installed. Niri documents this dependency in its [screencasting guide](https://github.com/niri-wm/niri/wiki/Screencasting). |
 | Live Secret portal selects absent `gnome-keyring`; `oo7-portal` also absent | User’s current portal policy gap, not a Sparrow core defect | Ask whether the user wants a keyring/secrets provider or retain host policy; detect before warning. Sparrow does not need to install one. |
 | Archives unavailable in current Thunar | Nice-to-have | The host has neither `thunar-archive-plugin` nor an archive GUI. This does not make file management incomplete; offer archive handling as an optional Thunar integration only if wanted. Arch provides [`thunar-archive-plugin`](https://archlinux.org/packages/extra/x86_64/thunar-archive-plugin/) and separate handlers such as File Roller. |
 | Thumbnails | Feature dependency | Thunar + Tumbler are installed; video/image thumbnail generation also uses Sparrow helpers/ffmpeg. Current setup covers common previews. Some formats need optional plugins/codecs; do not promise all formats. |
@@ -183,9 +183,9 @@ The repository’s `docs/INSTALL-INVENTORY.md` provides the exhaustive source-ca
 | `ttf-jetbrains-mono-nerd`, `inter-font` | Default terminal and UI typography. Outfit is bundled for lock UI with OFL notice. |
 | `thunar`, `tumbler`, `gvfs`, `udisks2` | Chosen file manager, thumbnails, Gio remote/trash/device services. GVFS includes its UDisks monitor on Arch; do not refer to nonexistent separate `gvfs-udisks2` package. |
 | `adw-gtk-theme`, GTK3/GTK4 where applications need them | System base from which Sparrow generates its GTK theme. No home-local `adw-gtk3` fallback is required. GTK application toolkit dependencies may already be pulled by apps. |
-| `xdg-desktop-portal`, `xdg-desktop-portal-gtk`, `python-gobject` | Folder chooser and portal file picking; ensure Niri-specific routing. ScreenCast backend is a distinct optional group below. |
+| `xdg-desktop-portal`, `xdg-desktop-portal-gtk`, `python-gobject` | Folder chooser and portal file picking; Sparrow merges GTK FileChooser routing. The recommended default profile also supplies GNOME ScreenCast support only when no ScreenCast route is already selected. |
 | `firefox` | Current default browser key. If user declines it, installer should offer a replacement/default shortcut plan instead of leaving a knowingly dead bind. |
-| Bibata Modern Ice cursor package | Intended cursor style/size; upstream [Bibata](https://github.com/ful1e5/Bibata_Cursor) currently points users to non-core package channels. Offer as optional and never replace an existing theme without consent. |
+| Bibata Modern Ice cursor package | AUR-only manual choice (`bibata-cursor-theme-bin`); Sparrow never runs an AUR helper. Configure it only when installed, and preserve an existing user cursor choice. |
 
 ### OPTIONAL FEATURE PACKAGES
 
@@ -215,7 +215,7 @@ The repository’s `docs/INSTALL-INVENTORY.md` provides the exhaustive source-ca
 | `ddcutil` | External DDC display brightness only; optional, absence remains quiet. |
 | `nvibrant` plus NVIDIA driver stack | NVIDIA vibrance only; vendor/package support varies. |
 | `nvidia-utils` (`nvidia-smi`) | NVIDIA GPU stats only. |
-| GNOME portal + PipeWire | Niri portal screen sharing; may bring extra GNOME/Nautilus dependencies. User can choose another supported capture mechanism if sufficient, but must be tested. |
+| GNOME portal + PipeWire | Recommended default ScreenCast backend for Niri when no route already exists. The installer preserves an existing ScreenCast route and skips the GNOME backend package in that case. |
 | A Polkit authentication agent | Needed if graphical applications require authentication. Select/detect one; Polkit daemon alone is not a UI. |
 | `gnome-keyring` or `oo7-portal` | Secret portal only if chosen applications need secrets. Current live preference is inconsistent with installed packages. |
 | `xwayland-satellite` + Xwayland | Optional compatibility for legacy X11 clients. |
@@ -266,7 +266,7 @@ The future installer should be transactional and conservative. The ordering belo
 | `generated-colors.kdl` | SPARROW GENERATES | Recreate from selected wallpaper/palette; do not track or transfer. |
 | `~/.config/systemd/user/sparrow-*.service` | SPARROW OWNS named units, USER controls enablement | Back up same-name files; do not overwrite unrelated units; enable only after path/unit verification and consent. |
 | `~/.config/systemd/user/xdg-desktop-portal-gtk.service.d/10-sparrow-theme.conf` | OPTIONAL SPARROW integration | Install only when GTK portal is used; preserve/merge existing drop-ins. Scope theme env to this service only. |
-| `xdg-desktop-portal/niri-portals.conf.fragment` | SPARROW-OWNED merge input | Adds only GTK FileChooser preference. |
+| `xdg-desktop-portal/niri-portals.conf.fragment` | SPARROW-OWNED merge input | GTK FileChooser default plus optional GNOME ScreenCast fallback; installer adds ScreenCast only when GNOME backend is installed and no route exists. |
 | `~/.config/xdg-desktop-portal/niri-portals.conf` | USER OWNS / MERGE-PRESERVE | Merge only needed entry and retain all unrelated routes. Never replace the whole file. |
 | `~/.config/environment.d/90-cursor.conf` | MERGE/PRESERVE user preference | Set default only if unset/consented; never force Bibata over selected cursor. |
 | Kitty/Fish/Starship configs | USER OWNS with optional Sparrow include/default | Install defaults only when absent or through clear backup/include flow. Keep dynamic Kitty include generated. |
@@ -369,7 +369,7 @@ installation had already been tested.
 
 ### 10. MY DECISIONS NEEDED
 
-1. Should screen-sharing portal support be a default optional package group, or should v1 limit its portal offer to GTK FileChooser? Recommendation: expose it as a separately selected capability because GNOME portal adds system dependencies.
+1. **Resolved for Installer v1:** include GNOME ScreenCast support in the recommended desktop bundle when no existing ScreenCast route is configured; preserve any selected route and skip the backend package otherwise. The separate GTK FileChooser preference remains a targeted merge.
 2. Should Sparrow installer offer an optional Thunar archive integration? Recommendation: keep it opt-in and omit from minimal/default install unless you want archive context menus.
 3. Do you want one small Pill-shape identity pass before v1, or ship current geometry? Recommendation: ship current version and revisit only after a user-visible comparison.
 

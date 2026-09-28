@@ -19,8 +19,9 @@ binds {
     XF86AudioLowerVolume allow-when-locked=true { spawn-sh "wpctl set-volume @DEFAULT_AUDIO_SINK@ 0.1-"; }
     XF86AudioMute allow-when-locked=true { spawn-sh "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"; }
     XF86AudioMicMute allow-when-locked=true { spawn-sh "wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle"; }
-    XF86MonBrightnessUp allow-when-locked=true { spawn "brightnessctl" "--class=backlight" "set" "+10%"; }
-    XF86MonBrightnessDown allow-when-locked=true { spawn "brightnessctl" "--class=backlight" "set" "10%-"; }
+    // brightnessctl is an optional device integration; on desktops without it these keys quietly do nothing.
+    XF86MonBrightnessUp allow-when-locked=true { spawn-sh "if command -v brightnessctl >/dev/null 2>&1; then brightnessctl --class=backlight set +10%; fi"; }
+    XF86MonBrightnessDown allow-when-locked=true { spawn-sh "if command -v brightnessctl >/dev/null 2>&1; then brightnessctl --class=backlight set 10%-; fi"; }
 
     // Normal workspaces: move only the focused window, not its column.
     Super+1 { focus-workspace 1; }

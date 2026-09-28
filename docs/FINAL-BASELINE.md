@@ -5,7 +5,10 @@ audited on 2026-09-27. It describes the implementation as it exists; it is not
 an installer, a promise that every optional feature is available everywhere,
 or a replacement for user configuration. Do not treat the live home directory
 as a clean-install template. Installer v1 is implemented in this working
-baseline; fresh graphical installation still requires VM/separate-user QA.
+baseline. Its first real bare-metal CachyOS test exposed validation-before-
+installation ordering. The ordering fix and isolated regression coverage are in
+place; the second bare-metal run is still required before clean-install
+acceptance is claimed.
 
 ## 1. What Sparrow is
 
@@ -407,10 +410,12 @@ Installer v1 is intended to retain these conservative boundaries:
 Installer v1 is implemented by `install.sh`, `uninstall.sh`, and
 `installer/sparrow_installer.py`. It does not install a greeter, automatically
 install AUR packages, remove shared packages, seed machine state, or start
-services in the current session. The temporary-root test suite covers fresh
-install, repeat install, existing Niri/portal files, conflict preservation,
-ownership-aware restore, and user edits made after install. A graphical
-clean-user or VM login/install test remains outstanding.
+services in the current session. The first bare-metal test failed because
+systemd units were validated before pacman supplied `qs`, `awww`, and the
+conditional Polkit executable. The current working fix installs approved
+packages and checks required executables before staged Niri/unit validation;
+tests use a closed package/command simulator and cannot call live Niri or
+systemd. The fresh bare-metal retest is still required before release.
 
 ## 15. Proposed isolated fresh-default audit
 

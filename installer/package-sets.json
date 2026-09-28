@@ -1,4 +1,9 @@
 {
+  "bootstrap": {
+    "before_clone": ["git"],
+    "installer_runtime": ["python"],
+    "python_missing_prompt": "sudo pacman -S --needed python"
+  },
   "required": [
     "niri",
     "quickshell",
@@ -30,6 +35,9 @@
     "starship",
     "inter-font",
     "ttf-jetbrains-mono-nerd",
+    "curl",
+    "wl-clipboard",
+    "ffmpeg",
     "thunar",
     "tumbler",
     "gvfs",
@@ -39,23 +47,26 @@
     "adw-gtk-theme",
     "xdg-desktop-portal",
     "xdg-desktop-portal-gtk",
+    "xdg-desktop-portal-gnome",
     "python-gobject",
     "xdg-utils",
     "libnotify"
   ],
-  "polkit_agent": "lxqt-policykit",
+  "required_executables": ["niri", "qs", "python3", "bash", "jq", "matugen", "awww", "awww-daemon", "wpctl", "gtk-launch"],
+  "platform_executables": ["systemctl", "systemd-analyze", "env", "gio", "udevadm"],
+  "required_python_modules": ["PIL.Image"],
+  "polkit_agent": {"package": "lxqt-policykit", "executable": "lxqt-policykit-agent"},
   "optional": {
     "recording": ["gpu-screen-recorder", "slurp"],
-    "video-wallpaper-and-thumbnails": ["ffmpeg"],
     "network-bluetooth-battery": ["networkmanager", "bluez", "bluez-utils", "upower"],
     "night-light": ["wlsunset"],
     "audio-visualizer": ["cava"],
     "brightness-hardware": ["brightnessctl", "ddcutil"],
-    "wallpaper-search": ["curl", "imagemagick"],
+    "wallpaper-search": ["imagemagick"],
     "hyprlock-fallback": ["hyprlock"]
   },
   "aur_manual": {
-    "Bibata Modern Ice cursor": "bibata-cursor-theme",
+    "Bibata Modern Ice cursor": "bibata-cursor-theme-bin",
     "Video wallpaper player": "mpvpaper",
     "Rishot screenshot app (separate upstream project)": "rishot-git"
   },

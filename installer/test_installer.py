@@ -25,6 +25,16 @@ class InstallerTests(unittest.TestCase):
             self.root / ".cache",
         )
         self.messages: list[str] = []
+        self.machine = {
+            "os": "id=cachyos",
+            "packages": set(),
+            "commands": {"sudo", "pacman", "bash", "systemd-analyze", "systemctl", "env", "gio", "udevadm"},
+            "modules": set(),
+            "missing_after_install": set(),
+            "existing_polkit_agent": False,
+            "pacman_failure": False,
+            "events": [],
+        }
 
     def tearDown(self) -> None:
         self.temp.cleanup()
@@ -34,17 +44,126 @@ class InstallerTests(unittest.TestCase):
             self.paths,
             REPO,
             testing=True,
-            confirm=confirm or (lambda _prompt, default: True),
+            confirm=confirm or self.confirm_full_profile,
+            test_machine=self.machine,
             output=self.messages.append,
         )
+
+    @staticmethod
+    def confirm_full_profile(prompt: str, _default: bool) -> bool:
+        return "optional feature" not in prompt.lower() and "include optional group" not in prompt.lower()
 
     def test_portal_merge_preserves_routes_and_is_idempotent(self) -> None:
         original = """[preferred]\ndefault=gnome;gtk;\norg.freedesktop.impl.portal.ScreenCast=gnome;\norg.freedesktop.impl.portal.FileChooser=org.gtk.FileChooser;\n"""
         installer = self.installer()
-        updated = installer.merge_portal(original)
+        updated = installer.merge_portal(original, include_screencast=True)
         self.assertIn("ScreenCast=gnome;", updated)
         self.assertIn("FileChooser=gtk;", updated)
-        self.assertEqual(installer.merge_portal(updated), updated)
+        self.assertEqual(installer.merge_portal(updated, include_screencast=True), updated)
+
+    def test_portal_merge_adds_niri_screencast_route_without_overwriting_other_routes(self) -> None:
+        existing = "[preferred]\norg.freedesktop.impl.portal.ScreenCast=custom;\norg.freedesktop.impl.portal.RemoteDesktop=other;\n"
+        installer = self.installer()
+        updated = installer.merge_portal(existing, include_screencast=True)
+        self.assertIn("ScreenCast=custom;", updated)
+        self.assertIn("RemoteDesktop=other;", updated)
+        self.assertIn("FileChooser=gtk;", updated)
+        restored = installer._restore_portal_key(updated, existing)
+        self.assertEqual(restored, existing)
+
+    def test_clean_cachyos_installs_packages_before_niri_and_systemd_validation(self) -> None:
+        # The five missing binaries from the bare-metal report start absent.
+        for executable in ("niri", "qs", "awww", "awww-daemon", "matugen", "lxqt-policykit-agent"):
+            self.assertNotIn(executable, self.machine["commands"])
+        installer = self.installer()
+        self.assertEqual(installer.install(), 0)
+        events = self.machine["events"]
+        package_event = next(i for i, event in enumerate(events) if event[:3] == ("sudo", "pacman", "-S"))
+        niri_validate = next(i for i, event in enumerate(events) if event[:2] == ("niri", "validate"))
+        units_validate = next(i for i, event in enumerate(events) if event[:3] == ("systemd-analyze", "--user", "verify"))
+        self.assertLess(package_event, niri_validate)
+        self.assertLess(package_event, units_validate)
+        self.assertTrue({"qs", "awww", "awww-daemon", "matugen", "lxqt-policykit-agent"}.issubset(self.machine["commands"]))
+        self.assertTrue((self.paths.config / "systemd/user/sparrow-polkit-agent.service").is_file())
+
+    def test_systemd_validation_fails_if_a_required_binary_remains_missing_after_pacman(self) -> None:
+        self.machine["missing_after_install"].add("qs")
+        installer = self.installer()
+        self.assertEqual(installer.install(), 2)
+        self.assertTrue(any("still missing after package resolution" in message for message in self.messages))
+        self.assertFalse((self.paths.config / "systemd/user/sparrow-shell.service").exists())
+        self.assertFalse(any(event[:3] == ("systemd-analyze", "--user", "verify") for event in self.machine["events"]))
+
+    def test_required_package_decline_leaves_xdg_fixture_empty(self) -> None:
+        installer = self.installer(confirm=lambda _prompt, _default: False)
+        self.assertEqual(installer.install(), 2)
+        self.assertFalse(any(event[:3] == ("sudo", "pacman", "-S") for event in self.machine["events"]))
+        self.assertFalse(self.paths.config.exists())
+
+    def test_pacman_failure_stops_before_configuration_deployment(self) -> None:
+        self.machine["pacman_failure"] = True
+        installer = self.installer()
+        self.assertEqual(installer.install(), 2)
+        self.assertFalse(self.paths.config.exists())
+        self.assertFalse(any(event[0] == "niri" for event in self.machine["events"]))
+
+    def test_existing_polkit_agent_is_preserved_and_sparrow_agent_is_not_staged(self) -> None:
+        self.machine["existing_polkit_agent"] = True
+        installer = self.installer()
+        self.assertEqual(installer.install(), 0)
+        self.assertFalse((self.paths.config / "systemd/user/sparrow-polkit-agent.service").exists())
+        package_install = next(event for event in self.machine["events"] if event[:3] == ("sudo", "pacman", "-S"))
+        self.assertNotIn("lxqt-policykit", package_install)
+
+    def test_existing_custom_screencast_route_is_kept_without_installing_gnome_backend(self) -> None:
+        portal = self.paths.config / "xdg-desktop-portal/niri-portals.conf"
+        portal.parent.mkdir(parents=True)
+        portal.write_text("[preferred]\norg.freedesktop.impl.portal.ScreenCast=custom;\n")
+        installer = self.installer()
+        self.assertEqual(installer.install(), 0)
+        package_install = next(event for event in self.machine["events"] if event[:3] == ("sudo", "pacman", "-S"))
+        self.assertNotIn("xdg-desktop-portal-gnome", package_install)
+        result = portal.read_text()
+        self.assertIn("ScreenCast=custom;", result)
+        self.assertIn("FileChooser=gtk;", result)
+
+    def test_declining_default_portal_bundle_does_not_create_route_to_missing_backend(self) -> None:
+        installer = self.installer(
+            confirm=lambda prompt, default: False if "recommended desktop apps" in prompt.lower() else default
+        )
+        self.assertEqual(installer.install(), 0)
+        portal = self.paths.config / "xdg-desktop-portal/niri-portals.conf"
+        result = portal.read_text()
+        self.assertIn("FileChooser=gtk;", result)
+        self.assertNotIn("ScreenCast=gnome;", result)
+        self.assertNotIn("xdg-desktop-portal-gnome", self.machine["packages"])
+
+    def test_absent_optional_tools_do_not_block_clean_install(self) -> None:
+        installer = self.installer()
+        self.assertEqual(installer.install(), 0)
+        self.assertNotIn("cava", self.machine["commands"])
+        self.assertNotIn("wlsunset", self.machine["commands"])
+        self.assertNotIn("mpvpaper", self.machine["commands"])
+        self.assertTrue(any("Rishot" in message and "Super+Shift+S" in message for message in self.messages))
+
+    def test_cursor_default_is_not_written_without_bibata_asset(self) -> None:
+        installer = self.installer()
+        self.assertEqual(installer.install(), 0)
+        cursor = self.paths.config / "niri/sparrow/cursor.kdl"
+        self.assertIn(b"not installed", cursor.read_bytes())
+        self.assertFalse((self.paths.config / "environment.d/90-cursor.conf").exists())
+
+    def test_bibata_defaults_are_installed_only_when_asset_is_present(self) -> None:
+        self.machine["themes"] = {"Bibata-Modern-Ice"}
+        installer = self.installer()
+        self.assertEqual(installer.install(), 0)
+        cursor = self.paths.config / "niri/sparrow/cursor.kdl"
+        self.assertIn(b'xcursor-theme "Bibata-Modern-Ice"', cursor.read_bytes())
+        self.assertTrue((self.paths.config / "environment.d/90-cursor.conf").is_file())
+
+    def test_testing_cannot_inject_a_live_command_runner(self) -> None:
+        with self.assertRaisesRegex(ValueError, "forbids external command runners"):
+            SparrowInstaller(self.paths, REPO, testing=True, run=subprocess.run)
 
     def test_niri_merge_has_one_marker_and_preserves_user_output(self) -> None:
         original = 'output "DP-1" {\n    mode "1920x1080@60"\n}\n'
@@ -60,7 +179,7 @@ class InstallerTests(unittest.TestCase):
         root, planned, _ = installer._planned_niri(validate=False)
         self.assertEqual(root, self.paths.config / "niri/config.kdl")
         self.assertTrue(planned[root])
-        self.assertTrue(any("validation will run after" in line for line in self.messages))
+        self.assertTrue(any("validation is deferred until after" in line for line in self.messages))
 
     def test_noninteractive_consent_never_accepts_package_prompt_default(self) -> None:
         installer = self.installer()
@@ -104,7 +223,7 @@ class InstallerTests(unittest.TestCase):
         runtime.mkdir(parents=True)
         marker = runtime / "keep.txt"
         marker.write_text("not Sparrow\n")
-        installer = self.installer(confirm=lambda _prompt, _default: False)
+        installer = self.installer(confirm=lambda prompt, _default: prompt.startswith("Install these official repository packages"))
         self.assertEqual(installer.install(), 1)
         self.assertEqual(marker.read_text(), "not Sparrow\n")
         self.assertFalse((self.paths.config / "quickshell/sparrow").exists())
@@ -121,7 +240,12 @@ class InstallerTests(unittest.TestCase):
         root_config = self.paths.config / "niri/config.kdl"
         self.assertTrue(root_config.is_file())
         self.assertTrue((self.paths.config / "systemd/user/sparrow-shell.service").is_file())
+        self.assertTrue((self.paths.config / "systemd/user/sparrow-polkit-agent.service").is_file())
         self.assertTrue((self.paths.config / "xdg-desktop-portal/niri-portals.conf").is_file())
+        self.assertIn("ScreenCast=gnome;", (self.paths.config / "xdg-desktop-portal/niri-portals.conf").read_text())
+        self.assertIn("xdg-desktop-portal-gnome", self.machine["packages"])
+        self.assertIn("wl-clipboard", self.machine["packages"])
+        self.assertIn("curl", self.machine["packages"])
         manifest_before = json.loads(first.manifest_path.read_text())
         self.assertTrue(manifest_before["managed"])
 
@@ -259,7 +383,7 @@ class InstallerTests(unittest.TestCase):
             automatic.update(group)
         self.assertNotIn("bibata-cursor-theme", automatic)
         self.assertNotIn("mpvpaper", automatic)
-        self.assertIn("bibata-cursor-theme", sets["aur_manual"].values())
+        self.assertIn("bibata-cursor-theme-bin", sets["aur_manual"].values())
 
 
 if __name__ == "__main__":

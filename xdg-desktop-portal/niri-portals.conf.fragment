@@ -1,7 +1,8 @@
-# Merge this single preference into the user's existing
+# Merge Sparrow's targeted preferences into the user's existing
 # $XDG_CONFIG_HOME/xdg-desktop-portal/niri-portals.conf.
-# This is intentionally not a complete portal config: preserve all other
-# backend choices (especially ScreenCast, RemoteDesktop, Screenshot, and
-# Secret) from the user's file.
+# This is intentionally not a complete portal config. Preserve any explicit
+# user choice for ScreenCast, RemoteDesktop, Screenshot, Secret, and all other
+# interfaces. Installer adds ScreenCast=gnome only when no route exists.
 [preferred]
 org.freedesktop.impl.portal.FileChooser=gtk;
+org.freedesktop.impl.portal.ScreenCast=gnome;

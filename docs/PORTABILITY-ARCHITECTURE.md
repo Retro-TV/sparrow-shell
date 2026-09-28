@@ -21,8 +21,8 @@ generated state separate from portable source.
 | `~/.cache/sparrow-shell/` | Palette, thumbnails, weather location, recording thumbnails and transient outputs | Regenerable cache; never track. Startup migration now creates its root for clean first run. |
 | `~/Pictures/wallpapers/` | User-owned images and videos | Personal assets; not bundled. A missing directory is treated as an empty library. |
 | `~/Videos/Recordings/` | User recording destination | Personal output; not bundled. Recording selection/default path creates or handles it when used. |
-| `~/.config/environment.d/90-cursor.conf` | XCursor defaults for user-manager services and toolkit clients | Tracked as `environment.d/90-cursor.conf`; install only when absent or after preserving/confirming existing cursor preferences. |
-| `~/.local/share/icons/Bibata-Modern-Ice` | Unowned local copy of the current Bibata Modern Ice theme (metadata identifies v2.0.6) | External asset, not vendored. The recommended Arch source is `bibata-cursor-theme-bin` from AUR; the live Niri file selects the theme at size 24. |
+| `~/.config/environment.d/90-cursor.conf` | XCursor defaults for user-manager services and toolkit clients | Install only if Bibata files are already detected and the user path is absent/approved; do not select an unavailable cursor. |
+| `~/.local/share/icons/Bibata-Modern-Ice` | User-installed Bibata theme asset | External asset, not vendored. Upstream recommends AUR `bibata-cursor-theme-bin`; Sparrow never invokes an AUR helper. |
 
 The live wallpaper unit is the exception among the current systemd links: its
 home-directory symlink is absolute and resolves into the current checkout,
@@ -53,24 +53,30 @@ output names, resolutions, scales, focus-at-startup choices, hardware input
 settings, generated Matugen colors, or per-user Look/Input/Keybind edits are
 included.
 
-The root also preserves the current cursor name/size, hotkey overlay startup
-choice, no-CSD preference, screenshot path, and Niri's default animation feel.
+On fresh installation, the root also includes the recommended cursor fragment
+only when the Bibata Modern Ice asset is detected; otherwise the managed
+fragment is comment-only and no XCursor environment override is written. The
+root preserves the hotkey overlay startup choice, no-CSD preference, screenshot
+path, and Niri's default animation feel.
 App binds currently name Kitty, Thunar, and Firefox; those remain configurable
 user application choices and must be installed or changed by the user.
 
 Cursor defaults have two runtime paths because Sparrow itself is a
-systemd-launched Quickshell service: Niri's native `cursor` block selects the
-compositor cursor and sets `XCURSOR_THEME`/`XCURSOR_SIZE` for Niri-spawned
-clients, while `environment.d/90-cursor.conf` supplies those same values to
-user-manager services. GTK reads its cursor through GtkSettings/GSettings; the
-current GSettings values match Bibata Modern Ice at 24. This is independent of
+systemd-launched Quickshell service: when Bibata is installed, Niri's native
+`cursor` block selects the compositor cursor and sets `XCURSOR_THEME`/
+`XCURSOR_SIZE` for Niri-spawned clients, while `environment.d/90-cursor.conf`
+supplies those values to user-manager services. If Bibata is absent, installer
+does not add either override, so the system's selected cursor remains in use.
+GTK reads its cursor through GtkSettings/GSettings and the inherited XCursor
+environment; installer does not change GSettings. This is independent of
 the `GTK_THEME=Sparrow` setting scoped to Thunar, pavucontrol when launched
 from Sparrow Launcher, and the GTK portal for widget colors. A future
 installer should preserve non-default existing GSettings, environment, and
 Niri cursor choices rather than force these recommended
-fresh-install defaults over them. The GTK file chooser follows the same GTK
-cursor preference; Qt/Wayland clients use the standard XCursor environment.
-The portable default is Bibata Modern Ice at 24. Sparrow's UI uses Inter (this
+fresh-install defaults over them. The GTK file chooser follows the GTK cursor
+preference; Qt/Wayland clients use the standard XCursor environment. The
+recommended cursor is Bibata Modern Ice at 24, selected only if installed.
+Sparrow's UI uses Inter (this
 user's saved preference is Inter Black); Kitty uses JetBrains Mono Nerd Font.
 The Quickshell lockscreen uses its bundled Outfit Black font. No separate
 decorative-glyph font or CJK glyph setting is part of the runtime.
@@ -78,11 +84,13 @@ decorative-glyph font or CJK glyph setting is part of the runtime.
 ## Portal routing and Polkit agent
 
 The recording folder picker uses XDG FileChooser. Sparrow tracks
-`xdg-desktop-portal/niri-portals.conf.fragment`, which contains only the
-`org.freedesktop.impl.portal.FileChooser=gtk;` preference. It is a merge input,
-not a complete config file: an installer must merge that key into the user's
-`$XDG_CONFIG_HOME/xdg-desktop-portal/niri-portals.conf`, preserving other
-entries such as Niri ScreenCast, RemoteDesktop, Screenshot, and Secret routes.
+`xdg-desktop-portal/niri-portals.conf.fragment` with its targeted GTK chooser
+and GNOME ScreenCast defaults. It is a merge input, not a complete config:
+installer sets FileChooser to GTK and adds `ScreenCast=gnome;` only when the
+GNOME backend package is installed and no ScreenCast route was selected.
+Existing ScreenCast, RemoteDesktop, Screenshot,
+Secret, and other routes are preserved. The recommended default profile
+includes `xdg-desktop-portal-gnome` for Niri's portal screencasting path.
 Sparrow's `GTK_THEME=Sparrow` remains a systemd user drop-in for
 `xdg-desktop-portal-gtk.service` only; it is not exported globally.
 
@@ -106,12 +114,14 @@ live-development friendly. The cloned repository may live anywhere; shell
 scripts are resolved relative to the Quickshell shell root or canonical XDG
 paths, not the checkout.
 
-The four tracked user units launch through the canonical runtime root and
-their `ExecStartPre` migration is idempotent. Installer v1 copies the unit
-files (not absolute checkout symlinks), ensures the Quickshell runtime path
-exists first, runs `systemctl --user daemon-reload`, then enables the units for
-`graphical-session.target`. It does not manually start a second
-Quickshell process while the service is active. The installed Niri session
+The tracked user units launch through the canonical runtime root and their
+`ExecStartPre` migration is idempotent. Installer validates them only after
+approved packages exist, stages Polkit only when Sparrow's agent package was
+accepted/installed and no existing agent was found, then copies units (never
+absolute checkout symlinks), prepares the runtime path, runs
+`systemctl --user daemon-reload`, and enables the selected units for
+`graphical-session.target`. It does not manually start a second Quickshell
+process while the service is active. The installed Niri session
 must expose `XDG_CURRENT_DESKTOP=niri` and `graphical-session.target` as in the
 tested current session.
 

@@ -128,7 +128,8 @@ class SparrowInstaller:
         dry_run: bool = False,
         testing: bool = False,
         confirm: Callable[[str, bool], bool] | None = None,
-        run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+        run: Callable[..., subprocess.CompletedProcess] | None = None,
+        test_machine: dict | None = None,
         output: Callable[[str], None] = print,
     ) -> None:
         self.paths = paths or XdgPaths.from_environment()
@@ -136,7 +137,19 @@ class SparrowInstaller:
         self.dry_run = dry_run
         self.testing = testing
         self.confirm = confirm or self._confirm
-        self.run = run
+        if testing and run is not None:
+            raise ValueError("test mode forbids external command runners; use its built-in closed simulator")
+        self.test_machine = test_machine if test_machine is not None else {
+            "os": "id=cachyos",
+            "packages": set(),
+            "commands": {"sudo", "pacman", "bash", "systemd-analyze", "systemctl", "env", "gio", "udevadm"},
+            "modules": set(),
+            "missing_after_install": set(),
+            "existing_polkit_agent": False,
+            "pacman_failure": False,
+            "events": [],
+        }
+        self.run = run or (self._test_run if testing else subprocess.run)
         self.output = output
         self.state_root = self.paths.state / "sparrow-shell" / "installer"
         self.manifest_path = self.state_root / "manifest.json"
@@ -151,6 +164,77 @@ class SparrowInstaller:
         self.enabled_before: dict[str, bool] = {}
         self.enabled_by_sparrow: set[str] = set(self.old.get("enabled_by_sparrow", []))
         self._installed_package_cache: set[str] | None = None
+        self.install_polkit_agent = False
+        self.bibata_available = False
+
+    def _which(self, executable: str) -> str | None:
+        if self.testing:
+            return f"/simulated/bin/{executable}" if executable in self.test_machine["commands"] else None
+        return shutil.which(executable)
+
+    def _test_run(self, args: list[str], **kwargs) -> subprocess.CompletedProcess:
+        """A closed command simulator: installer tests never dispatch to the host."""
+        self.test_machine["events"].append(tuple(args))
+        text_result = kwargs.get("text", True)
+        stdout = ""
+        stderr = ""
+        code = 0
+        package_binaries = {
+            "niri": {"niri"}, "quickshell": {"qs"}, "python": {"python3"},
+            "awww": {"awww", "awww-daemon"}, "matugen": {"matugen"},
+            "bash": {"bash"}, "jq": {"jq"}, "wireplumber": {"wpctl"},
+            "gtk3": {"gtk-launch"}, "lxqt-policykit": {"lxqt-policykit-agent"},
+            "ffmpeg": {"ffmpeg", "ffprobe"}, "networkmanager": {"nmcli"},
+            "bluez-utils": {"bluetoothctl"}, "upower": {"upower"},
+            "wlsunset": {"wlsunset"}, "cava": {"cava"},
+            "brightnessctl": {"brightnessctl"}, "ddcutil": {"ddcutil"},
+            "curl": {"curl"}, "imagemagick": {"magick"}, "wl-clipboard": {"wl-copy", "wl-paste"},
+            "gpu-screen-recorder": {"gpu-screen-recorder"}, "slurp": {"slurp"},
+            "hyprlock": {"hyprlock"}, "kitty": {"kitty"}, "fish": {"fish"},
+            "starship": {"starship"}, "thunar": {"thunar"},
+            "firefox": {"firefox"}, "pavucontrol": {"pavucontrol"},
+            "xdg-utils": {"xdg-open"}, "libnotify": {"notify-send"},
+        }
+        if args[:2] == ["pacman", "-Qq"]:
+            stdout = "\n".join(sorted(self.test_machine["packages"]))
+        elif args[:3] == ["sudo", "pacman", "-S"]:
+            if self.test_machine["pacman_failure"]:
+                code, stderr = 1, "simulated pacman transaction failure"
+            else:
+                packages = args[4:]
+                self.test_machine["packages"].update(packages)
+                for package in packages:
+                    self.test_machine["commands"].update(package_binaries.get(package, set()))
+                    if package == "python-pillow":
+                        self.test_machine["modules"].add("PIL.Image")
+                self.test_machine["commands"].difference_update(self.test_machine["missing_after_install"])
+        elif args and args[0] == "niri" and "validate" in args:
+            if "niri" not in self.test_machine["commands"]:
+                code, stderr = 127, "simulated niri executable is missing"
+        elif args and args[0] == "python3" and "-c" in args:
+            module = args[-1].split("import", 1)[-1].strip().split()[0]
+            if module not in self.test_machine["modules"]:
+                code, stderr = 1, f"simulated Python module is missing: {module}"
+        elif args and args[0] == "systemd-analyze":
+            for filename in args[args.index("verify") + 1:]:
+                content = Path(filename).read_text(encoding="utf-8")
+                for executable in re.findall(r"(?m)^Exec(?:Start|StartPre|StartPost|Stop|Condition)=(/[^\s]+)", content):
+                    name = Path(executable).name
+                    if name not in {"env", "bash"} and name not in self.test_machine["commands"]:
+                        code, stderr = 1, f"{filename}: {executable} is not executable (simulated)"
+                        break
+                for executable in re.findall(r"(?m)^ConditionFileIsExecutable=(/[^\s]+)", content):
+                    name = Path(executable).name
+                    if name not in self.test_machine["commands"]:
+                        code, stderr = 1, f"{filename}: {executable} is not executable (simulated)"
+                        break
+                if code:
+                    break
+        elif args and args[0] == "bash" and "-n" in args:
+            pass
+        else:
+            raise AssertionError(f"Test runner refused to execute unmodelled host command: {args!r}")
+        return subprocess.CompletedProcess(args, code, stdout if text_result else stdout.encode(), stderr if text_result else stderr.encode())
 
     def _confirm(self, prompt: str, default: bool = False) -> bool:
         if not sys.stdin.isatty():
@@ -343,7 +427,7 @@ class SparrowInstaller:
 
     def installed_packages(self) -> set[str]:
         if self.testing:
-            return set()
+            return set(self.test_machine["packages"])
         if self._installed_package_cache is not None:
             return self._installed_package_cache
         result = self._command(["pacman", "-Qq"])
@@ -360,27 +444,26 @@ class SparrowInstaller:
             return True
         self.output(f"{label} missing: " + " ".join(missing))
         if not self.confirm(f"Install these official repository packages with pacman?", required):
-            return not required
-        if self.testing:
-            self.output("TEST: pacman install suppressed")
-            return True
-        if shutil.which("sudo") is None:
+            self.output(f"{label} package installation was declined; dependent features will remain unavailable until installed.")
+            return False
+        if self._which("sudo") is None:
             self.output("sudo is unavailable. Install manually: sudo pacman -S --needed " + " ".join(missing))
-            return not required
+            return False
         result = self._command(["sudo", "pacman", "-S", "--needed", *missing])
         if result.returncode:
             self.output(result.stderr or f"Package installation failed ({result.returncode}).")
-            return not required
+            return False
         self._installed_package_cache = None
         return True
 
     def resolve_packages(self) -> bool:
         if self.testing:
-            return True
-        if not Path("/etc/os-release").is_file():
+            os_release = self.test_machine["os"].lower()
+        elif not Path("/etc/os-release").is_file():
             self.output("Cannot identify the operating system; refusing an unverified Sparrow deployment.")
             return False
-        os_release = Path("/etc/os-release").read_text(errors="replace").lower()
+        else:
+            os_release = Path("/etc/os-release").read_text(errors="replace").lower()
         if not any(name in os_release for name in ("id=arch", "id=cachyos", "id_like=arch")):
             self.output("Sparrow targets Arch/CachyOS; refusing to install on an unverified distribution.")
             return False
@@ -392,13 +475,11 @@ class SparrowInstaller:
             self.output(f"Detected {group} packages present: " + (", ".join(present) if present else "none"))
             if missing:
                 self.output(f"  not installed: {', '.join(missing)}")
-        bibata_available = any(
-            (root / "Bibata-Modern-Ice/index.theme").is_file()
-            for root in (self.paths.data / "icons", Path("/usr/share/icons"))
-        )
+        bibata_available = self._detect_bibata()
+        self.bibata_available = bibata_available
         for label, available in (
-            ("mpvpaper", shutil.which("mpvpaper") is not None),
-            ("Rishot", shutil.which("rishot") is not None),
+            ("mpvpaper", self._which("mpvpaper") is not None),
+            ("Rishot", self._which("rishot") is not None),
             ("Bibata cursor theme", bibata_available),
         ):
             self.output(f"Detected {label}: {'available' if available else 'not found'}")
@@ -407,25 +488,63 @@ class SparrowInstaller:
             return True
         if not self._install_package_list(sets["required"], label="Required Sparrow runtime", required=True):
             return False
-        if self.confirm("Offer Sparrow's replaceable default apps and GTK/portal integration?", True):
+        if not self._verify_required_runtime(sets):
+            return False
+        if self.confirm("Install Sparrow's recommended desktop apps, fonts, GTK theme and portal integrations?", True):
             defaults = list(sets["defaults"])
+            existing_screencast = self._portal_route(
+                self.paths.config / "xdg-desktop-portal/niri-portals.conf",
+                "org.freedesktop.impl.portal.ScreenCast",
+            )
+            if existing_screencast and existing_screencast != "gnome;":
+                defaults.remove("xdg-desktop-portal-gnome")
+                self.output(f"Preserving the existing ScreenCast portal route ({existing_screencast}); skipping the GNOME portal package.")
             agent_exists = self.has_existing_polkit_agent()
             if not agent_exists:
-                defaults.append(sets["polkit_agent"])
+                defaults.append(sets["polkit_agent"]["package"])
             if not self._install_package_list(defaults, label="Default desktop profile"):
-                self.output("Continuing without some default apps; their bindings may need replacement.")
+                self.output("Continuing without the full default app bundle. Super+T/E/F require Kitty/Thunar/Firefox; pavucontrol, themed Thunar, and the GTK portal styling may also be unavailable.")
+            if not agent_exists:
+                self.install_polkit_agent = self._which(sets["polkit_agent"]["executable"]) is not None
+                if not self.install_polkit_agent:
+                    self.output("No graphical Polkit agent was detected or installed; privileged prompts will not have a Sparrow agent.")
+        elif not self.has_existing_polkit_agent():
+            self.output("Default apps/Polkit were declined and no existing Polkit agent was detected; privileged prompts will not be shown graphically.")
         optional = sets["optional"]
-        if self.confirm("Choose optional feature packages (recording, video helpers, hardware integrations)?", False):
+        if self.confirm("Choose optional feature packages (recording, Night Light, visualizer, hardware integrations)?", False):
             for group, packages in optional.items():
                 if self.confirm(f"  Include optional group '{group}' ({', '.join(packages)})?", False):
                     self._install_package_list(packages, label=f"Optional {group}")
         self.output("No AUR packages are installed by Sparrow. Manual AUR notes: " + "; ".join(f"{k}: {v}" for k, v in sets["aur_manual"].items()))
+        if self._which("rishot") is None:
+            self.output("Screenshot shortcut Super+Shift+S requires the separate Rishot application; install it manually from its upstream-supported source.")
+        if not bibata_available:
+            self.output("Bibata Modern Ice is not installed. The cursor default needs the manual AUR package listed above or a user-selected cursor theme.")
+        return True
+
+    def _verify_required_runtime(self, sets: dict) -> bool:
+        missing = [name for name in sets.get("required_executables", []) if self._which(name) is None]
+        missing_platform = [name for name in sets.get("platform_executables", []) if self._which(name) is None]
+        if missing_platform:
+            self.output("Required Arch/CachyOS base-session commands are missing: " + ", ".join(missing_platform))
+            return False
+        if missing:
+            self.output("Required Sparrow executables are still missing after package resolution: " + ", ".join(missing))
+            self.output("Install the corresponding official packages, then rerun Sparrow Installer.")
+            return False
+        for module in sets.get("required_python_modules", []):
+            result = self._command(["python3", "-c", f"import {module}"])
+            if result.returncode:
+                self.output(f"Required Python module is missing after package resolution: {module}")
+                return False
         return True
 
     def has_existing_polkit_agent(self) -> bool:
+        if self.testing:
+            return bool(self.test_machine["existing_polkit_agent"])
         known = re.compile(r"(lxqt-policykit-agent|polkit-gnome-authentication-agent-1|polkit-mate-authentication-agent-1|polkit-kde-authentication-agent-1|hyprpolkitagent)")
         try:
-            result = subprocess.run(["ps", "-u", str(os.getuid()), "-o", "args="], text=True, capture_output=True, check=False)
+            result = self._command(["ps", "-u", str(os.getuid()), "-o", "args="])
             if any(known.search(line) for line in result.stdout.splitlines()):
                 return True
         except OSError:
@@ -472,6 +591,14 @@ class SparrowInstaller:
         entry = (self.repo / "niri/sparrow/entry.kdl").read_text(encoding="utf-8")
         return [line.strip() for line in entry.splitlines() if line.strip().startswith("include ")]
 
+    def _detect_bibata(self) -> bool:
+        if self.testing:
+            return "Bibata-Modern-Ice" in self.test_machine.get("themes", set())
+        return any(
+            (root / "Bibata-Modern-Ice/index.theme").is_file()
+            for root in (self.paths.data / "icons", Path("/usr/share/icons"), Path("/usr/local/share/icons"))
+        )
+
     def _niri_directives_to_add(self, existing: str) -> list[str]:
         expected = self._niri_expected_directives()
         noncomment = [line.strip() for line in existing.splitlines() if line.strip() and not line.lstrip().startswith("//")]
@@ -506,23 +633,28 @@ class SparrowInstaller:
             prefix += "\n"
         return prefix + block
 
-    def merge_portal(self, existing: str) -> str:
-        key = "org.freedesktop.impl.portal.FileChooser"
+    def merge_portal(self, existing: str, *, include_screencast: bool) -> str:
+        routes = {
+            "org.freedesktop.impl.portal.FileChooser": "gtk;",
+        }
+        if include_screencast:
+            routes["org.freedesktop.impl.portal.ScreenCast"] = "gnome;"
         section_pattern = re.compile(r"(?ms)^\[preferred\]\s*\n(.*?)(?=^\[|\Z)")
         match = section_pattern.search(existing)
         if match:
             section = match.group(1)
-            key_pattern = re.compile(rf"(?m)^{re.escape(key)}\s*=.*$")
-            found = key_pattern.search(section)
-            if found:
-                if found.group(0).split("=", 1)[1].strip() == "gtk;":
-                    return existing
-                new_section = key_pattern.sub(f"{key}=gtk;", section, count=1)
-                return existing[:match.start(1)] + new_section + existing[match.end(1):]
-            line = f"{key}=gtk;\n"
-            return existing[:match.end(1)] + line + existing[match.end(1):]
+            for key, value in routes.items():
+                key_pattern = re.compile(rf"(?m)^{re.escape(key)}\s*=.*$")
+                found = key_pattern.search(section)
+                if found:
+                    if key.endswith("FileChooser") and found.group(0).split("=", 1)[1].strip() != value:
+                        section = key_pattern.sub(f"{key}={value}", section, count=1)
+                else:
+                    section += f"{key}={value}\n"
+            return existing[:match.start(1)] + section + existing[match.end(1):]
         tail = "" if not existing or existing.endswith("\n") else "\n"
-        return existing + tail + f"\n[preferred]\n{key}=gtk;\n"
+        route_lines = "".join(f"{key}={value}\n" for key, value in routes.items())
+        return existing + tail + f"\n[preferred]\n{route_lines}"
 
     def _planned_niri(self, *, validate: bool = True) -> tuple[Path, dict[Path, bytes], bytes]:
         niri_home = self.paths.config / "niri"
@@ -539,6 +671,10 @@ class SparrowInstaller:
                     root.write_text(self.merge_niri_root(root.read_text(encoding="utf-8")), encoding="utf-8")
                 for source in sorted((self.repo / "niri/sparrow").glob("*.kdl")):
                     dest = stage_home / "sparrow" / source.name
+                    if source.name == "cursor.kdl" and not self.bibata_available:
+                        dest.parent.mkdir(parents=True, exist_ok=True)
+                        dest.write_text("// Bibata Modern Ice is not installed; preserve Niri's existing cursor default.\n", encoding="utf-8")
+                        continue
                     current = dest.read_bytes() if dest.exists() else None
                     managed = self.managed.get(str(niri_home / "sparrow" / source.name))
                     if current is not None and current != source.read_bytes() and not (managed and sha256_file(dest) == managed.get("sha256")):
@@ -556,7 +692,7 @@ class SparrowInstaller:
                     if result.returncode:
                         raise RuntimeError("Staged Niri config validation failed: " + (result.stderr or result.stdout))
                 else:
-                    self.output("Niri is not installed yet; staged validation will run after the required package step.")
+                    self.output("Staged Niri validation is deferred until after the approved package step and before deployment.")
             root_path = niri_home / "config.kdl"
             if root_path.exists():
                 root_text = self.merge_niri_root(root_path.read_text(encoding="utf-8"))
@@ -567,12 +703,17 @@ class SparrowInstaller:
                 stage_home = Path(temp_name) / "niri"
                 shutil.copytree(self.repo / "niri", stage_home)
                 root = stage_home / "config.kdl"
+                if not self.bibata_available:
+                    (stage_home / "sparrow/cursor.kdl").write_text(
+                        "// Bibata Modern Ice is not installed; preserve Niri's existing cursor default.\n",
+                        encoding="utf-8",
+                    )
                 if validate:
                     result = self._command(["niri", "validate", "-c", str(root)])
                     if result.returncode:
                         raise RuntimeError("Repository Niri config validation failed: " + (result.stderr or result.stdout))
                 else:
-                    self.output("Niri is not installed yet; staged validation will run after the required package step.")
+                    self.output("Staged Niri validation is deferred until after the approved package step and before deployment.")
             root_path = niri_home / "config.kdl"
             root_text = (self.repo / "niri/config.kdl").read_text(encoding="utf-8")
         planned[root_path] = root_text.encode()
@@ -606,8 +747,14 @@ class SparrowInstaller:
         for dest, data in niri_plan.items():
             plan.append((dest, data, "Niri root config", 0o644))
         for source in sorted((self.repo / "niri/sparrow").glob("*.kdl")):
-            plan.append((self.paths.config / "niri/sparrow" / source.name, source.read_bytes(), "Niri Sparrow fragment", 0o644))
+            if source.name == "cursor.kdl" and not self.bibata_available:
+                data = b"// Bibata Modern Ice is not installed; preserve Niri's existing cursor default.\n"
+            else:
+                data = source.read_bytes()
+            plan.append((self.paths.config / "niri/sparrow" / source.name, data, "Niri Sparrow fragment", 0o644))
         for source in sorted((self.repo / "quickshell/sparrow/systemd").glob("*.service")):
+            if source.name == "sparrow-polkit-agent.service" and not self.install_polkit_agent:
+                continue
             plan.append((self.paths.config / "systemd/user" / source.name, self._unit_payload(source), "Sparrow user service", 0o644))
         dropin = self.repo / "quickshell/sparrow/systemd/xdg-desktop-portal-gtk.service.d/10-sparrow-theme.conf"
         plan.append((self.paths.config / "systemd/user/xdg-desktop-portal-gtk.service.d/10-sparrow-theme.conf", dropin.read_bytes(), "GTK portal-only theme override", 0o644))
@@ -615,24 +762,35 @@ class SparrowInstaller:
             (self.repo / "kitty/kitty.conf", self.paths.config / "kitty/kitty.conf", "Kitty defaults"),
             (self.repo / "fish/config.fish", self.paths.config / "fish/config.fish", "Fish defaults"),
             (self.repo / "starship/starship.toml", self.paths.config / "starship.toml", "Starship defaults"),
-            (self.repo / "environment.d/90-cursor.conf", self.paths.config / "environment.d/90-cursor.conf", "recommended cursor defaults"),
             (self.repo / "applications/sparrow-files.desktop", self.paths.data / "applications/sparrow-files.desktop", "Sparrow Files desktop entry"),
             (self.repo / "hyprlock/hyprlock.conf", self.paths.config / "sparrow/hyprlock.conf", "optional Hyprlock fallback config"),
         ]
+        if self.bibata_available:
+            user_files.append((self.repo / "environment.d/90-cursor.conf", self.paths.config / "environment.d/90-cursor.conf", "recommended cursor defaults"))
         for source, destination, label in user_files:
             plan.append((destination, source.read_bytes(), label, source.stat().st_mode & 0o777))
         portal = self.paths.config / "xdg-desktop-portal/niri-portals.conf"
         original_portal = portal.read_text(encoding="utf-8") if portal.is_file() else ""
-        merged_portal = self.merge_portal(original_portal)
-        plan.append((portal, merged_portal.encode(), "FileChooser-only portal route merge", 0o644))
+        gnome_portal_installed = "xdg-desktop-portal-gnome" in self.installed_packages()
+        merged_portal = self.merge_portal(original_portal, include_screencast=gnome_portal_installed)
+        plan.append((portal, merged_portal.encode(), "Sparrow portal route merge", 0o644))
         return plan
 
-    def _validate_units(self) -> None:
-        unit_files = sorted((self.repo / "quickshell/sparrow/systemd").glob("*.service"))
-        if shutil.which("systemd-analyze"):
-            result = self._command(["systemd-analyze", "--user", "verify", *map(str, unit_files)])
+    def _validate_units(self, plan: list[tuple[Path, bytes, str, int]]) -> None:
+        if self._which("systemd-analyze") is None:
+            raise RuntimeError("systemd-analyze is required to validate Sparrow's user services; install/repair the systemd base package.")
+        unit_payloads = [(path.name, content) for path, content, role, _ in plan if role == "Sparrow user service"]
+        if not unit_payloads:
+            raise RuntimeError("No Sparrow user service units were staged for validation.")
+        with tempfile.TemporaryDirectory(prefix="sparrow-unit-stage-") as temp_name:
+            staged = []
+            for name, content in unit_payloads:
+                path = Path(temp_name) / name
+                path.write_bytes(content)
+                staged.append(str(path))
+            result = self._command(["systemd-analyze", "--user", "verify", *staged])
             if result.returncode:
-                raise RuntimeError("Sparrow systemd unit validation failed: " + (result.stderr or result.stdout))
+                raise RuntimeError("Staged Sparrow systemd unit validation failed: " + (result.stderr or result.stdout))
 
     def _validate_sources(self) -> None:
         py_files = list((self.repo / "quickshell/sparrow/scripts").glob("*.py"))
@@ -645,7 +803,7 @@ class SparrowInstaller:
             result = self._command(["bash", "-n", str(path)])
             if result.returncode:
                 raise RuntimeError(f"Shell syntax check failed: {path}")
-        if shutil.which("qmllint"):
+        if self._which("qmllint"):
             qmls = [str(p) for p in (self.repo / "quickshell/sparrow").rglob("*.qml")]
             result = self._command(["qmllint", *qmls])
             if result.returncode:
@@ -662,7 +820,7 @@ class SparrowInstaller:
                     self.write_merged_file(path, content, role=role, merge_role="niri")
                 else:
                     self.write_file(path, content, mode=mode, role=role)
-            elif role == "FileChooser-only portal route merge":
+            elif role == "Sparrow portal route merge":
                 self.write_merged_file(path, content, role=role, merge_role="portal")
             else:
                 self.write_file(path, content, mode=mode, role=role)
@@ -696,15 +854,17 @@ class SparrowInstaller:
     def install(self) -> int:
         try:
             self._validate_sources()
-            self._validate_units()
-            niri_was_installed = shutil.which("niri") is not None
-            _, niri_plan, _ = self._planned_niri(validate=niri_was_installed)
+            self.bibata_available = self._detect_bibata()
+            # Planning may stage config text, but package-dependent validation
+            # is intentionally deferred until after the approved transaction.
+            _, niri_plan, _ = self._planned_niri(validate=False)
             plan = self._build_file_plan(niri_plan)
             self.output("\nSparrow install plan:")
             self.output(f"  Runtime copy: {self.paths.data / 'sparrow-shell/runtime'}")
             self.output(f"  Stable Quickshell entry: {self.paths.config / 'quickshell/sparrow'}")
             for path, _, role, _ in plan:
                 self.output(f"  {role}: {path}")
+            self.output("  Polkit agent unit: conditional on the default profile and no existing graphical agent")
             self.output("  Existing user state, wallpapers, generated palettes, caches, and monitor layout: preserve")
             existing_niri = self.paths.config / "niri/config.kdl"
             if existing_niri.exists():
@@ -731,12 +891,9 @@ class SparrowInstaller:
             if not self.resolve_packages():
                 self.output("Required packages were declined or unavailable; no Sparrow files were deployed.")
                 return 2
-            if not niri_was_installed:
-                # The required package set includes Niri. Install it before
-                # validating its own config syntax, but still validate the
-                # staged graph before deploying user configuration.
-                _, niri_plan, _ = self._planned_niri()
-                plan = self._build_file_plan(niri_plan)
+            _, niri_plan, _ = self._planned_niri(validate=True)
+            plan = self._build_file_plan(niri_plan)
+            self._validate_units(plan)
             self.backup_root.mkdir(parents=True, exist_ok=True, mode=0o700)
             # Runtime copy and entrypoint are staged before all integrations.
             runtime_src = self._runtime_stage_source()
@@ -924,19 +1081,23 @@ class SparrowInstaller:
 
     @staticmethod
     def _restore_portal_key(current: str, original: str) -> str:
-        key = "org.freedesktop.impl.portal.FileChooser"
-        old_match = re.search(rf"(?m)^{re.escape(key)}\s*=.*$", original)
-        old_line = old_match.group(0) if old_match else None
-        section_match = re.search(r"(?ms)^\[preferred\]\s*\n(.*?)(?=^\[|\Z)", current)
-        if not section_match:
-            return current
-        section = section_match.group(1)
-        key_match = re.search(rf"(?m)^{re.escape(key)}\s*=.*(?:\n|$)", section)
-        if not key_match or key_match.group(0).split("=", 1)[1].strip() != "gtk;":
-            return current
-        replacement = (old_line + "\n") if old_line else ""
-        section = section[:key_match.start()] + replacement + section[key_match.end():]
-        result = current[:section_match.start(1)] + section + current[section_match.end(1):]
+        managed = {
+            "org.freedesktop.impl.portal.FileChooser": "gtk;",
+            "org.freedesktop.impl.portal.ScreenCast": "gnome;",
+        }
+        result = current
+        for key, expected in managed.items():
+            section_match = re.search(r"(?ms)^\[preferred\]\s*\n(.*?)(?=^\[|\Z)", result)
+            if not section_match:
+                break
+            section = section_match.group(1)
+            key_match = re.search(rf"(?m)^{re.escape(key)}\s*=.*(?:\n|$)", section)
+            if not key_match or key_match.group(0).split("=", 1)[1].strip() != expected:
+                continue
+            original_match = re.search(rf"(?m)^{re.escape(key)}\s*=.*$", original)
+            replacement = (original_match.group(0) + "\n") if original_match else ""
+            section = section[:key_match.start()] + replacement + section[key_match.end():]
+            result = result[:section_match.start(1)] + section + result[section_match.end(1):]
         if not original or "[preferred]" not in original:
             # Remove only an otherwise empty section created by Sparrow.
             result = re.sub(r"(?m)^\[preferred\]\s*\n(?=\[|\Z)", "", result)
@@ -948,6 +1109,18 @@ class SparrowInstaller:
         if not preferred:
             return None
         match = re.search(r"(?m)^org\.freedesktop\.impl\.portal\.FileChooser\s*=\s*(.*)$", preferred.group(1))
+        return match.group(1).strip() if match else None
+
+    @staticmethod
+    def _portal_route(path: Path, interface: str) -> str | None:
+        try:
+            content = path.read_text(encoding="utf-8")
+        except OSError:
+            return None
+        preferred = re.search(r"(?ms)^\[preferred\]\s*\n(.*?)(?=^\[|\Z)", content)
+        if not preferred:
+            return None
+        match = re.search(rf"(?m)^{re.escape(interface)}\s*=\s*(.*)$", preferred.group(1))
         return match.group(1).strip() if match else None
 
 

@@ -1,0 +1,17 @@
+[remember]
+username = true
+session = false
+user_session = true
+
+[keybindings]
+command = 2
+sessions = 3
+background = 4
+power = 12
+
+[session]
+sessions_dirs = ["/usr/share/wayland-sessions"]
+xsessions_dirs = []
+
+[background]
+kind = "none"

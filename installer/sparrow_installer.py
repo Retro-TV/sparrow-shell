@@ -15,8 +15,10 @@ import re
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 from typing import Callable
+from urllib.request import urlopen
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -185,6 +187,9 @@ class SparrowInstaller:
         self._installed_package_cache: set[str] | None = None
         self.install_polkit_agent = False
         self.bibata_available = False
+        self.bibata_defaults_enabled = False
+        self.bibata_asset_source: Path | None = None
+        self._bibata_temp: tempfile.TemporaryDirectory | None = None
         self.skipped_optional_groups: list[str] = []
         self.default_profile_skipped = False
         self.missing_manual: list[str] = []
@@ -215,7 +220,7 @@ class SparrowInstaller:
             "curl": {"curl"}, "imagemagick": {"magick"}, "wl-clipboard": {"wl-copy", "wl-paste"},
             "gpu-screen-recorder": {"gpu-screen-recorder"}, "slurp": {"slurp"},
             "hyprlock": {"hyprlock"}, "kitty": {"kitty"}, "fish": {"fish"},
-            "starship": {"starship"}, "thunar": {"thunar"},
+            "starship": {"starship"}, "thunar": {"thunar"}, "fontconfig": {"fc-match"},
             "firefox": {"firefox"}, "pavucontrol": {"pavucontrol"},
             "xdg-utils": {"xdg-open"}, "libnotify": {"notify-send"},
         }
@@ -263,6 +268,8 @@ class SparrowInstaller:
                     break
         elif args and args[0] == "bash" and "-n" in args:
             pass
+        elif args and args[0] == "fc-match":
+            stdout = args[-1]
         else:
             raise AssertionError(f"Test runner refused to execute unmodelled host command: {args!r}")
         return subprocess.CompletedProcess(args, code, stdout if text_result else stdout.encode(), stderr if text_result else stderr.encode())
@@ -273,6 +280,8 @@ class SparrowInstaller:
             self.test_machine["commands"].update(package_binaries.get(package, set()))
             if package == "python-pillow":
                 self.test_machine["modules"].add("PIL.Image")
+            if package == "python-gobject":
+                self.test_machine["modules"].add("gi")
         self.test_machine["commands"].difference_update(self.test_machine["missing_after_install"])
 
     def _confirm(self, prompt: str, default: bool = False) -> bool:
@@ -463,7 +472,64 @@ class SparrowInstaller:
         polkit = sets.get("polkit_agent")
         if not isinstance(polkit, dict) or any(not isinstance(polkit.get(key), str) for key in ("package", "executable")):
             raise ValueError("Installer package set 'polkit_agent' must specify a package and executable.")
+        if not isinstance(sets.get("manual_external", {}), dict):
+            raise ValueError("Installer package set 'manual_external' must be a JSON object.")
         return sets
+
+    def source_manifest(self) -> dict:
+        try:
+            manifest = json.loads((self.repo / "SOURCE-OF-TRUTH.json").read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            raise ValueError(f"Cannot read valid SOURCE-OF-TRUTH.json: {error}") from error
+        if not isinstance(manifest, dict) or manifest.get("schema") != 1:
+            raise ValueError("SOURCE-OF-TRUTH.json has an unsupported schema.")
+        entries = manifest.get("entries")
+        if not isinstance(entries, list):
+            raise ValueError("SOURCE-OF-TRUTH.json must contain an entries list.")
+        for entry in entries:
+            if not isinstance(entry, dict) or not all(isinstance(entry.get(key), str) for key in ("source", "destination", "category")):
+                raise ValueError("Every source-of-truth entry must specify source, destination, and category.")
+            if entry["category"] not in {"A", "B", "C", "D"}:
+                raise ValueError(f"Unsupported source-of-truth category: {entry['category']}")
+        cursor = manifest.get("cursor")
+        if not isinstance(cursor, dict) or any(
+            not isinstance(cursor.get(key), str)
+            for key in ("theme", "version", "asset", "directory", "install_url", "install_directory", "sha256")
+        ) or not re.fullmatch(r"[0-9a-f]{64}", cursor["sha256"]):
+            raise ValueError("SOURCE-OF-TRUTH.json must pin the cursor asset URL, version, destination, and SHA-256.")
+        return manifest
+
+    def _manifest_destination(self, destination: str) -> Path:
+        roots = {
+            "$XDG_CONFIG_HOME": self.paths.config,
+            "$XDG_DATA_HOME": self.paths.data,
+            "$XDG_STATE_HOME": self.paths.state,
+            "$XDG_CACHE_HOME": self.paths.cache,
+        }
+        for token, root in roots.items():
+            if destination == token or destination.startswith(token + "/"):
+                suffix = destination[len(token):].lstrip("/")
+                return root / suffix
+        raise ValueError(f"Installer cannot deploy this non-path or undeclared destination: {destination}")
+
+    def _source_entries(self, category: str = "A") -> list[tuple[dict, Path, Path]]:
+        result = []
+        for entry in self.source_manifest()["entries"]:
+            if entry["category"] != category:
+                continue
+            source = self.repo / entry["source"]
+            if not source.exists():
+                if category == "A":
+                    raise ValueError(f"Source-of-truth source is missing: {source}")
+                continue
+            if not any(entry["destination"] == token or entry["destination"].startswith(token + "/")
+                       for token in ("$XDG_CONFIG_HOME", "$XDG_DATA_HOME", "$XDG_STATE_HOME", "$XDG_CACHE_HOME")):
+                if category == "A":
+                    raise ValueError(f"Canonical source has a non-deployable destination: {entry['destination']}")
+                continue
+            destination = self._manifest_destination(entry["destination"])
+            result.append((entry, source, destination))
+        return result
 
     def installed_packages(self) -> set[str]:
         if self._installed_package_cache is not None:
@@ -533,7 +599,11 @@ class SparrowInstaller:
             return False
         sets = self.package_sets()
         installed = self.installed_packages()
-        for group, names in (("Required", sets["required"]), ("Defaults", sets["defaults"]), *sets["optional"].items()):
+        agent_exists = self.has_existing_polkit_agent()
+        required_packages = list(sets["required"])
+        if not agent_exists:
+            required_packages.append(sets["polkit_agent"]["package"])
+        for group, names in (("Required", required_packages), ("Defaults", sets["defaults"]), *sets["optional"].items()):
             present = sorted(set(names) & installed)
             missing = sorted(set(names) - installed)
             self.output(f"Detected {group} packages present: " + (", ".join(present) if present else "none"))
@@ -548,28 +618,55 @@ class SparrowInstaller:
         ):
             self.output(f"Detected {label}: {'available' if available else 'not found'}")
         if self.dry_run:
-            self.output("AUR/upstream (manual only): " + "; ".join(f"{k}: {v}" for k, v in sets["aur_manual"].items()))
+            self.output("Manual external items (not installed by Sparrow): " + "; ".join(f"{k}: {v}" for k, v in sets["manual_external"].items()))
+            if not bibata_available:
+                cursor = self.source_manifest()["cursor"]
+                self.output(f"Would offer to download the pinned Bibata {cursor['version']} archive to {cursor['install_directory']}.")
             return True
-        if not self._install_package_list(sets["required"], label="Required Sparrow runtime", required=True):
+        if not self._install_package_list(required_packages, label="Required Sparrow desktop and runtime", required=True):
             return False
         if not self._verify_required_runtime(sets):
             return False
+        cursor_setting_available, cursor_setting = self._gsettings_user_value("org.gnome.desktop.interface/cursor-theme")
+        if not cursor_setting_available:
+            self.output("Cannot safely inspect the existing GSettings cursor choice; refusing to deploy a noncanonical or conflicting cursor setup.")
+            return False
+        wants_bibata_default = cursor_setting_available and cursor_setting in (None, "Bibata-Modern-Ice")
+        if wants_bibata_default and not self.bibata_available:
+            asset = self.source_manifest()["cursor"]
+            target = self.paths.data / "icons" / asset["directory"]
+            if not self.confirm(
+                f"Download the official Bibata {asset['version']} archive and install it for this user at {target}?",
+                True,
+            ):
+                self.output("Bibata is required for Sparrow's canonical fresh-install cursor. Install the pinned upstream asset as documented, then rerun; no Sparrow files were deployed.")
+                return False
+            if not self._prepare_bibata_asset(asset):
+                self.output("No Sparrow files were deployed. Fix network/archive access and rerun the installer.")
+                return False
+            self.output(f"Verified the pinned Bibata {asset['version']} release archive (SHA-256) for per-user installation.")
+        self.bibata_defaults_enabled = bool(
+            self.bibata_available and cursor_setting_available
+            and cursor_setting in (None, "Bibata-Modern-Ice")
+        )
+        if cursor_setting_available and cursor_setting not in (None, "Bibata-Modern-Ice"):
+            self._relinquish_changed_gsettings(
+                "org.gnome.desktop.interface/cursor-theme", cursor_setting,
+            )
+        if self.bibata_available and not cursor_setting_available:
+            self.output("Could not read the current cursor choice; preserving it and not applying Bibata defaults.")
+        elif self.bibata_available and cursor_setting not in (None, "Bibata-Modern-Ice"):
+            self.output(f"Preserving the existing cursor theme choice: {cursor_setting}")
+        self.install_polkit_agent = not agent_exists and self._which(sets["polkit_agent"]["executable"]) is not None
+        if not agent_exists and not self.install_polkit_agent:
+            self.output("No existing or installed graphical Polkit agent was detected; privileged prompts will not have a Sparrow agent.")
         if self.confirm("Install Sparrow's recommended desktop apps, fonts, GTK theme and portal integrations?", True):
             defaults = list(sets["defaults"])
-            agent_exists = self.has_existing_polkit_agent()
-            if not agent_exists:
-                defaults.append(sets["polkit_agent"]["package"])
             if not self._install_package_list(defaults, label="Default desktop profile"):
                 self.default_profile_skipped = True
                 self.output("Recommended desktop bundle declined. App shortcuts/integrations for uninstalled apps will be unavailable.")
-            if not agent_exists:
-                self.install_polkit_agent = self._which(sets["polkit_agent"]["executable"]) is not None
-                if not self.install_polkit_agent:
-                    self.output("No graphical Polkit agent was detected or installed; privileged prompts will not have a Sparrow agent.")
         else:
             self.default_profile_skipped = True
-            if not self.has_existing_polkit_agent():
-                self.output("Default apps/Polkit were declined and no existing Polkit agent was detected; privileged prompts will not be shown graphically.")
         optional = sets["optional"]
         if self.confirm("Choose optional feature packages (recording, Night Light, visualizer, hardware integrations)?", False):
             for group, packages in optional.items():
@@ -580,16 +677,12 @@ class SparrowInstaller:
                     self.skipped_optional_groups.append(group)
         else:
             self.skipped_optional_groups.extend(optional)
-        self.output("No AUR packages are installed by Sparrow. Manual AUR notes: " + "; ".join(f"{k}: {v}" for k, v in sets["aur_manual"].items()))
+        self.output("Sparrow does not install AUR or upstream applications. Manual external items: " + "; ".join(f"{k}: {v}" for k, v in sets["manual_external"].items()))
         for executable, label in (("rishot", "Rishot screenshots"), ("mpvpaper", "video wallpaper playback")):
             if self._which(executable) is None:
                 self.missing_manual.append(label)
-        if not bibata_available:
-            self.missing_manual.append("Bibata Modern Ice cursor (manual AUR)")
         if self._which("rishot") is None:
             self.output("Screenshot shortcut Super+Shift+S requires the separate Rishot application; install it manually from its upstream-supported source.")
-        if not bibata_available:
-            self.output("Bibata Modern Ice is not installed. The cursor default needs the manual AUR package listed above or a user-selected cursor theme.")
         return True
 
     def _verify_required_runtime(self, sets: dict) -> bool:
@@ -606,6 +699,16 @@ class SparrowInstaller:
             result = self._command(["python3", "-c", f"import {module}"])
             if result.returncode:
                 self.output(f"Required Python module is missing after package resolution: {module}")
+                return False
+        for key in ("quickshell", "terminal", "gtk"):
+            family = self.source_manifest().get("fonts", {}).get(key, {}).get("family")
+            if not isinstance(family, str):
+                continue
+            result = self._command(["fc-match", "-f", "%{family}", family])
+            normalized_family = re.sub(r"[^a-z0-9]", "", family.lower())
+            normalized_result = re.sub(r"[^a-z0-9]", "", result.stdout.lower())
+            if result.returncode or normalized_family not in normalized_result:
+                self.output(f"Required font family is not resolving through Fontconfig: {family}")
                 return False
         return True
 
@@ -646,17 +749,6 @@ class SparrowInstaller:
                     return True
         return False
 
-    def _runtime_source(self) -> Path:
-        return self.repo / "quickshell/sparrow"
-
-    def _runtime_stage_source(self) -> Path:
-        stage = Path(tempfile.mkdtemp(prefix="sparrow-runtime-source-"))
-        shutil.copytree(self._runtime_source(), stage / "sparrow", dirs_exist_ok=True)
-        # Keep the installed runtime focused on run-time material, not local test entry points.
-        for relative in ("minimal-test.qml", "lib/monitors.test.mjs", "scripts/test_wallcolors.py", "scripts/test_niri_config_transaction.py"):
-            (stage / "sparrow" / relative).unlink(missing_ok=True)
-        return stage / "sparrow"
-
     def _detect_bibata(self) -> bool:
         if self.testing:
             return "Bibata-Modern-Ice" in self.test_machine.get("themes", set())
@@ -664,6 +756,53 @@ class SparrowInstaller:
             (root / "Bibata-Modern-Ice/index.theme").is_file()
             for root in (self.paths.data / "icons", Path("/usr/share/icons"), Path("/usr/local/share/icons"))
         )
+
+    def _prepare_bibata_asset(self, asset: dict) -> bool:
+        """Fetch and safely stage the exact cursor release; deployment remains transactional."""
+        self._bibata_temp = tempfile.TemporaryDirectory(prefix="sparrow-bibata-")
+        temporary_root = Path(self._bibata_temp.name)
+        archive = temporary_root / asset["asset"]
+        if self.testing:
+            source = temporary_root / asset["directory"]
+            (source / "cursors").mkdir(parents=True)
+            (source / "index.theme").write_text("[Icon Theme]\nName=Bibata-Modern-Ice\n")
+            (source / "cursor.theme").write_text("[Icon Theme]\nInherits=Bibata-Modern-Ice\n")
+            (source / "cursors/arrow").write_bytes(b"simulated cursor asset")
+            self.test_machine.setdefault("themes", set()).add("Bibata-Modern-Ice")
+            self.bibata_asset_source = source
+            self.bibata_available = True
+            return True
+
+        digest = hashlib.sha256()
+        try:
+            with urlopen(asset["install_url"], timeout=45) as response, archive.open("wb") as output:
+                while chunk := response.read(1024 * 1024):
+                    digest.update(chunk)
+                    output.write(chunk)
+            if digest.hexdigest() != asset["sha256"]:
+                raise RuntimeError("downloaded cursor archive did not match the pinned SHA-256")
+
+            extracted = temporary_root / "extracted"
+            extracted.mkdir()
+            with tarfile.open(archive, "r:xz") as tar:
+                members = tar.getmembers()
+                prefix = asset["directory"] + "/"
+                for member in members:
+                    path = Path(member.name)
+                    if path.is_absolute() or ".." in path.parts or not (member.name == asset["directory"] or member.name.startswith(prefix)):
+                        raise RuntimeError("cursor archive contains an unexpected path")
+                tar.extractall(extracted, members=members, filter="data")
+            source = extracted / asset["directory"]
+            if not (source / "index.theme").is_file() or not (source / "cursors/arrow").is_file():
+                raise RuntimeError("cursor archive is missing its expected theme files")
+            self.bibata_asset_source = source
+            self.bibata_available = True
+            return True
+        except Exception as error:
+            self.output(f"Could not prepare the pinned Bibata {asset['version']} cursor asset: {error}")
+            self._bibata_temp.cleanup()
+            self._bibata_temp = None
+            return False
 
     @staticmethod
     def _desktop_hidden_value(content: str) -> str | None:
@@ -673,80 +812,112 @@ class SparrowInstaller:
         match = re.search(r"(?m)^Hidden\s*=\s*(.*?)\s*$", section.group(1))
         return match.group(1).lower() if match else None
 
-    def _icon_theme_user_value(self) -> tuple[bool, str | None]:
+    def _gsettings_user_value(self, key: str) -> tuple[bool, str | int | None]:
+        schema, name = key.split("/", 1)
         if self.testing:
-            return True, self.test_machine.setdefault("gsettings", {}).get("icon-theme")
-        if self.paths.home != Path.home():
-            return False, None
+            return True, self.test_machine.setdefault("gsettings", {}).get(name)
         try:
             import gi
             gi.require_version("Gio", "2.0")
             from gi.repository import Gio
-            settings = Gio.Settings.new("org.gnome.desktop.interface")
-            variant = settings.get_user_value("icon-theme")
+            settings = Gio.Settings.new(schema)
+            variant = settings.get_user_value(name)
             return True, variant.unpack() if variant is not None else None
         except Exception as error:
-            self.output(f"Could not inspect the GTK icon-theme user preference; leaving it unchanged: {error}")
+            self.output(f"Could not inspect GSettings value {key}; preserving the user's current value: {error}")
             return False, None
 
-    def _set_icon_theme_user_value(self, value: str | None) -> bool:
+    def _set_gsettings_user_value(self, key: str, value: str | int | None) -> bool:
+        schema, name = key.split("/", 1)
         if self.testing:
             values = self.test_machine.setdefault("gsettings", {})
             if value is None:
-                values.pop("icon-theme", None)
+                values.pop(name, None)
             else:
-                values["icon-theme"] = value
+                values[name] = value
             return True
-        if self.paths.home != Path.home():
-            return False
         try:
             import gi
             gi.require_version("Gio", "2.0")
             from gi.repository import Gio
-            settings = Gio.Settings.new("org.gnome.desktop.interface")
+            settings = Gio.Settings.new(schema)
             if value is None:
-                settings.reset("icon-theme")
+                settings.reset(name)
                 return True
-            return bool(settings.set_string("icon-theme", value))
+            if isinstance(value, int):
+                return bool(settings.set_int(name, value))
+            return bool(settings.set_string(name, value))
         except Exception as error:
-            self.output(f"Could not update GTK icon-theme preference: {error}")
+            self.output(f"Could not update GSettings value {key}: {error}")
             return False
 
-    def _apply_sparrow_icon_default(self) -> None:
-        key = "org.gnome.desktop.interface/icon-theme"
-        if not (self.paths.data / "icons/Sparrow/index.theme").is_file():
-            self.output("Sparrow icon theme files are unavailable; preserving the current GTK icon-theme preference.")
-            return
-        available, current = self._icon_theme_user_value()
+    def _apply_gsettings_default(self, key: str, value: str | int) -> None:
+        available, current = self._gsettings_user_value(key)
         if not available:
-            return
+            raise RuntimeError(f"Cannot safely inspect required desktop preference {key}; no Sparrow defaults were applied.")
         previous = self.managed_settings.get(key)
         if previous:
             if current == previous.get("installed"):
                 return
             # A later user choice relinquishes Sparrow ownership permanently.
             self.managed_settings.pop(key, None)
-            self.output(f"Preserved the user's GTK icon-theme choice: {current}")
+            self.output(f"Preserved the user's GSettings choice for {key}: {current}")
             return
         if current is not None:
-            self.output(f"Preserved explicit GTK icon-theme choice: {current}")
+            self.output(f"Preserved explicit GSettings choice for {key}: {current}")
             return
         if self.dry_run:
-            self.output("Would set the unset GTK icon-theme preference to Sparrow (colors remain globally Adwaita).")
+            self.output(f"Would set unset GSettings value {key} to {value}.")
             return
-        if self._set_icon_theme_user_value("Sparrow"):
-            self.settings_before[key] = current
-            self.managed_settings[key] = {"previous": current, "installed": "Sparrow"}
-            self.output("Selected Sparrow icons for this fresh user; global GTK colors remain unchanged.")
+        if not self._set_gsettings_user_value(key, value):
+            raise RuntimeError(f"Could not set fresh-user desktop preference {key}={value}.")
+        self.settings_before[key] = current
+        self.managed_settings[key] = {"previous": current, "installed": value}
+        self.output(f"Set fresh-user default {key}={value}; later user changes remain user-owned.")
 
-    def _restore_icon_default(self, key: str, record: dict) -> None:
-        available, current = self._icon_theme_user_value()
+    def _relinquish_changed_gsettings(self, key: str, current: str | int | None) -> None:
+        record = self.managed_settings.get(key)
+        if record and current != record.get("installed"):
+            self.managed_settings.pop(key, None)
+            self.output(f"Preserved the user's GSettings choice for {key}: {current}")
+
+    def _restore_managed_file_if_unchanged(self, path: Path) -> None:
+        record = self.managed.get(str(path))
+        if not record or record.get("kind") != "file":
+            return
+        if not path.is_file() or sha256_file(path) != record.get("sha256"):
+            self.output(f"Preserved user-modified cursor configuration: {path}")
+            return
+        self._snapshot_once(path)
+        restore_snapshot(path, record.get("initial", {"exists": False}))
+        self.managed.pop(str(path), None)
+        self.changed.append(f"restored cursor configuration {path}")
+
+    def _drop_unselected_cursor_files(self) -> None:
+        if self.bibata_defaults_enabled:
+            return
+        for path in (
+            self.paths.config / "niri/sparrow/cursor.kdl",
+            self.paths.config / "environment.d/90-cursor.conf",
+        ):
+            self._restore_managed_file_if_unchanged(path)
+
+    def _apply_sparrow_defaults(self) -> None:
+        if (self.paths.data / "icons/Sparrow/index.theme").is_file():
+            self._apply_gsettings_default("org.gnome.desktop.interface/icon-theme", "Sparrow")
+        self._apply_gsettings_default("org.gnome.desktop.interface/font-name", "Adwaita Sans 11")
+        if self.bibata_defaults_enabled:
+            self._apply_gsettings_default("org.gnome.desktop.interface/cursor-theme", "Bibata-Modern-Ice")
+            self._apply_gsettings_default("org.gnome.desktop.interface/cursor-size", 24)
+
+    def _restore_gsettings_default(self, key: str, record: dict) -> None:
+        available, current = self._gsettings_user_value(key)
         if not available:
             return
         if current != record.get("installed"):
-            self.output(f"Preserved changed GTK icon-theme preference during restore: {current}")
+            self.output(f"Preserved changed GSettings choice during restore ({key}): {current}")
             return
-        self._set_icon_theme_user_value(record.get("previous"))
+        self._set_gsettings_user_value(key, record.get("previous"))
 
     @classmethod
     def _restore_desktop_hidden(cls, current: str, original: str) -> str:
@@ -777,6 +948,16 @@ class SparrowInstaller:
         niri_home = self.paths.config / "niri"
         planned: dict[Path, bytes] = {}
         root_source = self.repo / "niri/config.kdl"
+        niri_fragments = [
+            (source, destination)
+            for entry, source, destination in self._source_entries()
+            if entry["source"].startswith("niri/sparrow/") and source.is_file()
+        ]
+        seed_source, seed_destination = next(
+            (source, destination)
+            for entry, source, destination in self._source_entries("D")
+            if entry["source"] == "niri/defaults/user-input.kdl"
+        )
         if niri_home.exists():
             # Validate the tracked Sparrow config alongside host-local generated files.
             with tempfile.TemporaryDirectory(prefix="sparrow-niri-stage-") as temp_name:
@@ -785,12 +966,10 @@ class SparrowInstaller:
                 root = stage_home / "config.kdl"
                 root.parent.mkdir(parents=True, exist_ok=True)
                 root.write_bytes(root_source.read_bytes())
-                for source in sorted((self.repo / "niri/sparrow").glob("*.kdl")):
-                    dest = stage_home / "sparrow" / source.name
-                    if source.name == "cursor.kdl" and not self.bibata_available:
-                        dest.parent.mkdir(parents=True, exist_ok=True)
-                        dest.write_text("// Bibata Modern Ice is not installed; preserve Niri's existing cursor default.\n", encoding="utf-8")
+                for source, destination in niri_fragments:
+                    if source.name == "cursor.kdl" and not self.bibata_defaults_enabled:
                         continue
+                    dest = stage_home / destination.relative_to(self.paths.config)
                     current = dest.read_bytes() if dest.exists() else None
                     managed = self.managed.get(str(niri_home / "sparrow" / source.name))
                     if current is not None and current != source.read_bytes() and not (managed and sha256_file(dest) == managed.get("sha256")):
@@ -803,6 +982,10 @@ class SparrowInstaller:
                     else:
                         dest.parent.mkdir(parents=True, exist_ok=True)
                         dest.write_bytes(source.read_bytes())
+                seed_stage = stage_home / seed_destination.relative_to(self.paths.config)
+                if not seed_stage.exists() and not seed_stage.is_symlink():
+                    seed_stage.parent.mkdir(parents=True, exist_ok=True)
+                    seed_stage.write_bytes(seed_source.read_bytes())
                 if validate:
                     result = self._command(["niri", "validate", "-c", str(root)])
                     if result.returncode:
@@ -816,11 +999,12 @@ class SparrowInstaller:
                 stage_home = Path(temp_name) / "niri"
                 shutil.copytree(self.repo / "niri", stage_home)
                 root = stage_home / "config.kdl"
-                if not self.bibata_available:
-                    (stage_home / "sparrow/cursor.kdl").write_text(
-                        "// Bibata Modern Ice is not installed; preserve Niri's existing cursor default.\n",
-                        encoding="utf-8",
-                    )
+                if not self.bibata_defaults_enabled:
+                    (stage_home / "sparrow/cursor.kdl").unlink(missing_ok=True)
+                seed_stage = stage_home / seed_destination.relative_to(self.paths.config)
+                if not seed_stage.exists():
+                    seed_stage.parent.mkdir(parents=True, exist_ok=True)
+                    seed_stage.write_bytes(seed_source.read_bytes())
                 if validate:
                     result = self._command(["niri", "validate", "-c", str(root)])
                     if result.returncode:
@@ -843,6 +1027,38 @@ class SparrowInstaller:
                 continue
             self.write_file(target, src.read_bytes(), mode=src.stat().st_mode & 0o777, role=role)
 
+    def _deploy_manifest_directories(self) -> None:
+        if self.bibata_asset_source is not None:
+            destination = self.paths.data / "icons/Bibata-Modern-Ice"
+            if not self.write_tree(destination, self.bibata_asset_source, role="pinned Bibata cursor asset"):
+                raise RuntimeError(f"The existing cursor directory was preserved: {destination}")
+        for entry, source, destination in self._source_entries():
+            if not source.is_dir():
+                continue
+            if entry["source"] == "quickshell/sparrow":
+                if not self.write_tree(destination, source, role="portable Sparrow runtime"):
+                    raise RuntimeError(f"The existing runtime was preserved; Sparrow was not linked to it: {destination}")
+            else:
+                self._copy_tree_files(source, destination, f"tracked tree: {entry['source']}", preserve_generated=True)
+
+    def _restore_obsolete_development_runtime(self) -> None:
+        """Remove only the unchanged installer-owned runtime from the former layout."""
+        path = self.paths.data / "sparrow-shell/runtime"
+        record = self.old.get("managed", {}).get(str(path))
+        if not record:
+            return
+        current_digest = None
+        if path.is_dir() and not path.is_symlink():
+            current_digest = tree_digest(path)
+        if record.get("kind") != "directory" or current_digest != record.get("sha256"):
+            if path.exists() or path.is_symlink():
+                self.output(f"Preserved user-modified legacy runtime during migration: {path}")
+            return
+        self._snapshot_once(path)
+        restore_snapshot(path, record.get("initial", {"exists": False}))
+        self.managed.pop(str(path), None)
+        self.changed.append(f"restored obsolete runtime path {path}")
+
     def _unit_payload(self, source: Path) -> bytes:
         payload = source.read_bytes()
         conventional_config = self.paths.home / ".config"
@@ -857,36 +1073,42 @@ class SparrowInstaller:
 
     def _build_file_plan(self, niri_plan: dict[Path, bytes]) -> list[tuple[Path, bytes, str, int]]:
         plan: list[tuple[Path, bytes, str, int]] = []
-        for dest, data in niri_plan.items():
-            plan.append((dest, data, "Niri root config", 0o644))
-        for source in sorted((self.repo / "niri/sparrow").glob("*.kdl")):
-            if source.name == "cursor.kdl" and not self.bibata_available:
-                data = b"// Bibata Modern Ice is not installed; preserve Niri's existing cursor default.\n"
-            else:
-                data = source.read_bytes()
-            plan.append((self.paths.config / "niri/sparrow" / source.name, data, "Niri Sparrow fragment", 0o644))
-        for source in sorted((self.repo / "quickshell/sparrow/systemd").glob("*.service")):
+        for entry, source, destination in self._source_entries():
+            if source.is_dir() or entry["source"] == "niri/config.kdl":
+                continue
+            if entry["source"].startswith("niri/sparrow/") and source.name == "cursor.kdl" and not self.bibata_defaults_enabled:
+                continue
+            if source.name == "90-cursor.conf" and not self.bibata_defaults_enabled:
+                continue
             if source.name == "sparrow-polkit-agent.service" and not self.install_polkit_agent:
                 continue
-            plan.append((self.paths.config / "systemd/user" / source.name, self._unit_payload(source), "Sparrow user service", 0o644))
-        dropin = self.repo / "quickshell/sparrow/systemd/xdg-desktop-portal-gtk.service.d/10-sparrow-theme.conf"
-        plan.append((self.paths.config / "systemd/user/xdg-desktop-portal-gtk.service.d/10-sparrow-theme.conf", dropin.read_bytes(), "GTK portal-only theme override", 0o644))
-        user_files = [
-            (self.repo / "kitty/kitty.conf", self.paths.config / "kitty/kitty.conf", "Kitty defaults"),
-            (self.repo / "fish/config.fish", self.paths.config / "fish/config.fish", "Fish defaults"),
-            (self.repo / "starship/starship.toml", self.paths.config / "starship.toml", "Starship defaults"),
-            (self.repo / "gtk/settings.ini", self.paths.config / "gtk-3.0/settings.ini", "GTK icon-theme setting"),
-            (self.repo / "applications/sparrow-files.desktop", self.paths.data / "applications/sparrow-files.desktop", "Sparrow Files desktop entry"),
-            (self.repo / "hyprlock/hyprlock.conf", self.paths.config / "sparrow/hyprlock.conf", "optional Hyprlock fallback config"),
-        ]
-        if self.bibata_available:
-            user_files.append((self.repo / "environment.d/90-cursor.conf", self.paths.config / "environment.d/90-cursor.conf", "recommended cursor defaults"))
-        for source, destination, label in user_files:
-            plan.append((destination, source.read_bytes(), label, source.stat().st_mode & 0o777))
-        if not self.default_profile_skipped:
-            portal = self.paths.config / "xdg-desktop-portal/niri-portals.conf"
-            portal_source = self.repo / "xdg-desktop-portal/niri-portals.conf"
-            plan.append((portal, portal_source.read_bytes(), "Niri portal routing", 0o644))
+            if entry["source"].startswith("niri/sparrow/"):
+                role = "Niri Sparrow fragment"
+            elif source.suffix == ".service":
+                role = "Sparrow user service"
+            elif "xdg-desktop-portal" in entry["source"]:
+                role = "Niri portal routing"
+            elif entry["source"] == "applications/sparrow-files.desktop":
+                role = "Sparrow Files desktop entry"
+            elif entry["source"] == "hyprlock/hyprlock.conf":
+                role = "optional Hyprlock fallback config"
+            elif entry["source"] == "environment.d/90-cursor.conf":
+                role = "recommended cursor defaults"
+            else:
+                role = f"tracked source: {entry['source']}"
+            payload = self._unit_payload(source) if role == "Sparrow user service" else source.read_bytes()
+            plan.append((destination, payload, role, source.stat().st_mode & 0o777))
+
+        # The manifest describes the one intentional D-category first-login seed.
+        # It is copied only when absent and is never an update target.
+        for entry, source, destination in self._source_entries("D"):
+            if entry["source"] != "niri/defaults/user-input.kdl":
+                continue
+            if not destination.exists() and not destination.is_symlink():
+                plan.append((destination, source.read_bytes(), "first-login user input seed", source.stat().st_mode & 0o777))
+        for destination, data in niri_plan.items():
+            if destination.name == "config.kdl":
+                plan.append((destination, data, "Niri root config", 0o644))
         return plan
 
     def _validate_units(self, plan: list[tuple[Path, bytes, str, int]]) -> None:
@@ -906,6 +1128,10 @@ class SparrowInstaller:
                 raise RuntimeError("Staged Sparrow systemd unit validation failed: " + (result.stderr or result.stdout))
 
     def _validate_sources(self) -> None:
+        self.source_manifest()
+        for _entry, source, _destination in self._source_entries():
+            if not source.is_file() and not source.is_dir():
+                raise RuntimeError(f"Canonical source is not a file or directory: {source}")
         py_files = list((self.repo / "quickshell/sparrow/scripts").glob("*.py"))
         for path in py_files:
             try:
@@ -953,9 +1179,10 @@ class SparrowInstaller:
         for key, saved in reversed(list(self.snapshots.items())):
             restore_snapshot(Path(key), saved)
         for key, previous in self.settings_before.items():
-            available, current = self._icon_theme_user_value()
-            if available and current == "Sparrow":
-                self._set_icon_theme_user_value(previous)
+            record = self.managed_settings.get(key, {})
+            available, current = self._gsettings_user_value(key)
+            if available and current == record.get("installed"):
+                self._set_gsettings_user_value(key, previous)
         if newly_enabled and not self.testing and not self.dry_run:
             self._command(["systemctl", "--user", "daemon-reload"])
 
@@ -1005,23 +1232,13 @@ class SparrowInstaller:
             self.output("[3/6] Validating staged Niri configuration and Sparrow services")
             self._validate_units(plan)
             self.backup_root.mkdir(parents=True, exist_ok=True, mode=0o700)
-            # Runtime copy and entrypoint are staged before all integrations.
             self.output("[4/6] Deploying Sparrow runtime and selected configuration")
-            runtime_src = self._runtime_stage_source()
-            runtime_dest = self.paths.data / "sparrow-shell/runtime"
-            try:
-                if not self.write_tree(runtime_dest, runtime_src, role="portable Sparrow runtime copy"):
-                    raise RuntimeError("The existing Sparrow runtime was preserved; refusing to link Quickshell to it.")
-                runtime_link = self.paths.config / "quickshell/sparrow"
-                if not self.write_symlink(runtime_link, runtime_dest, role="canonical Quickshell runtime entry"):
-                    raise RuntimeError("The existing canonical Quickshell entry was preserved; no deployment was made.")
-            finally:
-                shutil.rmtree(runtime_src.parent, ignore_errors=True)
+            self._deploy_manifest_directories()
+            self._restore_obsolete_development_runtime()
             # A live compositor reloads Niri config on file change. Stage validation happened above.
             self._apply_plan(plan)
-            self._copy_tree_files(self.repo / "gtk/Sparrow", self.paths.data / "themes/Sparrow", "Sparrow GTK scaffold", preserve_generated=True)
-            self._copy_tree_files(self.repo / "icons/Sparrow", self.paths.data / "icons/Sparrow", "Sparrow icon theme", preserve_generated=True)
-            self._apply_sparrow_icon_default()
+            self._drop_unselected_cursor_files()
+            self._apply_sparrow_defaults()
             notices = self.paths.data / "sparrow-shell/licenses"
             legal_sources = [
                 ("LICENSE", self.repo / "LICENSE"),
@@ -1059,6 +1276,10 @@ class SparrowInstaller:
             if not self.dry_run:
                 self._rollback()
             return 1
+        finally:
+            if self._bibata_temp is not None:
+                self._bibata_temp.cleanup()
+                self._bibata_temp = None
         self.output(f"Sparrow installation succeeded. Backups and restore manifest: {self.backup_root}")
         self.output("Units were enabled but not started or restarted. Log out and back into Niri to test startup.")
         self.output("Portal routing/theme changes are not applied to already-running portal processes; they take effect after the next session start.")
@@ -1193,7 +1414,7 @@ class SparrowInstaller:
                 preserved.append(str(path))
                 continue
             if defer_runtime_cleanup and record.get("role") in {
-                "portable Sparrow runtime copy", "canonical Quickshell runtime entry"
+                "portable Sparrow runtime"
             }:
                 preserved.append(str(path))
                 continue
@@ -1206,7 +1427,7 @@ class SparrowInstaller:
             self.output("Sparrow is still active. Its runtime and entry point were preserved; run ./uninstall.sh again after logging out to finish cleanup.")
         if not self.dry_run:
             for key, record in self.old.get("managed_settings", {}).items():
-                self._restore_icon_default(key, record)
+                self._restore_gsettings_default(key, record)
             if preserved:
                 self.output("Preserved user-modified/in-use paths: " + ", ".join(dict.fromkeys(preserved)))
             # Backups remain available for manual recovery; only the active ownership manifest is removed.

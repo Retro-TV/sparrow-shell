@@ -29,8 +29,11 @@ Sparrow/Niri files are deployed. Packages already installed are not removed if
 a later validation or file operation fails. Official package installation
 uses `sudo pacman` only after an explicit prompt. Required
 packages must be accepted for installation or already present. Sparrow never
-bootstraps an AUR helper; Bibata Modern Ice and mpvpaper are optional manual AUR
-installations. Rishot is a separate upstream project and is not bundled.
+bootstraps an AUR helper. For a fresh account with no explicit cursor choice,
+the installer offers to fetch the official Bibata Modern Ice v2.0.6 archive,
+checks its pinned SHA-256, and installs it per-user; declining stops deployment
+before Sparrow files are written. mpvpaper and Rishot remain separate optional
+upstream projects and are not bundled.
 
 Existing Niri configuration remains the user's file. Sparrow validates a
 staged include integration before applying it; Niri may automatically reload
@@ -39,10 +42,10 @@ app settings, cursor selections and default handlers are preserved unless a
 specific replacement is approved. Conflicting files are backed up before any
 replacement.
 
-The installed runtime is copied to `$XDG_DATA_HOME/sparrow-shell/runtime`
-(normally `~/.local/share/sparrow-shell/runtime`) and exposed through the
-stable `$XDG_CONFIG_HOME/quickshell/sparrow` entry point. It does not depend on
-the clone remaining in place.
+The complete runtime is copied directly to the stable
+`$XDG_CONFIG_HOME/quickshell/sparrow` entry point (normally
+`~/.config/quickshell/sparrow`). It does not depend on the clone remaining in
+place.
 
 After installation, select the newly available Niri session in your login
 manager, or use your existing `niri-session` workflow. Sparrow does not install

@@ -4,6 +4,7 @@ import json
 import hashlib
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -31,7 +32,7 @@ class InstallerTests(unittest.TestCase):
         self.machine = {
             "os": "id=cachyos",
             "packages": set(),
-            "commands": {"sudo", "pacman", "bash", "systemd-analyze", "systemctl", "env", "gio", "udevadm"},
+            "commands": {"sudo", "pacman", "bash", "systemd-analyze", "systemctl", "env", "gio", "udevadm", "ps"},
             "modules": set(),
             "missing_after_install": set(),
             "existing_polkit_agent": False,
@@ -90,12 +91,13 @@ class InstallerTests(unittest.TestCase):
         theme = (REPO / "quickshell/sparrow/Singletons/Theme.qml").read_text()
         self.assertIn(': "Inter Black"', theme)
         self.assertEqual(self.machine["gsettings"].get("icon-theme"), "Sparrow")
+        self.assertEqual(self.machine["gsettings"].get("font-name"), "Adwaita Sans 11")
         self.assertTrue((self.paths.config / "gtk-3.0/settings.ini").is_file())
 
     def test_blank_home_bootstrap_has_wallpaper_before_shell_without_seeding_generated_state(self) -> None:
         installer = self.installer()
         self.assertEqual(installer.install(), 0)
-        runtime = self.paths.data / "sparrow-shell/runtime"
+        runtime = self.paths.config / "quickshell/sparrow"
         self.assertTrue((runtime / "wallpapers/default.png").is_file())
         wallpaper_unit = (self.paths.config / "systemd/user/sparrow-wallpaper.service").read_text()
         shell_unit = (self.paths.config / "systemd/user/sparrow-shell.service").read_text()
@@ -108,8 +110,98 @@ class InstallerTests(unittest.TestCase):
         self.assertIn('include optional=true "sparrow/generated-colors.kdl"', niri_config)
         wallpaper_script = (runtime / "scripts/wallpaper.sh").read_text()
         self.assertIn('default_wallpaper="$helper/../wallpapers/default.png"', wallpaper_script)
+        seed = self.paths.config / "niri/sparrow/user-input.kdl"
+        self.assertTrue(seed.is_file())
+        self.assertIn("focus-follows-mouse", seed.read_text())
         self.assertFalse((self.paths.config / "niri/sparrow/generated-colors.kdl").exists())
         self.assertFalse((self.paths.cache / "sparrow-shell/palette.json").exists())
+
+    def test_full_temporary_home_install_then_real_wallpaper_bootstrap(self) -> None:
+        required_sources = (
+            shutil.which("matugen"), shutil.which("niri"),
+            Path("/usr/share/themes/adw-gtk3/gtk-3.0/gtk.css").is_file(),
+            Path("/usr/share/themes/adw-gtk3/gtk-4.0/libadwaita.css").is_file(),
+        )
+        if not all(required_sources):
+            self.skipTest("Matugen, Niri and the required adw-gtk-theme sources are needed for the real convergence test")
+
+        installer = self.installer()
+        self.assertEqual(installer.install(), 0)
+        runtime = self.paths.config / "quickshell/sparrow"
+        self.assertEqual(tree_digest(REPO / "quickshell/sparrow"), tree_digest(runtime))
+        self.assertFalse((self.paths.config / "niri/sparrow/display-outputs.kdl").exists())
+        self.assertFalse((self.paths.config / "niri/sparrow/display-binds.kdl").exists())
+
+        fakebin = self.root / "fakebin"
+        fakebin.mkdir()
+        niri = fakebin / "niri"
+        niri.write_text(
+            "#!/bin/sh\n"
+            "case \"$*\" in\n"
+            "  *'--json outputs'*) printf '%s\\n' '{\"eDP-1\":{}}' ;;\n"
+            "  *'--json focused-output'*) printf '%s\\n' '{\"name\":\"eDP-1\"}' ;;\n"
+            "  *) exit 0 ;;\n"
+            "esac\n"
+        )
+        niri.chmod(0o700)
+        awww = fakebin / "awww"
+        awww.write_text(
+            "#!/bin/sh\n"
+            "if [ \"$1\" = query ] && [ \"$2\" = --json ]; then\n"
+            "  printf '%s\\n' '{\"\": [{\"name\":\"eDP-1\",\"displaying\":{\"image\":\"\"}}]}'\n"
+            "fi\nexit 0\n"
+        )
+        awww.chmod(0o700)
+        pkill = fakebin / "pkill"
+        pkill.write_text("#!/bin/sh\nexit 0\n")
+        pkill.chmod(0o700)
+
+        real_niri = shutil.which("niri")
+        env = os.environ.copy()
+        for name in ("NIRI_SOCKET", "WAYLAND_DISPLAY", "DISPLAY", "DBUS_SESSION_BUS_ADDRESS"):
+            env.pop(name, None)
+        env.update({
+            "HOME": str(self.root), "XDG_CONFIG_HOME": str(self.paths.config),
+            "XDG_DATA_HOME": str(self.paths.data), "XDG_STATE_HOME": str(self.paths.state),
+            "XDG_CACHE_HOME": str(self.paths.cache), "NIRI_CONFIG": str(self.paths.config / "niri/config.kdl"),
+            "PATH": f"{fakebin}:{os.environ['PATH']}", "SPARROW_AWWW_DAEMON_MANAGED": "1",
+        })
+        before_palette = self.paths.cache / "sparrow-shell/palette.json"
+        self.assertFalse(before_palette.exists())
+        result = subprocess.run(
+            ["bash", str(runtime / "scripts/wallpaper.sh"), "init", "eDP-1", "eDP-1"],
+            env=env, text=True, capture_output=True, timeout=120,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        palette = json.loads(before_palette.read_text())
+        self.assertEqual((palette["theme_source"], palette["palette_style"], palette["appearance_mode"]),
+                         ("dynamic", "auto", "auto"))
+        generated = {
+            "niri": self.paths.config / "niri/sparrow/generated-colors.kdl",
+            "kitty": self.paths.config / "kitty/sparrow-colors.conf",
+            "gtk3": self.paths.data / "themes/Sparrow/gtk-3.0/gtk.css",
+            "gtk4": self.paths.data / "themes/Sparrow/gtk-4.0/libadwaita.css",
+            "icon": self.paths.data / "icons/Sparrow/scalable/places/folder.svg",
+        }
+        self.assertTrue(all(path.is_file() for path in generated.values()))
+        self.assertGreater(generated["gtk3"].stat().st_size, 100000)
+        self.assertGreater(generated["gtk4"].stat().st_size, 10000)
+        self.assertIn(palette["primary"], generated["gtk3"].read_text())
+        self.assertIn(palette["primary"], generated["gtk4"].read_text())
+        self.assertIn(palette["primary"], generated["icon"].read_text())
+        validated = subprocess.run([real_niri, "validate", "-c", str(self.paths.config / "niri/config.kdl")],
+                                   env=env, text=True, capture_output=True, timeout=30)
+        self.assertEqual(validated.returncode, 0, validated.stderr or validated.stdout)
+        first_generated = {name: path.read_bytes() for name, path in generated.items()}
+        first_generated["palette"] = before_palette.read_bytes()
+        repeat = subprocess.run(
+            ["bash", str(runtime / "scripts/wallpaper.sh"), "recolor"],
+            env=env, text=True, capture_output=True, timeout=120,
+        )
+        self.assertEqual(repeat.returncode, 0, repeat.stderr)
+        for name, path in generated.items():
+            self.assertEqual(path.read_bytes(), first_generated[name], f"non-deterministic generated output: {name}")
+        self.assertEqual(before_palette.read_bytes(), first_generated["palette"])
 
     def test_installed_portable_files_converge_with_the_live_ssd_source_map(self) -> None:
         source_map = json.loads((REPO / "installer/live-source-map.json").read_text())
@@ -164,7 +256,7 @@ class InstallerTests(unittest.TestCase):
                         )
             else:
                 self.assertIn(repo_rel, represented_repo_files, f"portable source is not represented in the Git worktree: {repo_source}")
-            if item["policy"] == "copy-tree-exact-through-current-development-link":
+            if item["policy"] == "copy-tree-exact-to-canonical-runtime":
                 live_tree = (live_home / live_rel).resolve()
                 self.assertEqual(tree_digest(repo_source), tree_digest(live_tree), item["live"])
             elif item["policy"].startswith("copy-scaffold"):
@@ -277,18 +369,12 @@ class InstallerTests(unittest.TestCase):
         for item in source_map["home_relative_sources"]:
             repo_source = REPO / item["repo"]
             destination = self.root / item["install"]
-            if item["policy"] == "copy-tree-exact-through-current-development-link":
-                runtime_target = destination.resolve()
+            if item["policy"] == "copy-tree-exact-to-canonical-runtime":
+                runtime_target = destination
                 for source_file in repo_source.rglob("*"):
                     if not source_file.is_file():
                         continue
                     relative = source_file.relative_to(repo_source)
-                    if relative.as_posix() in {
-                        "lib/monitors.test.mjs",
-                        "scripts/test_wallcolors.py",
-                        "scripts/test_niri_config_transaction.py",
-                    }:
-                        continue
                     deployed = runtime_target / relative
                     self.assertTrue(deployed.is_file(), f"not deployed: {relative}")
                     self.assertEqual(deployed.read_bytes(), source_file.read_bytes(), str(relative))
@@ -318,6 +404,28 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(self.machine["gsettings"]["icon-theme"], "Papirus")
         manifest = json.loads((self.paths.state / "sparrow-shell/installer/manifest.json").read_text())
         self.assertNotIn("org.gnome.desktop.interface/icon-theme", manifest.get("managed_settings", {}))
+
+    def test_explicit_cursor_and_font_choices_are_preserved(self) -> None:
+        self.machine["gsettings"].update({
+            "cursor-theme": "Adwaita", "cursor-size": 32,
+            "font-name": "Custom Sans 13", "icon-theme": "Papirus",
+        })
+        self.assertEqual(self.installer().install(), 0)
+        self.assertEqual(self.machine["gsettings"]["cursor-theme"], "Adwaita")
+        self.assertEqual(self.machine["gsettings"]["cursor-size"], 32)
+        self.assertEqual(self.machine["gsettings"]["font-name"], "Custom Sans 13")
+        self.assertEqual(self.machine["gsettings"]["icon-theme"], "Papirus")
+        self.assertFalse((self.paths.config / "niri/sparrow/cursor.kdl").exists())
+        self.assertFalse((self.paths.config / "environment.d/90-cursor.conf").exists())
+
+    def test_user_input_seed_is_created_once_and_keeps_user_edits_on_update_and_uninstall(self) -> None:
+        self.assertEqual(self.installer().install(), 0)
+        target = self.paths.config / "niri/sparrow/user-input.kdl"
+        target.write_text("// user-owned\n")
+        self.assertEqual(self.installer().install(), 0)
+        self.assertEqual(target.read_text(), "// user-owned\n")
+        self.assertEqual(self.installer().uninstall(), 0)
+        self.assertEqual(target.read_text(), "// user-owned\n")
 
     def test_generated_look_override_is_not_seeded_or_overwritten(self) -> None:
         self.assertEqual(self.installer().install(), 0)
@@ -363,6 +471,7 @@ class InstallerTests(unittest.TestCase):
         installer = self.installer()
         self.machine["commands"].update({"sudo", "pacman"})
         self.machine["packages"].update(installer.package_sets()["required"])
+        self.machine["packages"].discard("kitty")
         installer._installed_package_cache = None
         self.assertTrue(installer._install_package_list(["kitty"], label="stdio test"))
         args, kwargs = next(
@@ -408,7 +517,7 @@ class InstallerTests(unittest.TestCase):
         self.assertTrue((self.paths.config / "niri/config.kdl").is_file())
         transactions = [event for event in self.machine["events"] if event[:3] == ("sudo", "pacman", "-S")]
         self.assertEqual(len(transactions), 3)
-        self.assertTrue(any("Required Sparrow runtime: already installed" in message for message in self.messages))
+        self.assertTrue(any("Required Sparrow desktop and runtime: already installed" in message for message in self.messages))
         self.assertTrue((self.paths.config / "systemd/user/sparrow-shell.service").is_file())
 
     def test_prompt_interrupt_is_clean_and_does_not_traceback_or_deploy(self) -> None:
@@ -477,14 +586,15 @@ class InstallerTests(unittest.TestCase):
         self.assertTrue(any("xdg-desktop-portal-gnome" in event for event in package_events))
         self.assertEqual(portal.read_bytes(), (REPO / "xdg-desktop-portal/niri-portals.conf").read_bytes())
 
-    def test_declining_default_profile_leaves_portal_configuration_unmodified(self) -> None:
+    def test_declining_replaceable_desktop_bundle_keeps_core_portal_and_shell(self) -> None:
         installer = self.installer(
             confirm=lambda prompt, default: False if "recommended desktop apps" in prompt.lower() else default
         )
         self.assertEqual(installer.install(), 0)
         portal = self.paths.config / "xdg-desktop-portal/niri-portals.conf"
-        self.assertFalse(portal.exists())
-        self.assertNotIn("xdg-desktop-portal-gnome", self.machine["packages"])
+        self.assertTrue(portal.is_file())
+        self.assertIn("xdg-desktop-portal-gnome", self.machine["packages"])
+        self.assertNotIn("firefox", self.machine["packages"])
 
     def test_absent_optional_tools_do_not_block_clean_install(self) -> None:
         installer = self.installer()
@@ -494,12 +604,27 @@ class InstallerTests(unittest.TestCase):
         self.assertNotIn("mpvpaper", self.machine["commands"])
         self.assertTrue(any("Rishot" in message and "Super+Shift+S" in message for message in self.messages))
 
-    def test_cursor_default_is_not_written_without_bibata_asset(self) -> None:
+    def test_declining_canonical_cursor_stops_before_deploying_sparrow(self) -> None:
+        installer = self.installer(
+            confirm=lambda prompt, default: False if "official Bibata" in prompt else self.confirm_full_profile(prompt, default)
+        )
+        self.assertEqual(installer.install(), 2)
+        self.assertFalse((self.paths.config / "niri/config.kdl").exists())
+        self.assertFalse((self.paths.config / "environment.d/90-cursor.conf").exists())
+        self.assertFalse((self.paths.config / "quickshell/sparrow").exists())
+        self.assertTrue(any("Bibata is required" in message for message in self.messages))
+
+    def test_pinned_cursor_asset_is_deployed_per_user_and_restorable(self) -> None:
         installer = self.installer()
         self.assertEqual(installer.install(), 0)
-        cursor = self.paths.config / "niri/sparrow/cursor.kdl"
-        self.assertIn(b"not installed", cursor.read_bytes())
-        self.assertFalse((self.paths.config / "environment.d/90-cursor.conf").exists())
+        installed = self.paths.data / "icons/Bibata-Modern-Ice"
+        self.assertEqual((installed / "index.theme").read_text(), "[Icon Theme]\nName=Bibata-Modern-Ice\n")
+        self.assertEqual((installed / "cursors/arrow").read_bytes(), b"simulated cursor asset")
+        self.assertEqual(self.machine["gsettings"].get("cursor-theme"), "Bibata-Modern-Ice")
+        self.assertEqual(self.machine["gsettings"].get("cursor-size"), 24)
+        self.assertTrue((self.paths.config / "niri/sparrow/cursor.kdl").is_file())
+        self.assertEqual(self.installer().uninstall(), 0)
+        self.assertFalse(installed.exists())
 
     def test_bibata_defaults_are_installed_only_when_asset_is_present(self) -> None:
         self.machine["themes"] = {"Bibata-Modern-Ice"}
@@ -508,6 +633,8 @@ class InstallerTests(unittest.TestCase):
         cursor = self.paths.config / "niri/sparrow/cursor.kdl"
         self.assertIn(b'xcursor-theme "Bibata-Modern-Ice"', cursor.read_bytes())
         self.assertTrue((self.paths.config / "environment.d/90-cursor.conf").is_file())
+        self.assertEqual(self.machine["gsettings"].get("cursor-theme"), "Bibata-Modern-Ice")
+        self.assertEqual(self.machine["gsettings"].get("cursor-size"), 24)
 
     def test_testing_cannot_inject_a_live_command_runner(self) -> None:
         with self.assertRaisesRegex(ValueError, "forbids external command runners"):
@@ -567,25 +694,27 @@ class InstallerTests(unittest.TestCase):
         self.assertFalse(installed)
         self.assertEqual(target.read_text(), "user kitty config\n")
 
-    def test_unrelated_runtime_collision_stops_before_canonical_link(self) -> None:
-        runtime = self.paths.data / "sparrow-shell/runtime"
+    def test_unrelated_runtime_collision_stops_before_canonical_runtime(self) -> None:
+        runtime = self.paths.config / "quickshell/sparrow"
         runtime.mkdir(parents=True)
         marker = runtime / "keep.txt"
         marker.write_text("not Sparrow\n")
-        installer = self.installer(confirm=lambda prompt, _default: prompt.startswith("Install these official repository packages"))
+        installer = self.installer(confirm=lambda prompt, _default: (
+            prompt.startswith("Install these official repository packages") or "official Bibata" in prompt
+        ))
         self.assertEqual(installer.install(), 1)
         self.assertEqual(marker.read_text(), "not Sparrow\n")
-        self.assertFalse((self.paths.config / "quickshell/sparrow").exists())
+        self.assertTrue(marker.is_file())
         self.assertFalse((self.paths.config / "niri/config.kdl").exists())
 
     def test_fresh_install_is_idempotent_and_restorable(self) -> None:
         first = self.installer()
         self.assertEqual(first.install(), 0)
-        runtime = self.paths.data / "sparrow-shell/runtime"
+        runtime = self.paths.config / "quickshell/sparrow"
         entry = self.paths.config / "quickshell/sparrow"
         self.assertTrue((runtime / "shell.qml").is_file())
-        self.assertTrue(entry.is_symlink())
-        self.assertEqual(entry.resolve(), runtime)
+        self.assertTrue(entry.is_dir())
+        self.assertFalse(entry.is_symlink())
         root_config = self.paths.config / "niri/config.kdl"
         self.assertTrue(root_config.is_file())
         self.assertTrue((self.paths.config / "systemd/user/sparrow-shell.service").is_file())
@@ -600,7 +729,7 @@ class InstallerTests(unittest.TestCase):
 
         second = self.installer()
         self.assertEqual(second.install(), 0)
-        self.assertEqual(entry.resolve(), runtime)
+        self.assertTrue(entry.is_dir())
         self.assertEqual(root_config.read_text().count('include "sparrow/appearance.kdl"'), 1)
         self.assertEqual((self.paths.config / "xdg-desktop-portal/niri-portals.conf").read_text().count("FileChooser=gtk;"), 1)
 
@@ -668,7 +797,7 @@ class InstallerTests(unittest.TestCase):
 
     def test_uninstall_defers_runtime_removal_while_shell_is_active(self) -> None:
         self.assertEqual(self.installer().install(), 0)
-        runtime = self.paths.data / "sparrow-shell/runtime"
+        runtime = self.paths.config / "quickshell/sparrow"
         entry = self.paths.config / "quickshell/sparrow"
 
         def systemctl_stub(args, **_kwargs):
@@ -682,7 +811,7 @@ class InstallerTests(unittest.TestCase):
         )
         self.assertEqual(active_uninstaller.uninstall(), 0)
         self.assertTrue(runtime.is_dir())
-        self.assertTrue(entry.is_symlink())
+        self.assertTrue(entry.is_dir())
         self.assertTrue(active_uninstaller.manifest_path.is_file())
 
         def inactive_stub(args, **_kwargs):
@@ -721,7 +850,7 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(installer.install(), 1)
         self.assertFalse((self.paths.config / "niri/config.kdl").exists())
         self.assertFalse((self.paths.config / "quickshell/sparrow").exists())
-        self.assertFalse((self.paths.data / "sparrow-shell/runtime").exists())
+        self.assertFalse((self.paths.config / "quickshell/sparrow").exists())
         self.assertFalse(installer.manifest_path.exists())
 
     def test_package_sets_keep_aur_out_of_automatic_lists(self) -> None:
@@ -731,7 +860,9 @@ class InstallerTests(unittest.TestCase):
             automatic.update(group)
         self.assertNotIn("bibata-cursor-theme", automatic)
         self.assertNotIn("mpvpaper", automatic)
-        self.assertIn("bibata-cursor-theme-bin", sets["aur_manual"].values())
+        self.assertNotIn("Bibata-Modern-Ice", automatic)
+        self.assertNotIn("Bibata Modern Ice cursor", sets["manual_external"])
+        self.assertEqual(self.installer().source_manifest()["cursor"]["version"], "v2.0.6")
 
 
 if __name__ == "__main__":

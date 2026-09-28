@@ -16,10 +16,10 @@ personal wallpaper library.
 | Niri input | Live's `input.kdl` and Git's bridge are byte-identical; live `user-input.kdl` supplies focus-follows-mouse alongside user-specific Num Lock/touchpad choices. The tracked `niri/defaults/user-input.kdl` holds only focus-follows-mouse and Niri's existing 25/600 keyboard repeat defaults. Do **not** copy live device preferences. |
 | Niri generated colors | Live colors reflect the current bundled default wallpaper. Git contains the wallpaper, Matugen generator, and transaction helper, not a frozen palette. |
 | Displays and user binds | Live `display-outputs.kdl`, `display-binds.kdl`, `user-binds.kdl` are machine/user state; Git ships only the static fragments and the generators. |
-| Niri cursor | Live has Bibata inline. Git has the identical block in an optional fragment because the asset is separately installed. |
+| Niri cursor | Live has Bibata inline. Git has the same block in a conditional fragment; the installer offers the pinned upstream v2.0.6 asset and installs it per-user before deploying that selection. |
 | Portal profile | Live has `Secret=gnome-keyring` without that backend installed. Git omits only that stale route; GTK FileChooser and Niri screencast/screenshot routes remain. |
 | GTK theme | Live GTK3/4 CSS is generated and current. The 106-byte Git stub was not a theme and has been removed. Git retains theme metadata and the generator; `adw-gtk-theme` supplies upstream GTK3/GTK4 CSS. Live `gtk-contained-dark.css` and `sparrow-colors.css` are stale historical files, not inputs to the active generator. |
-| Live service links | Their contents match tracked systemd units; live links point into the development checkout. Units themselves use `%h/.config/quickshell/sparrow`, not the checkout path. A future deployment must put the runtime at that stable path. |
+| Live service links | Their contents match tracked systemd units; live links point into the development checkout. Units themselves use `%h/.config/quickshell/sparrow`, not the checkout path. The installer deploys the runtime tree directly at that stable path. |
 
 The audited static Kitty, Fish, Starship, window-rule, GTK-settings, desktop,
 systemd and Quickshell files match their live counterparts. The existing
@@ -34,29 +34,31 @@ Sparrow runtime source needs `/home/vrabko/Projects/sparrow-shell`.
 cannot clear an earlier enabled node. Therefore placing focus-follows-mouse in
 immutable `input.kdl` would make Sparrow's existing Input off toggle lie. The
 portable tracked seed is the only honest source for the initial preference;
-the user fragment remains its sole runtime owner. **The current installer does
-not yet seed it.** A future installer must copy the seed to
-`$XDG_CONFIG_HOME/niri/sparrow/user-input.kdl` only when absent, before Niri
-starts, and never overwrite a later user edit. No installer change is part of
-this source-of-truth task.
+the user fragment remains its sole runtime owner. Installer copies that seed
+to `$XDG_CONFIG_HOME/niri/sparrow/user-input.kdl` only when absent, before
+Niri starts, and never overwrites it on updates. Uninstall removes the seed
+only while it still matches the installer-created bytes; an edited file stays
+user-owned.
 
 ## Cursor provenance and selection
 
-The SSD's `Bibata-Modern-Ice/index.theme` identifies v2.0.6. The [Bibata
-upstream releases](https://github.com/ful1e5/Bibata_Cursor/releases/tag/v2.0.6)
-provide `Bibata-Modern-Ice.tar.xz`; the [upstream project](https://github.com/ful1e5/Bibata_Cursor)
-recommends Arch's reviewed/manual AUR `bibata-cursor-theme-bin` package. Its
-[license](https://github.com/ful1e5/Bibata_Cursor/blob/main/LICENSE) is GPL-3.0.
-Use that named XCursor asset, not a substitute or unexplained copy of the SSD
-directory. AUR package versions may advance; the v2.0.6 tag is the exact SSD
-version to pin if exact cursor bytes are required. No cursor was downloaded or
-installed here.
+The SSD's `Bibata-Modern-Ice/index.theme` identifies v2.0.6. Installer offers
+the official [upstream v2.0.6 release archive](https://github.com/ful1e5/Bibata_Cursor/releases/download/v2.0.6/Bibata-Modern-Ice.tar.xz),
+checks it against the SHA-256 recorded in `SOURCE-OF-TRUTH.json`, and
+installs it under `$XDG_DATA_HOME/icons/Bibata-Modern-Ice`. No AUR helper or
+system-wide privilege is needed. Declining the asset offer stops deployment
+before Sparrow files are written, so a blank user does not silently receive a
+different cursor. Existing explicit cursor choices are preserved. The
+[upstream project](https://github.com/ful1e5/Bibata_Cursor) is GPL-3.0; the
+installer tracks the downloaded directory for safe update/restore.
 
-The tracked Niri cursor fragment and `environment.d/90-cursor.conf` both
-select `Bibata-Modern-Ice` at size 24. The SSD's GSettings
-`org.gnome.desktop.interface` cursor-theme/cursor-size are also
-`Bibata-Modern-Ice`/24. The manifest records that selection as a conditional
-future setup step; no GSettings state is copied from the SSD or changed now.
+The tracked Niri cursor fragment, `environment.d/90-cursor.conf`, and unset
+GSettings `org.gnome.desktop.interface` cursor-theme/cursor-size defaults all
+select `Bibata-Modern-Ice` at size 24, only when the asset is present and the
+user has no explicit different cursor choice. Installer records the GSettings
+values it sets and restores them only while unchanged. A later explicit cursor
+choice relinquishes Sparrow ownership; updates also remove/restore only
+unchanged Sparrow cursor fragments.
 
 ## Palette and GTK bootstrap
 
@@ -94,15 +96,14 @@ live generated file was an input to the isolated bootstrap.
 
 ## Packages and nonportable state
 
-The intended font families are `Inter Black` in `Theme.qml` (`inter-font`),
+The installer requires and verifies the intended font families: `Inter Black` in `Theme.qml` (`inter-font`),
 `JetBrains Mono Nerd Font` in Kitty (`ttf-jetbrains-mono-nerd`), Adwaita Sans
 for GTK/libadwaita (`adwaita-fonts`), and the bundled Outfit Black font for the
 Qylock-derived lockscreen. The audited host resolves each installed family.
-`adw-gtk-theme` is a required source package for canonical GTK appearance;
-Niri 26.04, Quickshell, Matugen, Python/Pillow, awww, and the declared GTK/Qt
-runtime dependencies remain in `docs/DEPENDENCIES.md`. The current installer
-package profile still treats some appearance packages as defaults and omits
-`adwaita-fonts`; aligning that install policy is a later installer task.
+`adw-gtk-theme`, `adwaita-fonts`, the default desktop applications, Niri 26.04,
+Quickshell, Matugen, Python/Pillow, awww, and the declared GTK/Qt runtime
+dependencies are in the required package set. Optional features remain
+separate; see `docs/DEPENDENCIES.md` for the current package groups.
 
 The live laptop exposes one internal backlight. The Mixer loads that control
 only with `Backlight.present` and `brightnessctlAvailable`, and separately

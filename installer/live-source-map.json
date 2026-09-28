@@ -21,10 +21,10 @@
     {"live": ".config/xdg-desktop-portal/niri-portals.conf", "repo": "xdg-desktop-portal/niri-portals.conf", "install": ".config/xdg-desktop-portal/niri-portals.conf", "policy": "copy-with-unavailable-secret-route-removed-after-conflict-consent"},
     {"live": ".config/sparrow/hyprlock.conf", "repo": "hyprlock/hyprlock.conf", "install": ".config/sparrow/hyprlock.conf", "policy": "copy-exact-fallback-only"},
     {"live": ".local/share/applications/sparrow-files.desktop", "repo": "applications/sparrow-files.desktop", "install": ".local/share/applications/sparrow-files.desktop", "policy": "copy-exact"},
-    {"live": ".config/quickshell/sparrow", "repo": "quickshell/sparrow", "install": ".config/quickshell/sparrow", "policy": "copy-tree-exact-through-current-development-link"},
+    {"live": ".config/quickshell/sparrow", "repo": "quickshell/sparrow", "install": ".config/quickshell/sparrow", "policy": "copy-tree-exact-to-canonical-runtime"},
     {"live": ".local/share/themes/Sparrow", "repo": "gtk/Sparrow", "install": ".local/share/themes/Sparrow", "policy": "copy-scaffold; generated-palette-css-is-regenerated"},
     {"live": ".local/share/icons/Sparrow", "repo": "icons/Sparrow", "install": ".local/share/icons/Sparrow", "policy": "copy-scaffold; wallpaper-colored-icons-and-cache-are-generated"},
-    {"live": ".config/quickshell/sparrow/wallpapers/default.png", "repo": "quickshell/sparrow/wallpapers/default.png", "install": ".local/share/sparrow-shell/runtime/wallpapers/default.png", "policy": "copy-exact-portable-default"}
+    {"live": ".config/quickshell/sparrow/wallpapers/default.png", "repo": "quickshell/sparrow/wallpapers/default.png", "install": ".config/quickshell/sparrow/wallpapers/default.png", "policy": "copy-exact-portable-default"}
   ],
   "generated_or_host_state": [
     ".config/niri/sparrow/generated-colors.kdl",

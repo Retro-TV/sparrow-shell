@@ -147,15 +147,15 @@ database. “Optional” means the desktop must remain useful when omitted.
 | Inter | `inter-font` — Arch Extra ([package](https://archlinux.org/packages/extra/any/inter-font/)) | Default UI font |
 | Outfit Black | Bundled `Outfit-Black.ttf` + OFL notice | Used by lockscreen; don't fetch separately or omit its license |
 | JetBrains Mono Nerd Font | `ttf-jetbrains-mono-nerd` — Arch Extra ([package](https://archlinux.org/packages/extra/any/ttf-jetbrains-mono-nerd/)) | Default Kitty/Fish/Starship typography |
-| Bibata Modern Ice | Upstream Bibata project recommends AUR `bibata-cursor-theme-bin` ([upstream guide](https://github.com/ful1e5/Bibata_Cursor)) | Manual-only; no AUR helper; only select the cursor once its files are installed |
-| GTK base theme | `adw-gtk-theme` — Arch Extra ([package](https://archlinux.org/packages/extra/any/adw-gtk-theme/)) | Required only for generated Sparrow GTK theme source; GTK3 is also required for Thunar |
-| Kitty | `kitty` — Arch Extra | Default terminal |
-| Fish | `fish` — Arch Extra | Kitty shell default |
-| Starship | `starship` — Arch Extra | Default Fish prompt |
-| Thunar | `thunar` — Arch Extra ([package](https://archlinux.org/packages/extra/x86_64/thunar/)) | Default file manager |
+| Bibata Modern Ice | Official pinned [v2.0.6 upstream archive](https://github.com/ful1e5/Bibata_Cursor/releases/download/v2.0.6/Bibata-Modern-Ice.tar.xz) | Installer offers download, verifies the SHA-256 in `SOURCE-OF-TRUTH.json`, then installs per-user; declining blocks fresh deployment; no AUR helper |
+| GTK base theme | `adw-gtk-theme` — Arch Extra ([package](https://archlinux.org/packages/extra/any/adw-gtk-theme/)) | Required for generated Sparrow GTK theme source |
+| Kitty | `kitty` — Arch Extra | Required canonical terminal default |
+| Fish | `fish` — Arch Extra | Required Kitty shell default |
+| Starship | `starship` — Arch Extra | Required Fish prompt |
+| Thunar | `thunar` — Arch Extra ([package](https://archlinux.org/packages/extra/x86_64/thunar/)) | Required canonical file manager |
 | Thumbnails | `tumbler` — Arch Extra ([package](https://archlinux.org/packages/extra/x86_64/tumbler/)) | Recommended part of default Thunar integration |
-| Portals | `xdg-desktop-portal`, `xdg-desktop-portal-gtk`, and recommended `xdg-desktop-portal-gnome` ([Arch package](https://archlinux.org/packages/extra/x86_64/xdg-desktop-portal-gnome/)) | GTK FileChooser + Niri ScreenCast on a fresh route; existing ScreenCast choice preserved |
-| Polkit agent | Existing user agent, otherwise recommended `lxqt-policykit` (Arch Extra) | Desktop infrastructure; Sparrow unit is conditional and Niri-session-scoped; preserve other agents |
+| Portals | `xdg-desktop-portal`, `xdg-desktop-portal-gtk`, and `xdg-desktop-portal-gnome` ([Arch package](https://archlinux.org/packages/extra/x86_64/xdg-desktop-portal-gnome/)) | Required by the tracked GTK FileChooser + Niri ScreenCast profile |
+| Polkit agent | Existing user agent, otherwise `lxqt-policykit` (Arch Extra) | Added to required transaction only when no existing agent is detected; preserve other agents |
 | video wallpapers | `mpvpaper` AUR | Optional video wallpaper enhancement |
 | recording | `gpu-screen-recorder`, `slurp` | Optional GPU-dependent recorder; direct output capture and picker capabilities vary |
 | screenshot | Rishot upstream, `grim`, `wl-clipboard` | Optional separate application; do not bundle or silently run external installer |
@@ -185,7 +185,7 @@ consent and are backed up, rather than reconstructed by installer code.
 
 | Tracked repository path(s) | Future destination | Ownership class | Deployment policy |
 | --- | --- | --- | --- |
-| `quickshell/sparrow/**` (including `shell.qml`, QML, `Singletons/`, `lib/`, `scripts/`, `idle/shell.qml`, `qmldir`, lockscreen assets, wallpaper default) | `~/.config/quickshell/sparrow` | Sparrow-owned source | One managed runtime tree; stable canonical path. Development may symlink to checkout; released install must not depend on checkout |
+| `quickshell/sparrow/**` (including `shell.qml`, QML, `Singletons/`, `lib/`, `scripts/`, `idle/shell.qml`, `qmldir`, lockscreen assets, wallpaper default) | `~/.config/quickshell/sparrow` | Sparrow-owned source | Exact managed tree copy to canonical runtime path; never a checkout symlink |
 | `niri/config.kdl` and tracked `niri/sparrow/*.kdl` | `~/.config/niri/` | Captured Sparrow root and working fragment defaults | Deploy repository files directly; an existing conflicting root/file requires explicit consent and a recoverable backup |
 | `quickshell/sparrow/systemd/sparrow-shell.service`, `sparrow-idle.service`, `sparrow-wallpaper.service`, `sparrow-polkit-agent.service` | `~/.config/systemd/user/` | Sparrow-owned unit templates | Copy files on install, not links into source checkout; enable the Polkit unit only if no existing agent/autostart owns that role |
 | `quickshell/sparrow/systemd/xdg-desktop-portal-gtk.service.d/10-sparrow-theme.conf` | `$XDG_CONFIG_HOME/systemd/user/xdg-desktop-portal-gtk.service.d/` | Sparrow-owned integration override | Conflict/backup required; scoped GTK theme affects portal only |
@@ -193,7 +193,7 @@ consent and are backed up, rather than reconstructed by installer code.
 | `kitty/kitty.conf` | `~/.config/kitty/kitty.conf` | Captured Sparrow default with generated palette include | Copy exact tracked file; ask and back up if a different file already exists |
 | `fish/config.fish` | `~/.config/fish/config.fish` | Captured Sparrow shell setup | Copy exact tracked file; ask and back up if a different file already exists |
 | `starship/starship.toml` | `~/.config/starship.toml` | Captured Sparrow prompt | Copy exact tracked file; ask and back up if a different file already exists |
-| `environment.d/90-cursor.conf` | `~/.config/environment.d/90-cursor.conf` | Recommended Sparrow environment defaults | Install only when Bibata Modern Ice files are detected; preserve existing cursor environment/user choice |
+| `environment.d/90-cursor.conf` | `~/.config/environment.d/90-cursor.conf` | Conditional Sparrow environment default | Install after pinned Bibata is present and only when the user has no explicit different cursor choice |
 | `gtk/Sparrow/**` | `$XDG_DATA_HOME/themes/Sparrow/` | Sparrow static theme scaffold | Install tracked CSS/theme metadata; generated colors are separate |
 | `icons/Sparrow/**`, `icons/NOTICE.md`, `icons/PAPIRUS-LICENSE.txt` | `$XDG_DATA_HOME/icons/Sparrow/` and license records | Sparrow theme files plus third-party subset | Deploy exact subset with GPL notice; generated palette recolors selected icons |
 | `applications/sparrow-files.desktop` | `$XDG_DATA_HOME/applications/sparrow-files.desktop` | Sparrow-owned desktop handler | Install optionally; MIME default change requires explicit user approval |
@@ -201,13 +201,14 @@ consent and are backed up, rather than reconstructed by installer code.
 | `quickshell/sparrow/wallpapers/default.png` | remains inside Sparrow runtime tree | Sparrow-owned redistributable default asset | Install as read-only fallback; never copy over the user's wallpaper library |
 | `docs/**`, `LICENSES/**`, root `LICENSE`, `THIRD_PARTY.md` | repo/docs | Project/legal metadata and component notices | Repository distribution; retain root and asset-adjacent notices with redistributed source/assets |
 
-Do not deploy active `~/.config/niri/sparrow/{display-outputs,display-binds,
-generated-colors,user-binds,user-input}.kdl`, current state, selected
-wallpaper, user-selected app defaults or user shell preferences from this
-host. The complete portal profile is an intentional captured default.
-`~/.config/quickshell/sparrow` currently is a development symlink; the
-three live service links also point to the checkout and are not a released
-installation model.
+Do not copy SSD values for `~/.config/niri/sparrow/{display-outputs,display-binds,
+generated-colors,user-binds,user-input}.kdl`; seed the tracked `user-input.kdl`
+default only on a fresh home. Do not copy current state, selected wallpaper,
+user-selected app defaults or shell preferences from this host. The complete
+portal profile is an intentional captured default.
+`~/.config/quickshell/sparrow` is a development symlink on this SSD; the
+installer deploys a real managed copy there. Live service symlinks on this SSD
+are not copied; tracked unit files target the canonical runtime location.
 
 ## Runtime-generated and user-specific files
 
@@ -253,12 +254,12 @@ configuration.
 | Deploy captured Niri root and Sparrow fragments | Must for Niri integration | Stage and validate repository files; ask before replacing an existing root and back it up |
 | Install/validate Sparrow user units and run `systemctl --user daemon-reload` | Must for managed startup | Enable only after paths/session dependencies are staged; enable the Polkit unit only if no existing agent/autostart exists; no duplicate manual QS/agent launch |
 | `graphical-session.target` / environment availability for Niri | Must | Check session manager integration; do not start shell from Kitty or duplicate compositor autostart |
-| Install portal backends/config | Recommended desktop profile for chooser and Niri screen sharing | Copy captured full portal config after profile consent; conflicting destination is backed up; declining leaves routing untouched; keep GTK_THEME scoped to GTK portal service |
+| Install portal backends/config | Required captured chooser and Niri screen-sharing path | Install required backend packages and copy the tracked portal config with conflict consent/backup; keep GTK_THEME scoped to GTK portal service |
 | GTK portal per-service override | Recommended for Sparrow-themed chooser | Back up conflicts; no global GTK_THEME |
 | Polkit agent | Use an existing user agent, or offer `lxqt-policykit` when none is found | Never remove/disable an existing agent; skip Sparrow unit if an agent/autostart already owns the role |
 | `inode/directory` default to Sparrow Files | Optional | Must ask; current default is a user preference and may conflict with another file manager |
 | GSettings icon-theme default | Recommended Sparrow icon choice | Set `Sparrow` only when no user value exists; preserve explicit choices and restore only an unchanged installer-owned value. Does not change global GTK colors or set `GTK_THEME` |
-| Cursor environment/Niri cursor settings | Recommended portable defaults | Preserve existing XCURSOR and cursor selection unless user opts in |
+| Cursor archive/environment/Niri cursor settings | Required canonical cursor for a fresh account | Offer the pinned upstream archive, verify SHA-256, install per-user, and select size 24 in Niri/environment/GSettings when no explicit different user choice exists |
 | Font and icon cache refresh | Recommended when deploying fonts/icons | Use installed package fonts or tracked assets; refresh caches without changing preferences |
 | NetworkManager / Bluetooth services | Optional system services | Must ask before enabling; avoid conflict with a user's existing network stack or Bluetooth policy |
 | PipeWire/WirePlumber, UPower, PAM | Required compatible platform services/features | Preflight status; avoid replacing service configs; lock uses Quickshell PAM integration and must be validated without writing custom system PAM policy blindly |
@@ -292,12 +293,11 @@ configuration.
 8. Install default-app configs and desktop entry only with explicit conflict
    policy. Preserve app config and MIME defaults; install packages only when
    chosen.
-9. Install GTK theme/icon scaffold and chosen fonts/cursor. Scope theme to the
-   portal and Thunar launch; preserve global app theming and GSettings. Select
-   Bibata only if its theme files are present; otherwise preserve the system
-   cursor and give the user the manual AUR package name.
-10. Copy the captured portal file only when the recommended desktop profile is
-    accepted; an existing file requires consent and backup. Install validated
+9. Install GTK theme/icon scaffold and required fonts. Scope theme to the
+   portal and Thunar launch; preserve global app theming. Offer the pinned
+   Bibata archive when needed; a fresh account does not silently fall back to
+   another cursor.
+10. Copy the tracked portal file with conflict consent and backup. Install validated
     units and the GTK portal drop-in. Include Sparrow's Polkit unit only if the
    accepted agent package is installed and no existing agent/autostart owns it.
    Only after successful validation, daemon-reload and enable units against
@@ -316,18 +316,18 @@ configuration.
 
 ## One default profile and optional capabilities
 
-Do not create dozens of feature toggles. The proposed single Sparrow Default is
+Do not create dozens of feature toggles. The single Sparrow default install is
 Niri + Quickshell + idle/wallpaper services, image wallpaper/Matugen,
 Dynamic/Auto palette, Sparrow default image, Pill/Launcher/Settings, Niri
 Look/Display/Input/Keybind surfaces, system tray/media/audio/network/device
 surfaces, Qylock-derived Quickshell lock/PAM, Kitty/Fish/Starship, Thunar with
 Tumbler and scoped Sparrow GTK, Inter, JetBrains Mono Nerd Font, Bibata Modern
-Ice when already installed, Sparrow's licensed icon subset, curl/wl-clipboard/
+Ice v2.0.6 after explicit installer consent, Sparrow's licensed icon subset, curl/wl-clipboard/
 FFmpeg support tools, and GTK FileChooser/Niri ScreenCast portal integration.
-Bibata and Rishot remain manual AUR/upstream installs; without Bibata the
-installer leaves the system cursor selection intact. User may decline or
-substitute default applications; the installer clearly calls out affected
-bindings/features.
+Rishot remains a separate upstream install. An existing explicit cursor choice
+is preserved; on a fresh home declining the pinned Bibata asset stops before
+Sparrow files are deployed. Optional app extras may be declined without
+removing the required terminal, file-manager, and GTK defaults.
 
 Keep adaptive extras as a compact optional list: video wallpapers, Cava, Night
 Light, internal brightness, DDC, NVIDIA vibrance, GPU Screen Recorder,

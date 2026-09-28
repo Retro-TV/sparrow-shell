@@ -4,17 +4,44 @@ import json
 import hashlib
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
 import unittest
 from unittest import mock
 
-from sparrow_installer import SparrowInstaller, XdgPaths
+from sparrow_installer import (
+    APPROVED_USER_APPEARANCE_DEFAULT,
+    LEGACY_USER_APPEARANCE_DEFAULTS,
+    SparrowInstaller,
+    XdgPaths,
+)
 from sparrow_installer import tree_digest
 
 
 REPO = Path(__file__).resolve().parents[1]
+
+
+def effective_niri_spacing(config_home: Path) -> dict[str, float]:
+    """Read the spacing keys in include order: portable fragment, then user override."""
+    values: dict[str, float] = {}
+    fragments = (
+        config_home / "niri/sparrow/appearance.kdl",
+        config_home / "niri/sparrow/user-appearance.kdl",
+    )
+    for fragment in fragments:
+        if not fragment.is_file():
+            continue
+        text = fragment.read_text()
+        gap = re.search(r"(?m)^\s*gaps (-?[0-9]+(?:\.[0-9]+)?)$", text)
+        if gap:
+            values["gaps"] = float(gap.group(1))
+        struts = re.search(r"(?ms)^\s*struts\s*\{(.*?)^\s*\}", text)
+        if struts:
+            for name, value in re.findall(r"(?m)^\s*(left|right|top|bottom) (-?[0-9]+(?:\.[0-9]+)?)$", struts.group(1)):
+                values[name] = float(value)
+    return values
 
 
 class InstallerTests(unittest.TestCase):
@@ -92,20 +119,98 @@ class InstallerTests(unittest.TestCase):
         installer = self.installer()
         self.assertEqual(installer.install(), 0)
         appearance = (self.paths.config / "niri/sparrow/appearance.kdl").read_text()
+        root_config = (self.paths.config / "niri/config.kdl").read_text()
+        self.assertIn('include "sparrow/appearance.kdl"', root_config)
+        self.assertIn('include optional=true "user-appearance.kdl"', appearance)
+        self.assertEqual(effective_niri_spacing(self.paths.config), {
+            "gaps": 8, "left": 0, "right": 0, "top": -8, "bottom": 0,
+        })
         self.assertRegex(appearance, r"(?m)^\s*gaps 8$")
-        self.assertRegex(appearance, r"(?m)^\s*left 0$")
-        self.assertRegex(appearance, r"(?m)^\s*right 0$")
-        self.assertRegex(appearance, r"(?m)^\s*top -8$")
-        self.assertRegex(appearance, r"(?m)^\s*bottom 0$")
         self.assertIn("geometry-corner-radius 12", appearance)
         self.assertIn("clip-to-geometry true", appearance)
         self.assertIn("slowdown 1.5", appearance)
         self.assertFalse((self.paths.config / "niri/sparrow/user-appearance.kdl").exists())
+        flags_source = (REPO / "quickshell/sparrow/Singletons/Flags.qml").read_text()
+        self.assertRegex(flags_source, r"(?m)^\s*property real topGap: 1\.1$")
         theme = (REPO / "quickshell/sparrow/Singletons/Theme.qml").read_text()
         self.assertIn(': "Inter Black"', theme)
         self.assertEqual(self.machine["gsettings"].get("icon-theme"), "Sparrow")
         self.assertEqual(self.machine["gsettings"].get("font-name"), "Adwaita Sans 11")
         self.assertTrue((self.paths.config / "gtk-3.0/settings.ini").is_file())
+
+    def test_update_migrates_exact_legacy_appearance_and_pill_defaults_idempotently(self) -> None:
+        niri_dir = self.paths.config / "niri/sparrow"
+        niri_dir.mkdir(parents=True)
+        old_user_appearance = niri_dir / "user-appearance.kdl"
+        old_user_appearance.write_bytes(LEGACY_USER_APPEARANCE_DEFAULTS[0])
+        flags_path = self.paths.state / "sparrow-shell/flags.json"
+        flags_path.parent.mkdir(parents=True)
+        flags_path.write_text(json.dumps({
+            "topGap": 1.0,
+            "appGap": 1.0,
+            "paletteMode": "dynamic",
+            "wallpaperDir": "/user/wallpapers",
+        }))
+
+        installer = self.installer()
+        self.assertEqual(installer.install(), 0)
+        self.assertEqual(old_user_appearance.read_bytes(), APPROVED_USER_APPEARANCE_DEFAULT)
+        self.assertEqual(effective_niri_spacing(self.paths.config), {
+            "gaps": 8, "left": 0, "right": 0, "top": -8, "bottom": 0,
+        })
+        migrated_flags = json.loads(flags_path.read_text())
+        self.assertEqual(migrated_flags["topGap"], 1.1)
+        self.assertEqual(migrated_flags["appGap"], 1.0)
+        self.assertEqual(migrated_flags["paletteMode"], "dynamic")
+        self.assertEqual(migrated_flags["wallpaperDir"], "/user/wallpapers")
+
+        first_appearance = old_user_appearance.read_bytes()
+        first_flags = flags_path.read_bytes()
+        self.assertEqual(self.installer().install(), 0)
+        self.assertEqual(old_user_appearance.read_bytes(), first_appearance)
+        self.assertEqual(flags_path.read_bytes(), first_flags)
+
+        niri = shutil.which("niri")
+        if niri:
+            result = subprocess.run(
+                [niri, "validate", "-c", str(self.paths.config / "niri/config.kdl")],
+                text=True, capture_output=True, timeout=30,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
+
+        self.assertEqual(self.installer().uninstall(), 0)
+        self.assertEqual(old_user_appearance.read_bytes(), LEGACY_USER_APPEARANCE_DEFAULTS[0])
+        restored_flags = json.loads(flags_path.read_text())
+        self.assertEqual(restored_flags["topGap"], 1.0)
+        self.assertEqual(restored_flags["wallpaperDir"], "/user/wallpapers")
+
+    def test_update_migrates_other_known_untouched_appearance_default(self) -> None:
+        niri_dir = self.paths.config / "niri/sparrow"
+        niri_dir.mkdir(parents=True)
+        target = niri_dir / "user-appearance.kdl"
+        target.write_bytes(LEGACY_USER_APPEARANCE_DEFAULTS[1])
+        self.assertEqual(self.installer().install(), 0)
+        self.assertEqual(target.read_bytes(), APPROVED_USER_APPEARANCE_DEFAULT)
+        self.assertEqual(effective_niri_spacing(self.paths.config), {
+            "gaps": 8, "left": 0, "right": 0, "top": -8, "bottom": 0,
+        })
+
+    def test_customized_appearance_and_pill_gap_are_preserved(self) -> None:
+        niri_dir = self.paths.config / "niri/sparrow"
+        niri_dir.mkdir(parents=True)
+        customized = LEGACY_USER_APPEARANCE_DEFAULTS[0].replace(b"gaps 6", b"gaps 9")
+        target = niri_dir / "user-appearance.kdl"
+        target.write_bytes(customized)
+        flags_path = self.paths.state / "sparrow-shell/flags.json"
+        flags_path.parent.mkdir(parents=True)
+        flags_path.write_text('{"topGap":1.25,"wallpaperDir":"/keep/me"}\n')
+
+        self.assertEqual(self.installer().install(), 0)
+        self.assertEqual(target.read_bytes(), customized)
+        self.assertEqual(effective_niri_spacing(self.paths.config)["gaps"], 9)
+        preserved_flags = json.loads(flags_path.read_text())
+        self.assertEqual(preserved_flags["topGap"], 1.25)
+        self.assertEqual(preserved_flags["wallpaperDir"], "/keep/me")
 
     def test_cachyos_hello_autostart_is_hidden_reversibly_and_only_for_that_app(self) -> None:
         autostart = self.paths.config / "autostart"

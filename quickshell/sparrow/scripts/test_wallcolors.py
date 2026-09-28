@@ -8,6 +8,7 @@ import importlib.util
 import json
 import math
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -81,6 +82,21 @@ class PaletteModelTests(unittest.TestCase):
             self.assertEqual(
                 wallcolors.find_adw_gtk3_stylesheet("dark", data, system), user_css,
             )
+
+    def test_adw_gtk4_system_package_is_preferred_to_user_data_copy(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            system = root / "system/adw-gtk3/gtk-4.0"
+            data = root / "data"
+            user = data / "themes/adw-gtk3/gtk-4.0"
+            for base in (system, user):
+                for filename in ("gtk.css", "gtk-dark.css", "libadwaita.css", "libadwaita-tweaks.css"):
+                    path = base / filename
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.touch()
+            self.assertEqual(wallcolors.find_adw_gtk4_theme(data, root / "system/adw-gtk3"), system)
+            (system / "libadwaita.css").unlink()
+            self.assertEqual(wallcolors.find_adw_gtk4_theme(data, root / "system/adw-gtk3"), user)
 
     def test_palette_state_migration_is_safe_and_idempotent(self):
         cases = (
@@ -256,6 +272,8 @@ class PaletteModelTests(unittest.TestCase):
             kitty = (config_home / "kitty/sparrow-colors.conf").read_text()
             gtk = (data_home / "themes/Sparrow/gtk-3.0/gtk.css").read_text()
             gtk_dark = (data_home / "themes/Sparrow/gtk-3.0/gtk-dark.css").read_text()
+            gtk4 = (data_home / "themes/Sparrow/gtk-4.0/libadwaita.css").read_text()
+            gtk4_tweaks = (data_home / "themes/Sparrow/gtk-4.0/libadwaita-tweaks.css").read_text()
             icon = (data_home / "icons/Sparrow/scalable/places/folder.svg").read_text()
             self.assertEqual(palette["theme_source"], "dynamic")
             self.assertEqual(palette["palette_style"], "content")
@@ -264,6 +282,16 @@ class PaletteModelTests(unittest.TestCase):
             self.assertIn(f"color4 {palette['terminal']['ansi'][4]}", kitty)
             self.assertIn(f"@define-color window_bg_color {palette['background']};", gtk)
             self.assertEqual(gtk, gtk_dark)
+            self.assertIn(f"@define-color window_bg_color {palette['background']};", gtk4)
+            self.assertIn(f"@define-color blue_3 {palette['primary']};", gtk4)
+            self.assertIn(f"--accent-blue: {palette['primary']};", gtk4)
+            accent_blue_roles = re.findall(
+                r"--accent-blue:\s*(#[0-9a-fA-F]{6})", gtk4_tweaks,
+            )
+            self.assertGreaterEqual(len(accent_blue_roles), 1)
+            self.assertTrue(all(color == palette["primary"] for color in accent_blue_roles))
+            self.assertIn(f"@define-color accent_fg_color {palette['on_primary']};", gtk4_tweaks)
+            self.assertTrue((data_home / "themes/Sparrow/gtk-4.0/assets/check-symbolic.svg").is_file())
             self.assertIn(palette["primary_container"], icon)
             self.assertEqual(len(captured_kdl), 1)
             self.assertIn(f'active-color "{palette["primary"]}"', captured_kdl[0])

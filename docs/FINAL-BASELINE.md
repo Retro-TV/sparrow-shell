@@ -137,7 +137,7 @@ that the palette must be initialized. The flow is:
    file and maps roles into pill, surfaces and lock UI.
 6. Niri border colors are written through the Niri config transaction helper
    to `~/.config/niri/sparrow/generated-colors.kdl`.
-7. Kitty's generated sibling `sparrow-colors.conf`, Sparrow GTK3 CSS under
+7. Kitty's generated sibling `sparrow-colors.conf`, Sparrow GTK3/GTK4 CSS under
    `$XDG_DATA_HOME/themes/Sparrow`, and generated folder/text icon assets under
    `$XDG_DATA_HOME/icons/Sparrow` are written from the same palette. Kitty is
    signalled to reload when its colors change.

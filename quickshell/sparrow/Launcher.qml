@@ -54,6 +54,13 @@ PillSurface {
         if (launchProcess.running)
             return false;
 
+        if (entry.id === "org.pulseaudio.pavucontrol") {
+            // This is the one GTK4 app currently opted into Sparrow's generated theme.
+            Quickshell.execDetached(["env", "GTK_THEME=Sparrow", "pavucontrol"]);
+            root.requestClose();
+            return true;
+        }
+
         root.launching = true;
         launchProcess.command = [
             "sh", "-c", "exec gtk-launch \"$1\" >/dev/null 2>&1",

@@ -68,7 +68,9 @@ The same semantic palette feeds:
 - Niri active/inactive borders through the validated
   `generated-colors.kdl` transaction.
 - Kitty through its generated include, ANSI slots, and reload signal.
-- Sparrow's app-scoped GTK3/adw-gtk3 CSS and generated folder/file icon assets.
+- Sparrow's app-scoped GTK3 and GTK4/adw-gtk3 CSS plus generated folder/file
+  icon assets. The launcher opts only `org.pulseaudio.pavucontrol` into the
+  GTK4 theme; global GTK settings remain unchanged.
 - The Quickshell lock through its existing `Dyn` roles and independent wallpaper
   luminance recommendation.
 
@@ -89,14 +91,18 @@ still needed to see a new palette.
 The active Niri portal configuration selects `xdg-desktop-portal-gtk` for
 FileChooser. A tracked systemd user drop-in scopes `GTK_THEME=Sparrow` only to
 that backend; it does not change global GTK settings or unrelated applications.
-The chooser reads Sparrow's generated GTK3 stylesheet. The active development
+The chooser reads Sparrow's generated GTK3 stylesheet. pavucontrol is GTK4, so
+its launcher entry receives `GTK_THEME=Sparrow` and uses a generated GTK4
+adw-gtk3-derived stylesheet built from the same Matugen roles. Its CSS and
+selection accent therefore update on the next launch; a running instance must
+be closed and reopened to pick up a changed palette. The active development
 drop-in is linked to
 `systemd/xdg-desktop-portal-gtk.service.d/10-sparrow-theme.conf`; a future
 installer should place that tracked file at the standard user-service drop-in
 path.
 
-The reproducible GTK3 base is the Arch `adw-gtk-theme` package (adw-gtk3,
-LGPL-2.1-only), already listed in `docs/DEPENDENCIES.md`. Generation now prefers
+The reproducible GTK3/GTK4 base is the Arch `adw-gtk-theme` package (adw-gtk3,
+LGPL-2.1-only), already listed in `docs/DEPENDENCIES.md`. Generation prefers
 the package's `/usr/share/themes/adw-gtk3` files. `$XDG_DATA_HOME/themes/adw-gtk3`
 is a development fallback only; a clean install must install the declared
 package rather than depend on this machine's local copy.

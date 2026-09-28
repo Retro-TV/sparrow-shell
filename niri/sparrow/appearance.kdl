@@ -73,7 +73,7 @@ recent-windows {
     highlight {
         active-color "#e0563b"
         urgent-color "#e0563b"
-        padding 8
+        padding 6
         corner-radius 12
     }
 }

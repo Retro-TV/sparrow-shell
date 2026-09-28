@@ -57,7 +57,7 @@ components. Sparrow's video preview additionally uses `qt6-multimedia` and
 | `ddcutil` | Optional external DDC/CI display brightness controls in Mixer. Not installed on the audited host. |
 | `nvibrant` | Optional NVIDIA vibrance backend; Sparrow checks its executable and NVIDIA device before exposing it. Not installed on the audited host. |
 | `tumbler` | Optional system D-Bus thumbnail service for Thunar image previews. |
-| `adw-gtk-theme` | Provides the system-installed `adw-gtk3` base used by Sparrow's generated, wallpaper-colored Thunar GTK3 theme. |
+| `adw-gtk-theme` | Provides the system-installed `adw-gtk3` GTK3/GTK4 bases used by Sparrow's generated, wallpaper-colored app themes (Thunar and the scoped pavucontrol launch). |
 | `bibata-cursor-theme-bin` (AUR) | Recommended default cursor asset; Niri and `environment.d/90-cursor.conf` select Bibata Modern Ice at size 24. The theme itself is not bundled. |
 
 The current live Bibata files identify themselves as version 2.0.6 and are an
@@ -111,6 +111,7 @@ is a KDE/KWin capture path and is not required for Niri.
 | `kitty`, `fish`, `starship` | Shipped terminal and shell defaults; not required to run Quickshell. `zoxide` and `fastfetch` are optional Fish conveniences. |
 | `ttf-jetbrains-mono-nerd` | Provides the selected Kitty face and Starship's Nerd Font symbols. |
 | `thunar` | Current default file manager, not a Sparrow runtime requirement. `tumbler` adds image thumbnails; `adw-gtk-theme` supplies the system GTK3 theme base used for Sparrow's generated Thunar theme. |
+| `pavucontrol` | Optional advanced audio-control desktop app, not required by Sparrow's native Mixer. If installed and launched from Sparrow Launcher, only this GTK4 application receives `GTK_THEME=Sparrow`. |
 | `firefox` | Ordinary default browser binding only; Sparrow does not ship or apply a Firefox theme. |
 
 The only browser-related runtime work is optional wallpaper search/download.

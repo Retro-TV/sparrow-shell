@@ -64,9 +64,10 @@ compositor cursor and sets `XCURSOR_THEME`/`XCURSOR_SIZE` for Niri-spawned
 clients, while `environment.d/90-cursor.conf` supplies those same values to
 user-manager services. GTK reads its cursor through GtkSettings/GSettings; the
 current GSettings values match Bibata Modern Ice at 24. This is independent of
-the `GTK_THEME=Sparrow` setting scoped to Thunar/the GTK portal for widget
-colors. A future installer should preserve non-default existing GSettings,
-environment, and Niri cursor choices rather than force these recommended
+the `GTK_THEME=Sparrow` setting scoped to Thunar, pavucontrol when launched
+from Sparrow Launcher, and the GTK portal for widget colors. A future
+installer should preserve non-default existing GSettings, environment, and
+Niri cursor choices rather than force these recommended
 fresh-install defaults over them. The GTK file chooser follows the same GTK
 cursor preference; Qt/Wayland clients use the standard XCursor environment.
 The portable default is Bibata Modern Ice at 24. Sparrow's UI uses Inter (this

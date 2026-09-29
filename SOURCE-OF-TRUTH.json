@@ -49,10 +49,11 @@
     {"source": "niri/sparrow/window-rules.kdl", "destination": "$XDG_CONFIG_HOME/niri/sparrow/window-rules.kdl", "category": "A", "dependencies": ["niri>=26.04"], "generation": null},
     {"source": "niri/sparrow/cursor.kdl", "destination": "$XDG_CONFIG_HOME/niri/sparrow/cursor.kdl", "category": "A", "dependencies": ["Bibata-Modern-Ice installed"], "generation": "deploy only when the named cursor theme exists"},
     {"source": "environment.d/90-cursor.conf", "destination": "$XDG_CONFIG_HOME/environment.d/90-cursor.conf", "category": "A", "dependencies": ["Bibata-Modern-Ice installed", "systemd user environment"], "generation": "deploy only when the named cursor theme exists"},
+    {"source": "environment.d/90-qt-portal-theme.conf", "destination": "$XDG_CONFIG_HOME/environment.d/90-qt-portal-theme.conf", "category": "A", "dependencies": ["Qt xdgdesktopportal platform theme plugin", "xdg-desktop-portal"], "generation": "select the standard portal theme; verified with installed Qt 6 dark color scheme; no custom Qt palette is imposed; Qt 5 is unvalidated and falls back if its build lacks the plugin"},
     {"source": "kitty/kitty.conf", "destination": "$XDG_CONFIG_HOME/kitty/kitty.conf", "category": "A", "dependencies": ["kitty", "ttf-jetbrains-mono-nerd"], "generation": null},
     {"source": "fish/config.fish", "destination": "$XDG_CONFIG_HOME/fish/config.fish", "category": "A", "dependencies": ["fish", "starship"], "generation": null},
     {"source": "starship/starship.toml", "destination": "$XDG_CONFIG_HOME/starship.toml", "category": "A", "dependencies": ["starship"], "generation": null},
-    {"source": "gtk/settings.ini", "destination": "$XDG_CONFIG_HOME/gtk-3.0/settings.ini", "category": "A", "dependencies": ["gtk3", "Sparrow icon theme"], "generation": null},
+    {"source": "gtk/settings.ini", "destination": "$XDG_CONFIG_HOME/gtk-3.0/settings.ini", "category": "A", "dependencies": ["gtk3", "generated Sparrow GTK3 theme", "Sparrow icon theme"], "generation": "GTK3 uses Sparrow's generated Matugen theme and built-in dark variant; GTK_THEME remains scoped to Sparrow-integrated apps"},
     {"source": "installer/autostart/cachyos-hello.desktop", "destination": "$XDG_CONFIG_HOME/autostart/cachyos-hello.desktop", "category": "A", "dependencies": ["CachyOS Hello (optional; already part of CachyOS)"], "generation": "merge Hidden=true into this exact CachyOS Hello autostart ID; preserve other desktop-entry fields and restore the prior Hidden value on uninstall"},
     {"source": "gtk/Sparrow/index.theme", "destination": "$XDG_DATA_HOME/themes/Sparrow/index.theme", "category": "A", "dependencies": ["gtk3", "adw-gtk-theme"], "generation": null},
     {"source": "icons/Sparrow", "destination": "$XDG_DATA_HOME/icons/Sparrow", "category": "A", "dependencies": ["GTK icon theme support"], "generation": "copy tracked icon subset; generated SVGs and cache are separate B outputs"},
@@ -81,6 +82,10 @@
     {"source": "Sparrow runtime", "destination": "$XDG_STATE_HOME/sparrow-shell/** and $XDG_CACHE_HOME/sparrow-shell/** except generated palette.json", "category": "D", "dependencies": [], "generation": "runtime histories, logs, thumbnails and transaction backups; never deploy"}
   ],
   "system_integrations": {
+    "appearance": {
+      "gsettings_defaults": {"org.gnome.desktop.interface/color-scheme": "prefer-dark"},
+      "policy": "seed only when the user has no explicit value; record ownership and restore on uninstall only if unchanged; GTK4/libadwaita and portal-aware Qt 6 apps receive the supported dark preference, not a forced GTK theme"
+    },
     "xwayland": {
       "package": "xwayland-satellite",
       "policy": "installed in the default desktop package profile; modern Niri manages compatibility automatically; Sparrow adds no startup command, environment override, or service"

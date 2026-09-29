@@ -1230,6 +1230,7 @@ class SparrowInstaller:
     def _apply_sparrow_defaults(self) -> None:
         if (self.paths.data / "icons/Sparrow/index.theme").is_file():
             self._apply_gsettings_default("org.gnome.desktop.interface/icon-theme", "Sparrow")
+        self._apply_gsettings_default("org.gnome.desktop.interface/color-scheme", "prefer-dark")
         gtk_font = self.source_manifest().get("fonts", {}).get("gtk", {})
         font_description = gtk_font.get("description")
         if not isinstance(font_description, str):

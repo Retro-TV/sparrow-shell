@@ -9,3 +9,10 @@ window-rule {
     match app-id=r#"^org\.wezfurlong\.wezterm$"#
     default-column-width {}
 }
+
+// Polkit prompts are transient system dialogs, not tiled application windows.
+// Let the agent request its own natural size; Niri centers floating windows by default.
+window-rule {
+    match app-id=r#"^lxqt-policykit-agent$"#
+    open-floating true
+}

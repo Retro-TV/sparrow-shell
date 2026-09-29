@@ -142,6 +142,7 @@ database. “Optional” means the desktop must remain useful when omitted.
 | Thumbnails | `tumbler` — Arch Extra ([package](https://archlinux.org/packages/extra/x86_64/tumbler/)) | Installed by default for the intended Thunar experience |
 | Portals | `xdg-desktop-portal`, `xdg-desktop-portal-gtk`, and `xdg-desktop-portal-gnome` ([Arch package](https://archlinux.org/packages/extra/x86_64/xdg-desktop-portal-gnome/)) | Required by the tracked GTK FileChooser + Niri ScreenCast profile |
 | Polkit agent | Existing user agent, otherwise `lxqt-policykit` (Arch Extra) | Added to required transaction only when no existing agent is detected; preserve other agents |
+| App appearance | GTK3 uses Sparrow's generated theme; GTK4/libadwaita and Qt6 use the standard dark preference via GSettings/XDG portal | No extra package; Qt6's portal QPA plugin is included with the existing Qt6 base runtime; no global GTK_THEME override |
 | video wallpapers | `mpvpaper` | Required runtime; CachyOS repository package, or Arch AUR package installed by the user before rerunning Installer |
 | recording | `gpu-screen-recorder`, `slurp` | Installed by default; capture availability still depends on device/capabilities |
 | screenshot | Pinned Rishot upstream source, `grim`, `wl-clipboard` | Installed by default; preserves valid external Rishot and user config |

@@ -34,6 +34,18 @@ Quickshell's Arch package depends on Qt 6 base/declarative/SVG/Wayland
 components. Sparrow's video preview additionally uses `qt6-multimedia` and
 `qt6-multimedia-ffmpeg`.
 
+## Application appearance
+
+GTK3 uses the generated Sparrow GTK theme through standard `gtk/settings.ini`
+settings; `GTK_THEME=Sparrow` remains scoped to Sparrow-integrated launchers
+and the GTK portal. GTK4/libadwaita receives the standard `prefer-dark`
+GSettings/portal preference and is not forced onto a GTK theme. Native Qt6
+apps can read that same portal preference through Qt's bundled
+`xdgdesktopportal` platform-theme plugin. This enables dark mode, not Matugen
+accent recoloring. Qt 5 is not separately configured or validated; if an app's
+Qt 5 build lacks the named portal plugin, Qt falls back to its own platform
+theme. No additional Qt theme-control package is installed.
+
 ## Feature packages
 
 | Package/tool | Classification and caller |

@@ -106,8 +106,14 @@ Sparrow's `GTK_THEME=Sparrow` remains a systemd user drop-in for
 `xdg-desktop-portal-gtk.service` only; it is not exported globally. The
 installer selects the Sparrow icon theme only when no explicit GSettings icon
 theme exists, and restores that preference on uninstall only while it remains
-unchanged. This selects icons, not GTK colors; global GTK colors remain the
-user's choice.
+unchanged. GTK3's tracked `gtk/settings.ini` selects Sparrow's generated
+Matugen theme and dark variant for ordinary GTK3 apps. GTK4/libadwaita instead
+receive the standard `color-scheme=prefer-dark` setting only when unset;
+`GTK_THEME` is not forced globally. Native Qt6 apps receive that same standard
+scheme through Qt's bundled XDG-portal platform-theme plugin. It enables dark
+mode but does not apply Sparrow's Matugen accent palette. Qt 5 has no separate
+theme stack here and was not validated; a Qt 5 build without that portal plugin
+falls back to its own platform theme.
 
 Niri's graphical session needs a Polkit authentication agent in addition to
 `polkitd`. Sparrow recommends the small official-Arch `lxqt-policykit`
@@ -117,7 +123,10 @@ requires the installed executable, and runs a guard for known existing agents
 before starting. Installation must preserve any agent/autostart the user has
 selected; do not replace it or enable Sparrow's unit on top of it. On the
 current host `lxqt-policykit` is installed, and the unit is active with its
-Polkit listener registered. A privileged prompt was not triggered for testing.
+Polkit listener registered. Sparrow's Niri rule matches only
+`lxqt-policykit-agent` and opens its windows floating; Niri centers them while
+the agent's naturally requested compact dimensions are preserved. No global
+floating policy or alternate authentication path is used.
 
 ## Quickshell and systemd installation model
 

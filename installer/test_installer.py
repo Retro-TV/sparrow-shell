@@ -167,13 +167,38 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("clip-to-geometry true", appearance)
         self.assertIn("slowdown 1.5", appearance)
         self.assertFalse((self.paths.config / "niri/sparrow/user-appearance.kdl").exists())
+        polkit_rules = (self.paths.config / "niri/sparrow/window-rules.kdl").read_text()
+        self.assertIn('match app-id=r#"^lxqt-policykit-agent$"#', polkit_rules)
+        self.assertIn("open-floating true", polkit_rules)
         flags_source = (REPO / "quickshell/sparrow/Singletons/Flags.qml").read_text()
         self.assertRegex(flags_source, r"(?m)^\s*property real topGap: 1\.1$")
         theme = (REPO / "quickshell/sparrow/Singletons/Theme.qml").read_text()
         self.assertIn(': "Inter Black"', theme)
         self.assertEqual(self.machine["gsettings"].get("icon-theme"), "Sparrow")
+        self.assertEqual(self.machine["gsettings"].get("color-scheme"), "prefer-dark")
         self.assertEqual(self.machine["gsettings"].get("font-name"), "Adwaita Sans 11")
         self.assertTrue((self.paths.config / "gtk-3.0/settings.ini").is_file())
+        gtk_settings = (self.paths.config / "gtk-3.0/settings.ini").read_text()
+        self.assertIn("gtk-theme-name=Sparrow", gtk_settings)
+        self.assertIn("gtk-application-prefer-dark-theme=true", gtk_settings)
+        self.assertEqual((self.paths.config / "environment.d/90-qt-portal-theme.conf").read_text(),
+                         "# Native Qt 6 apps follow the desktop's standard XDG color-scheme preference.\n"
+                         "QT_QPA_PLATFORMTHEME=xdgdesktopportal\n")
+
+    def test_explicit_light_preference_is_preserved(self) -> None:
+        self.machine["gsettings"]["color-scheme"] = "prefer-light"
+        installer = self.installer()
+        self.assertEqual(installer.install(), 0)
+        self.assertEqual(self.machine["gsettings"]["color-scheme"], "prefer-light")
+        self.assertNotIn("org.gnome.desktop.interface/color-scheme", installer.managed_settings)
+
+    def test_uninstall_restores_only_sparrow_owned_dark_preference(self) -> None:
+        installer = self.installer()
+        self.assertEqual(installer.install(), 0)
+        self.assertEqual(self.machine["gsettings"]["color-scheme"], "prefer-dark")
+        # Uninstall is a distinct invocation and reloads the ownership manifest.
+        self.assertEqual(self.installer().uninstall(), 0)
+        self.assertNotIn("color-scheme", self.machine["gsettings"])
 
     def test_update_migrates_exact_legacy_appearance_and_pill_defaults_idempotently(self) -> None:
         niri_dir = self.paths.config / "niri/sparrow"

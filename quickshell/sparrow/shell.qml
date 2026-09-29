@@ -97,6 +97,34 @@ ShellRoot {
         return Quickshell.screens.length > 0 ? Quickshell.screens[0].name : "";
     }
 
+    // ToplevelManager is backed by the foreign-toplevel protocol and reports
+    // fullscreen transitions directly, including fullscreen requested by an
+    // application (for example browser video). Prefer the toplevel's output
+    // association so fullscreen on one monitor does not hide other pills.
+    function hasFullscreenToplevelOnScreen(screenName) {
+        var toplevels = ToplevelManager.toplevels.values;
+        for (var i = 0; i < toplevels.length; i++) {
+            var toplevel = toplevels[i];
+            if (!toplevel || !toplevel.fullscreen)
+                continue;
+
+            var screens = toplevel.screens;
+            for (var j = 0; j < screens.length; j++) {
+                if (screens[j] && screens[j].name === screenName)
+                    return true;
+            }
+
+            // Some compositors don't provide output association. In that
+            // case, use the active fullscreen toplevel and Niri's focused
+            // output rather than hiding every monitor.
+            if (screens.length === 0 && toplevel.activated
+                && ToplevelManager.activeToplevel === toplevel
+                && root.focusedScreenName() === screenName)
+                return true;
+        }
+        return false;
+    }
+
     Component.onCompleted: {
         refresh();
         ScreenLock.initialize();
@@ -182,6 +210,8 @@ ShellRoot {
         var screenName = root.focusedScreenName();
         if (!screenName || !root.readyPillScreens[screenName])
             return;
+        if (root.hasFullscreenToplevelOnScreen(screenName))
+            return;
         if (!Flags.claimOnboardingAutoShow())
             return;
         root.autoOnboardingOpened = true;
@@ -260,6 +290,7 @@ ShellRoot {
         PanelWindow {
             id: reserve
             required property var modelData
+            readonly property bool monFullscreen: root.hasFullscreenToplevelOnScreen(modelData.name)
             readonly property real s: modelData ? (modelData.height / 1080) * Flags.uiScale : 1
             readonly property real topGap: 8 * Flags.topGap * s
             readonly property real restHeight: 38 * s
@@ -273,13 +304,14 @@ ShellRoot {
                 restHeight + topGap + appGap - root.niriTopStrut - root.niriLayoutGaps)
 
             screen: modelData
+            visible: !monFullscreen
             color: "transparent"
             exclusionMode: ExclusionMode.Normal
-            exclusiveZone: reservedH
+            exclusiveZone: monFullscreen ? 0 : reservedH
             aboveWindows: true
 
             anchors { top: true; left: true; right: true }
-            implicitHeight: reservedH
+            implicitHeight: monFullscreen ? 0 : reservedH
 
             mask: emptyReserve
             Region { id: emptyReserve }
@@ -299,20 +331,29 @@ ShellRoot {
             readonly property bool modal: !ScreenRec.folderPickerOpen
                 && (surfaceOpen || pill.held || pill.quickChoosing)
 
-            /**
-             * True while this monitor's active workspace reports a fullscreen
-             * client. The pill retracts off the top edge and the layer is
-             * click-through so fullscreen content owns the screen, until a
-             * surface or a peek summons it back over the content.
-             */
-            readonly property bool monFullscreen: false
-            readonly property bool summoned: modal || root.peekMon === modelData.name
-            readonly property bool pillHidden: monFullscreen && !summoned
+            /** A fullscreen client always owns this output; no surface or peek
+             * state may summon the pill above it. */
+            readonly property bool monFullscreen: root.hasFullscreenToplevelOnScreen(modelData.name)
+            readonly property bool pillHidden: monFullscreen
 
             onMonFullscreenChanged: if (monFullscreen) {
-                if (root.openMon === modelData.name) root.close();
+                // Collapse without completing onboarding: a fullscreen
+                // transition is not a user dismissal of that first-run page.
+                if (root.openMon === modelData.name) {
+                    root.openMon = "";
+                    root.openSurface = "";
+                }
                 if (root.peekMon === modelData.name) root.peekMon = "";
+                if (ScreenRec.quickMon === modelData.name) {
+                    ScreenRec.quickChoosing = false;
+                    ScreenRec.quickScreenChoosing = false;
+                    ScreenRec.quickMon = "";
+                }
                 pill.pinned = false;
+                pill.hovered = false;
+                pill.hoverLatch = false;
+            } else {
+                root.tryAutoOpenOnboarding();
             }
 
             screen: modelData
@@ -320,13 +361,13 @@ ShellRoot {
             color: "transparent"
             exclusionMode: ExclusionMode.Ignore
             WlrLayershell.layer: WlrLayer.Overlay
-            WlrLayershell.keyboardFocus: !ScreenRec.folderPickerOpen
+            WlrLayershell.keyboardFocus: !monFullscreen && !ScreenRec.folderPickerOpen
                 && (surfaceOpen || pill.quickChoosing) ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
             WlrLayershell.namespace: "pill"
 
             anchors { top: true; left: true; right: true; bottom: true }
 
-            mask: modal ? fullRegion : (pillHidden ? hiddenRegion : pillRegion)
+            mask: monFullscreen ? hiddenRegion : (modal ? fullRegion : (pillHidden ? hiddenRegion : pillRegion))
             Region { id: hiddenRegion }
             Region {
                 id: pillRegion

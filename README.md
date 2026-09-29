@@ -1,134 +1,172 @@
+<div align="center">
+
 # Sparrow Shell
 
-Sparrow is a wallpaper-aware Quickshell desktop for the Niri Wayland compositor.
-Niri manages windows, workspaces, outputs and input; Sparrow provides the Pill,
-launcher, wallpaper/theme pipeline, settings, mixer, recorder, notifications,
-tray, media controls, power and session lock.
+**A small Quickshell interface and Niri-centered desktop rice, gathered into one morphing pill.**
 
-The installer targets current Arch Linux and CachyOS user sessions. It does
-not install a greeter, replace a display manager, configure system PAM, manage
-pacman/AUR for you, theme browsers, or copy personal wallpapers and monitor
-layouts.
+<a href="https://github.com/Retro-TV/sparrow-shell/blob/main/LICENSE"><img alt="License: GPL-3.0-only" src="https://img.shields.io/badge/license-GPL--3.0--only-6f4bc3"></a>
+<img alt="Wayland" src="https://img.shields.io/badge/session-Wayland-6f4bc3">
+<img alt="Compositor: Niri" src="https://img.shields.io/badge/compositor-Niri-6f4bc3">
+<img alt="Shell: Quickshell" src="https://img.shields.io/badge/shell-Quickshell-6f4bc3">
+
+<br><br>
+
+<img src="docs/assets/sparrow-desktop.jpg" alt="Sparrow desktop with the compact Getting Started pill open" width="100%">
+<br>
+<img src="docs/assets/resting-pill.jpg" alt="Sparrow's small resting pill" width="54%">
+
+</div>
 
 ## Install
 
-On a basic Arch/CachyOS install with internet, pacman, and an account allowed
-to use `sudo`, obtain this repository with Git (install Git first if needed),
-then run the installer from a terminal:
+Tested on a **fresh CachyOS installation**. Sparrow is intended for Arch-based
+systems, but other distributions and package combinations have not had the same
+bare-metal test. The installer uses pacman and does not install an AUR helper;
+on systems where `mpvpaper` is not available from configured pacman
+repositories, install it through your reviewed package workflow before running
+Sparrow.
+
+If Git is not already installed:
 
 ```sh
+sudo pacman -S --needed git
+```
+
+Then clone and run the installer as your normal user:
+
+```sh
+git clone https://github.com/Retro-TV/sparrow-shell.git
+cd sparrow-shell
 ./install.sh
 ```
 
-The installer can install Niri as part of its required package set. Python is
-the bootstrap prerequisite; if it is missing, the launcher offers to install
-it with `sudo pacman`. When Niri is already installed, the planned Niri graph
-is validated before package changes. On a fresh system, required packages are
-installed using `sudo pacman` and the staged Niri graph is validated before any
-Sparrow/Niri files are deployed. Packages already installed are skipped and
-never removed if a later validation or file operation fails. Sparrow never
-bootstraps an AUR helper. The default package transaction installs the complete
-tested Sparrow profile; Bibata Modern Ice v2.0.6 and Rishot are installed from
-checksum-pinned upstream sources. `./install.sh --yes` accepts normal default-
-yes operations but never overrides conflict, overwrite, or display-manager
-replacement decisions. `mpvpaper` must be installed or available in configured
-pacman repositories.
+The installer sets up the complete default Sparrow desktop, including its
+packages, Niri integration, Quickshell runtime, theme generation, screenshot
+tool, and tested greetd/tuigreet login on a compatible clean system. It may
+request `sudo` authorization for packages and system login integration. It
+keeps backups and asks before replacing a conflicting display manager or
+meaningful existing configuration; it does not start greetd under your current
+session.
 
-Existing Niri configuration remains the user's file. Sparrow validates a
-staged include integration before applying it; Niri may automatically reload
-that file when it changes. Existing monitor/output blocks, portal routes,
-app settings, cursor selections and default handlers are preserved unless a
-specific replacement is approved. Conflicting files are backed up before any
-replacement.
+On a clean compatible install, reboot after installation to enter the new
+tuigreet login on tty1. Sign in and Sparrow starts with Niri. Existing display
+manager setups are preserved unless you explicitly choose Sparrow's login
+integration. The installer prepares tty2 as a recovery console before changing
+login-manager ownership.
 
-On a clean system with no competing display manager, Sparrow prepares the
-tested greetd/tuigreet login for the next boot after enabling tty2 recovery.
-It asks before replacing another login manager or meaningful existing system
-configuration, and never starts/restarts greetd during the current session.
+## What is Sparrow?
 
-The complete runtime is copied directly to the stable
-`$XDG_CONFIG_HOME/quickshell/sparrow` entry point (normally
-`~/.config/quickshell/sparrow`). It does not depend on the clone remaining in
-place.
+Sparrow is a Quickshell shell/interface designed around the Niri Wayland
+compositor, with a coordinated desktop configuration and installer. Niri owns
+window management, workspaces, outputs, and input; Sparrow provides the
+surfaces and controls around that session. It is a rice, not a full desktop
+environment.
 
-After installation, select the newly available Niri session in your login
-manager, or use your existing `niri-session` workflow. Sparrow does not install
-or choose a login manager. After installation, log out and back into Niri. The installer enables user
-services but deliberately does not start/restart Sparrow, Niri, portals, or
-other session services in the current session. Your first Niri login restores
-the bundled Sparrow Default wallpaper if no saved selection exists, generates
-the initial Matugen palette, and opens Getting Started only for a genuine new
-Sparrow state.
+The permanent interface stays intentionally small: wallpaper, applications,
+and one pill. Open a feature when you need it; the pill morphs into that
+surface instead of keeping a collection of panels and widgets on screen. The
+rule is simple: if the maintainer does not actually use something, it should
+not be there.
 
-## First login and keybinds
+## What it includes
 
-The central Pill is Sparrow's main entry point. The current default bindings
-include:
+- **One morphing pill:** app launcher, dynamic Niri workspaces, wallpaper
+  picker, calendar, media, notifications, tray, and power/session controls.
+- **Desktop controls:** Niri Look, Display, Input, and Keybind settings, plus
+  audio Mixer, device-aware brightness, Wi-Fi, Bluetooth, battery/peripherals,
+  and idle/lock controls.
+- **Capture:** screen recording through GPU Screen Recorder and screenshots
+  through Rishot, both integrated with Sparrow's shortcuts and surfaces.
+- **Wallpaper-led appearance:** still and animated wallpapers, with a generated
+  palette shared by Sparrow, Niri, Kitty, and Sparrow-integrated GTK apps.
+- **A ready-to-use desktop:** Kitty, Fish, Starship, Thunar, scoped GTK
+  integration, cursor/fonts, portals, and a greetd/tuigreet login option.
 
-- `Super+Space`: Launcher
-- `Super+C`: Wallpaper picker
-- `Super+B`: next wallpaper
-- `Super+T`: Kitty
-- `Super+E`: Thunar
-- `Super+F`: Firefox
-- `Super+O`: Niri Overview
-- `Super+L`: Sparrow session lock
-- `Super+Shift+S`: Rishot screenshot
+Hardware-dependent controls appear when the required device or backend is
+available. Sparrow's primary session lock is its Quickshell/PAM lockscreen;
+Hyprlock is only an optional fallback.
 
-Open Settings from the Pill to configure Niri appearance, displays, input,
-keybindings, idle behavior, palette mode and lock foreground. Hardware and
-optional features adapt to installed tools and connected devices.
+## In the pill
 
-## Update
+<div align="center">
+<img src="docs/assets/getting-started.jpg" alt="Sparrow Getting Started surface" width="49%">
+<img src="docs/assets/look.jpg" alt="Sparrow Look settings" width="41%">
+</div>
 
-Fetch the desired repository version, inspect its changes, then rerun:
+## Wallpaper and theming
+
+Sparrow's wallpaper flow feeds the palette used across the shell and desktop:
+
+**Wallpaper → Matugen palette → Sparrow · Niri · Kitty · selected GTK apps**
+
+Changing wallpaper can update the palette as well. GTK theming is deliberately
+scoped to Sparrow-integrated applications such as Thunar, the GTK file chooser,
+and pavucontrol; Sparrow does not globally force its GTK theme onto unrelated
+apps or browsers.
+
+Use Sparrow's Appearance and Look surfaces for the controls they expose. Niri
+user overrides and personal state are kept separate from portable defaults;
+generated palette/theme files are regenerated from their inputs. Avoid editing
+generated output by hand.
+
+## Login and shortcuts
+
+On a clean compatible installation, greetd with the stock-looking tuigreet
+starts Niri after authentication and remembers the username/session. F3 keeps
+session selection available and F12 opens power controls. Sparrow's own
+Quickshell lock is used inside the session.
+
+Common defaults:
+
+| Shortcut | Action |
+| --- | --- |
+| `Super+Space` | Launcher |
+| `Super+C` / `Super+B` | Wallpaper picker / next wallpaper |
+| `Super+T` / `Super+E` / `Super+F` | Kitty / Thunar / Firefox |
+| `Super+O` | Niri Overview |
+| `Super+L` | Lock session |
+| `Super+Shift+S` | Screenshot with Rishot |
+
+The Keybinds surface shows the current bindings and supports the key changes
+Sparrow exposes.
+
+## Update and restore
+
+To update a clone and reapply managed files safely:
 
 ```sh
 git pull --ff-only
 ./install.sh
 ```
 
-The installer updates only files it previously managed and that still match
-its recorded version. Edited conflicts are kept unless you approve replacement;
-the prior contents are retained in `$XDG_STATE_HOME/sparrow-shell/installer/backups/`.
-After updating an active session, log out and back in to load the copied runtime
-and portal environment cleanly. Niri config changes may be applied live after
-the installer explicitly warns and you approve the merge.
-
-## Restore / uninstall
-
-Run:
+To restore Sparrow-managed files and system integration:
 
 ```sh
 ./uninstall.sh
 ```
 
-This disables Sparrow's user units and restores files changed by the installer
-when it is safe to do so. It does not remove packages, user state, caches,
-personal wallpapers, recordings, or screenshot files. If Sparrow is active,
-the default is to leave its current processes running until the session ends;
-the runtime entry remains in place while those processes may still use it.
-After logging out, run `./uninstall.sh` again to finish removing those paths.
-To close the shell and wallpaper immediately, explicitly use:
+Uninstall preserves packages, personal state, generated caches, wallpapers,
+recordings, and user-edited files. If Sparrow is active, it normally leaves
+running processes until the session ends; `./uninstall.sh --stop-now` asks
+before stopping them immediately. Backups and detailed recovery behavior are
+documented in the installer inventory.
 
-```sh
-./uninstall.sh --stop-now
-```
+## Project status
 
-Backups remain under `$XDG_STATE_HOME/sparrow-shell/installer/backups/` for
-manual recovery. User-edited files are preserved and listed rather than
-blindly overwritten during restore.
+The complete default install has passed a fresh bare-metal CachyOS test.
+Sparrow is still a young personal project and may evolve; compatibility beyond
+the tested CachyOS setup should be treated as unverified.
 
-## Troubleshooting
+## Documentation and credits
 
-- Check user service logs with `journalctl --user -u sparrow-shell.service -b`.
-- Inspect service state with `systemctl --user status sparrow-shell.service sparrow-wallpaper.service sparrow-idle.service`.
-- Validate Niri configuration with `niri validate -c "${XDG_CONFIG_HOME:-$HOME/.config}/niri/config.kdl"`.
-- If optional controls are unavailable, see [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md).
-- Read [docs/INSTALL-INVENTORY.md](docs/INSTALL-INVENTORY.md) for file ownership and [docs/PORTABILITY-ARCHITECTURE.md](docs/PORTABILITY-ARCHITECTURE.md) for runtime paths.
-- For the pre-release bare-metal rehearsal, follow [docs/BARE-METAL-INSTALL-TEST.md](docs/BARE-METAL-INSTALL-TEST.md).
+- [Dependencies and package notes](docs/DEPENDENCIES.md)
+- [What the installer deploys](docs/INSTALL-INVENTORY.md)
+- [Runtime paths and configuration ownership](docs/PORTABILITY-ARCHITECTURE.md)
+- [Wallpaper and palette behavior](quickshell/sparrow/WALLPAPER-PALETTE.md)
+- [Third-party licenses and attribution](THIRD_PARTY.md)
 
-Sparrow does not replace an existing display manager or choose the Niri session
-for you. Select Niri in your current login manager, or use your existing
-`niri-session` workflow. A first clean Arch/Niri graphical login should still
-be tested in a disposable user or VM before treating the setup as release-ready.
+Sparrow incorporates and adapts work from Ricelin and Qylock, includes a
+Papirus-derived icon subset and the Outfit font, and installs Rishot from its
+pinned upstream source. Their respective notices and licenses are retained in
+the repository. Sparrow is licensed GPL-3.0-only except where
+[third-party notices](THIRD_PARTY.md) identify separately licensed material.

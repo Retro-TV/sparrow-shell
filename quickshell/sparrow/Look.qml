@@ -173,7 +173,7 @@ SettingsSurface {
     component GroupLabel: Text {
         topPadding: 16 * root.s
         bottomPadding: 6 * root.s
-        color: Theme.faint
+        color: Theme.sectionText
         font.family: Theme.font
         font.pixelSize: 8.5 * root.s
         font.weight: Font.Bold
@@ -199,7 +199,7 @@ SettingsSurface {
                 width: 15 * root.s
                 height: 15 * root.s
                 name: "chevron-down"
-                color: Theme.faint
+                color: Theme.sectionText
                 stroke: 2
                 rotation: grp.open ? 0 : -90
                 Behavior on rotation { NumberAnimation { duration: Motion.fast; easing.type: Easing.OutCubic } }
@@ -247,7 +247,7 @@ SettingsSurface {
             anchors.verticalCenter: parent.verticalCenter
             spacing: 2 * root.s
             Text { text: field.label; color: Theme.cream; font.family: Theme.font; font.pixelSize: 12.5 * root.s; font.weight: Font.Medium }
-            Text { visible: field.expanded && field.caption.length > 0; text: field.caption; color: Theme.faint; font.family: Theme.font; font.pixelSize: 9 * root.s; font.weight: Font.Medium }
+            Text { visible: field.expanded && field.caption.length > 0; text: field.caption; color: Theme.mutedText; font.family: Theme.font; font.pixelSize: 9 * root.s; font.weight: Font.Medium }
         }
         Item {
             id: ctrl

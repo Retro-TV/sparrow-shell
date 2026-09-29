@@ -296,7 +296,7 @@ PillSurface {
             anchors.bottom: parent.bottom
             anchors.bottomMargin: 2 * root.s
             text: parent.label
-            color: Theme.faint
+            color: Theme.secondaryText
             font.family: Theme.font
             font.pixelSize: 8.5 * root.s
             font.weight: Font.DemiBold
@@ -322,7 +322,7 @@ PillSurface {
             anchors.rightMargin: 8 * root.s
             anchors.verticalCenter: parent.verticalCenter
             text: confirm.connected ? "Connected" : "Paired"
-            color: Theme.faint
+            color: Theme.secondaryText
             font.family: Theme.font
             font.pixelSize: 9.5 * root.s
             font.weight: Font.Medium

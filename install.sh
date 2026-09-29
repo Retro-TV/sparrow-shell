@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+assume_yes=0
+for argument in "$@"; do
+    [[ $argument == --yes ]] && assume_yes=1
+done
 if [[ ${EUID} -eq 0 ]]; then
     printf '%s\n' 'Run Sparrow Installer as your normal user; it uses sudo only for approved package installation.' >&2
     exit 1
@@ -14,12 +18,17 @@ if ! command -v python3 >/dev/null 2>&1; then
         printf '%s\n' 'Python is missing. Install it manually with: sudo pacman -S --needed python' >&2
         exit 1
     fi
-    if [[ ! -t 0 ]]; then
+    if [[ ! -t 0 && $assume_yes -ne 1 ]]; then
         printf '%s\n' 'Python is missing and this is not an interactive terminal. Install it manually with: sudo pacman -S --needed python' >&2
         exit 1
     fi
-    printf '%s' 'Python is needed to run Sparrow Installer. Install it now with sudo pacman? [y/N] '
-    read -r answer
+    if [[ $assume_yes -eq 1 ]]; then
+        answer=yes
+        printf '%s\n' 'Python is needed to run Sparrow Installer; --yes accepts its normal package-install default.'
+    else
+        printf '%s' 'Python is needed to run Sparrow Installer. Install it now with sudo pacman? [y/N] '
+        read -r answer
+    fi
     case "${answer,,}" in
         y|yes)
             printf '%s\n' 'Starting pacman transaction to install the Sparrow Installer runtime (python).'

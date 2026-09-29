@@ -1,8 +1,9 @@
 # Sparrow installation inventory
 
-Audit date: 2026-09-28. This document records the current repository and live
-CachyOS/Niri host before installer design. It is an implementation inventory,
-not an installer specification that authorizes overwriting existing files.
+Audit date: 2026-09-29. This document records the current repository and live
+CachyOS/Niri reference implementation and its completed default installer
+profile. It is an implementation inventory; it does not authorize overwriting
+existing user files or changing machine-specific settings.
 Current source is authoritative for executable use; installed Arch package
 pages and upstream project documentation are linked where they establish
 package/source facts.
@@ -12,10 +13,9 @@ package/source facts.
 Sparrow is a Niri 26.04 desktop with a Quickshell 0.3.1 shell and a separate
 Quickshell idle instance. Niri owns windows, outputs, workspaces and input;
 Sparrow owns its multi-output pill/surfaces, selected wallpaper and generated
-theme state. The default configuration is a coordinated rice rather than a
-general-purpose desktop environment: it does not include a greeter, browser
-theme, package manager, clipboard manager, or a second compositor-control
-framework.
+theme state. The coordinated default includes Sparrow's tested greetd/tuigreet
+login, screenshot integration and core feature dependencies; it is not a
+general-purpose desktop environment or package manager.
 
 ### Intended visible stack
 
@@ -32,40 +32,24 @@ framework.
 | Applications | Kitty/Fish/Starship terminal; Thunar with Sparrow GTK theme; Firefox binding | Intended defaults, replaceable by user |
 | Desktop integration | Sparrow Files `.desktop` directory handler; GTK FileChooser and Niri ScreenCast portal routing; GTK portal theme scope | Add targeted routes only; preserve explicitly selected routes |
 | Network/devices | NetworkManager Wi-Fi, BlueZ Bluetooth, PipeWire audio, UPower/battery, MPRIS | Core surfaces, but dependent on services/devices |
-| Optional controls | Video, Cava, Night Light, brightness, DDC, NVIDIA vibrance, recording, image-format helper, Hyprlock fallback, screenshots | Explicitly optional/adaptive; weather/search use recommended-default curl |
+| Adaptive controls | Video, Cava, Night Light, brightness, DDC, NVIDIA vibrance, recording, image-format helper, Hyprlock fallback, screenshots | Tools install by default; UI remains adaptive to device/service support and Hyprlock remains optional |
 
 The fresh-install default flags are Dynamic palette + Auto palette style/mode,
 Auto lock text, Night Light off and the built-in Sparrow Default wallpaper.
 Flags are per-user: installation must provide defaults through the schema, not
 copy the development host's `flags.json`.
 
-## Rishot standalone boundary
+## Rishot deployment boundary
 
-The portable Niri bind invokes `rishot` through `PATH`. Rishot remains a separately installed upstream
-application and is not copied into Sparrow. The installer checks for that
-executable and reports the optional missing dependency. No Rishot private
-configuration or user state is part of this source capture.
-not edited or reloaded in this task.
-
-Rishot is an independent MIT-licensed Quickshell application by Gakuseei, not a
-Sparrow component. Its current [upstream README](https://github.com/Gakuseei/rishot)
-documents `rishot` as the command and its current installer installs runtime
-files under `~/.local/share/rishot` and links `~/.local/bin/rishot`. The
-installer's source says the `rishot-git` AUR package is its primary route;
-because the README and AUR availability/maintenance need to remain current,
-Installer v1 does not silently clone or run a privileged upstream script.
-Recommended policy: list Rishot as an optional, separate app; offer its
-upstream-supported AUR package only after explicit AUR consent, otherwise give
-the user the upstream reviewed-install instructions. Verify that the resulting
-launcher is on PATH before enabling its optional bind. Do not vendor it.
-
-Rishot required runtime dependencies per upstream: `quickshell` (`qs`),
-`wl-clipboard`, Qt 6 declarative, SVG, 5compat and Wayland modules; on Niri it
-uses `grim` for capture. Optional features use ImageMagick (stitch/metadata),
-cliphist, curl (upload), kdialog and libnotify. On Niri upstream documents
-region/monitor capture and window-click only for floating windows. The current
-host's launcher is a symlink at `~/.local/bin/rishot` to
-`~/.local/share/rishot/bin/rishot`, not owned by pacman.
+The portable Niri bind invokes `rishot` through `PATH`. The installer now
+deploys the official Rishot source archive pinned by commit and SHA-256 in
+`SOURCE-OF-TRUTH.json`, without running the upstream installer or building an
+AUR package. Runtime files go to `$XDG_DATA_HOME/rishot`; the launcher is
+managed at `$HOME/.local/bin/rishot`. Existing valid PATH installations are
+preserved, reruns skip unchanged managed content, and user config/state is not
+copied or owned. Uninstall restores/removes only unchanged Sparrow-managed
+files. Its MIT notice is installed with the application. Rishot user settings
+and screenshot outputs remain user-owned.
 
 ## External executable inventory
 
@@ -88,36 +72,36 @@ declaring those when a genuinely minimal install omits them.
 | `matugen` | `wallcolors.py` invokes Matugen for wallpaper palette generation | Official Extra `matugen` ([package](https://archlinux.org/packages/extra/x86_64/matugen/)); prefer official repo package over `matugen-bin` | Required for Dynamic palette; old palette/fallback colors remain if failed |
 | `awww-daemon`, `awww` | wallpaper systemd service and wallpaper operations/query/stop | Official Extra `awww` ([package](https://archlinux.org/packages/extra/x86_64/awww/)) | Required default wallpaper daemon; restoration reports failure if absent |
 | `mpvpaper` | animated wallpaper playback | CachyOS repository package; on Arch, upstream's AUR package is a reviewed pre-install prerequisite | Required feature backend; installer installs from configured CachyOS repos or stops before deployment with an Arch prerequisite message |
-| `ffmpeg`, `ffprobe` | video/GIF stills, wallpaper thumbnails, recording thumbnails and media dimensions | Official Extra `ffmpeg` | Recommended default bundle; absent tools degrade previews/stills but do not block shell startup |
-| `nmcli` | Wi-Fi scan/connect/profile operations and hotspot UI | Official `networkmanager` provides CLI; enable NetworkManager only by user choice if another network manager owns networking | Wi-Fi feature requires NetworkManager service; failures are presented in that surface |
-| `bluetoothctl` | Bluetooth pairing/trust/connect command path | Official `bluez-utils`; daemon is `bluez` | Feature-specific; unavailable adapter/daemon prevents Bluetooth operations |
+| `ffmpeg`, `ffprobe` | video/GIF stills, wallpaper thumbnails, recording thumbnails and media dimensions | Official Extra `ffmpeg` | Installed by default; previews/stills use it when available |
+| `nmcli` | Wi-Fi scan/connect/profile operations and hotspot UI | Official `networkmanager` provides CLI | Installed by default; service ownership/state is not changed, and availability follows host service/adapter |
+| `bluetoothctl` | Bluetooth pairing/trust/connect command path | Official `bluez-utils`; daemon is `bluez` | Packages installed by default; service state and adapter availability remain host-specific |
 | `wpctl` | Volume, mute, source and default sink controls | Official `wireplumber` supplies `wpctl`; install PipeWire + WirePlumber | Audio control needs a running PipeWire session; unavailable device/backend prevents use |
 | `systemctl` | Sparrow power actions, idle service start, environment import, service lifecycle | Official `systemd` | Required for units/power/idle path; systemd user session is core |
-| `wlsunset` | Quickshell-managed Night Light process | Official Extra package if present; optional | Optional; reports unavailable; off state starts none |
-| `cava` | Quickshell audio visualizer process | Official Extra `cava` | Optional; availability probe keeps visualizer hidden/inactive |
-| `brightnessctl` | Guarded Niri hardware-brightness binds and Mixer internal backlight | Official Extra `brightnessctl` | Optional; keys quietly no-op without it; Mixer hides unavailable control |
-| `ddcutil`, `timeout` | Mixer DDC detection/control; timeout bounds writes | Official `ddcutil` package if available; `timeout` from `coreutils` | Optional; no DDC row when absent; silent guard |
+| `wlsunset` | Quickshell-managed Night Light process | Official Extra package | Installed by default; the backend starts only when the user enables Night Light |
+| `cava` | Quickshell audio visualizer process | Official Extra `cava` | Installed by default; visualizer starts only when needed |
+| `brightnessctl` | Guarded Niri hardware-brightness binds and Mixer internal backlight | Official Extra `brightnessctl` | Installed by default; Mixer control still requires detected backlight hardware |
+| `ddcutil`, `timeout` | Mixer DDC detection/control; timeout bounds writes | Official `ddcutil` and `coreutils` | Installed by default; DDC control appears only for detected compatible displays |
 | `nvibrant` | NVIDIA vibrance control | Third-party/upstream package/source; identify compatible package only on NVIDIA targets | Optional; hidden unless command and NVIDIA modeset device exist |
-| `gpu-screen-recorder` | Recorder capture/record; process polling/stop | Official Extra `gpu-screen-recorder` ([package](https://archlinux.org/packages/extra/x86_64/gpu-screen-recorder/)) | Optional feature; surface reports backend failures |
-| `slurp` | Recorder region and window-point selection helper | Official Extra `slurp` | Optional within Recorder; direct display recording remains; picker reports unavailable |
-| `grim` | Rishot Niri capture dependency | Official Extra `grim`; separate Rishot dependency | Optional Rishot path only |
-| `rishot` on `PATH` | Niri `Super+Shift+S` screenshot bind | Separate upstream Rishot install; not Sparrow package/source | Manual-only; installer explicitly warns when the executable is missing |
+| `gpu-screen-recorder` | Recorder capture/record; process polling/stop | Official Extra `gpu-screen-recorder` ([package](https://archlinux.org/packages/extra/x86_64/gpu-screen-recorder/)) | Installed by default; capture remains device/session-dependent |
+| `slurp` | Recorder region and window-point selection helper | Official Extra `slurp` | Installed by default for Niri selection modes |
+| `grim` | Rishot Niri capture dependency | Official Extra `grim` | Installed by default |
+| `rishot` on `PATH` | Niri `Super+Shift+S` screenshot bind | Pinned upstream source archive, checksum verified by installer | Default installation; preserves valid existing Rishot and user config |
 | `kitty` | Niri terminal bind; generated colors reload via `pkill -USR1` | Official Extra `kitty` ([manual/package](https://man.archlinux.org/man/kitty.1.en)) | Default app; change bind if user does not install/choose Kitty |
 | `fish` | Kitty login shell; user's Fish configuration | Official Extra `fish` | Default app dependency; Kitty shell launch fails or falls back depending Kitty handling |
-| `starship` | Fish prompt initialization | Official Extra `starship` | Optional for base Fish; Sparrow directory prompt absent if not installed |
-| `greetd`, `greetd-tuigreet` | Sparrow's tested tty1 login flow using `niri-session` | Official Arch/CachyOS packages | Packages are required; system enablement is explicit opt-in and prepares tty2 recovery before changing login-manager enablement. |
+| `starship` | Fish prompt initialization | Official Extra `starship` | Required default Fish prompt |
+| `greetd`, `greetd-tuigreet` | Sparrow's tested tty1 login flow using `niri-session` | Official Arch/CachyOS packages | Packages installed by default; on a clean machine with no competing display manager, installer prepares tty2 recovery and enables greetd for next boot. A competing manager remains a user-confirmed conflict. |
 | `zoxide`, `fastfetch` | Optional Fish startup integration and `ff` abbreviation | Official Extra packages | User-invoked Fish conveniences; not Sparrow shell requirements |
 | `thunar`, `env`, `gtk-launch` | Niri/default-files `.desktop` entry; launcher routes desktop entries via `gtk-launch` | `thunar` official Extra ([package](https://archlinux.org/packages/extra/x86_64/thunar/)); `gtk-launch` from GTK3/GLib stack; `env` base coreutils | Thunar is the configured default file manager; other desktop entries need their own installed apps |
-| `pavucontrol` | Sparrow Launcher recognizes its desktop ID and starts this external advanced-volume UI with app-scoped `GTK_THEME=Sparrow` | Recommended default bundle; GTK4/gtkmm4 supplied by its package | Optional app; the native Sparrow Mixer remains the primary control surface |
-| `tumbler` | Thunar image/media thumbnails; not directly launched by Sparrow but required for stated file-manager experience | Official Extra `tumbler` ([package](https://archlinux.org/packages/extra/x86_64/tumbler/)) | Recommended default app integration; without it previews are missing |
+| `pavucontrol` | Sparrow Launcher recognizes its desktop ID and starts this external advanced-volume UI with app-scoped `GTK_THEME=Sparrow` | Complete default package profile; GTK4/gtkmm4 supplied by its package | Installed by default; the native Sparrow Mixer remains the primary control surface |
+| `tumbler` | Thunar image/media thumbnails; not directly launched by Sparrow but required for stated file-manager experience | Official Extra `tumbler` ([package](https://archlinux.org/packages/extra/x86_64/tumbler/)) | Installed by default; without it previews are missing |
 | `gio` | Wallpaper deletion through Trash | GTK/GLib (`glib2`) runtime | Missing GUI trash integration makes that picker action fail |
 | `xdg-open` | Open saved recordings/output directory | Official `xdg-utils` | Recording UI can open paths only if a handler exists |
-| `wl-copy` | Launcher calculation result copy; Rishot clipboard path | Official `wl-clipboard` | Recommended default; copy/Rishot clipboard feature unavailable without it |
-| `notify-send` | Recorder feedback and battery notification | Official `libnotify` | Non-blocking feedback absent; core UI still runs |
-| `curl` | Weather, wallpaper search/download/preview, Rishot optional upload | Official Extra `curl` | Recommended default; weather/search unavailable without it, local wallpaper unaffected |
-| `magick` | Wallpaper-search image identification; Rishot optional | Official `imagemagick` (command `magick`) | Optional downloaded-format check/conveniences; local wallpapers unaffected |
+| `wl-copy` | Launcher calculation result copy; Rishot clipboard path | Official `wl-clipboard` | Required default; copy/Rishot clipboard integration unavailable without it |
+| `notify-send` | Recorder feedback and battery notification | Official `libnotify` | Installed by default; missing notices do not block the UI |
+| `curl` | Weather, wallpaper search/download/preview, Rishot optional upload | Official Extra `curl` | Installed by default; weather/search still require network access |
+| `magick` | Wallpaper-search image identification; Rishot optional | Official `imagemagick` (command `magick`) | Installed by default; used for optional image handling/stitching |
 | `cp` | Pill copies dropped wallpaper images/videos into Sparrow's wallpaper library | `coreutils` | Required only for wallpaper file-drop import; picker and normal wallpaper selection remain separate |
-| `firefox` | Niri default browser binding | Official Extra `firefox` | Replaceable default-app choice; not needed by Sparrow itself |
+| `firefox` | Niri default browser binding | Official Extra `firefox` | Installed as the canonical replaceable default browser |
 | `gtk-update-icon-cache` | Regenerated Sparrow icon theme index | GTK3 package | Optional integration refresh; generated SVGs still written |
 | `nvidia-smi` | Optional NVIDIA GPU stats | `nvidia-utils` | GPU fields unavailable; CPU/memory/disk stats remain |
 | `df`, `awk`, `grep`, `head`, `cat`, `ls`, `sleep`, `printf`, `find`, `sort`, `shuf`, `tail`, `tr`, `cut`, `date`, `md5sum`, `flock`, `setsid`, `kill`, `rm`, `mv`, `mkdir`, `dirname`, `basename`, `readlink`, `pgrep`, `pkill`, `timeout`, `env`, `stat`, `ip` | Basic helper scripting, CPU/system monitoring, wallpaper/cache process and file operations, Kitty signaling, recorder management, Wi-Fi details | Primarily official `coreutils`, `findutils`, `gawk`, `grep`, `procps-ng`, `util-linux`, `iproute2`; standard Arch base packages | Low-level runtime requirements of helper scripts; normally supplied by a minimal Arch base install but document/check explicitly |
@@ -148,20 +132,20 @@ database. “Optional” means the desktop must remain useful when omitted.
 | Inter | `inter-font` — Arch Extra ([package](https://archlinux.org/packages/extra/any/inter-font/)) | Default UI font |
 | Outfit Black | Bundled `Outfit-Black.ttf` + OFL notice | Used by lockscreen; don't fetch separately or omit its license |
 | JetBrains Mono Nerd Font | `ttf-jetbrains-mono-nerd` — Arch Extra ([package](https://archlinux.org/packages/extra/any/ttf-jetbrains-mono-nerd/)) | Default Kitty/Fish/Starship typography |
-| Bibata Modern Ice | Official pinned [v2.0.6 upstream archive](https://github.com/ful1e5/Bibata_Cursor/releases/download/v2.0.6/Bibata-Modern-Ice.tar.xz) | Installer offers download, verifies the SHA-256 in `SOURCE-OF-TRUTH.json`, then installs per-user; declining blocks fresh deployment; no AUR helper |
+| Bibata Modern Ice | Official pinned [v2.0.6 upstream archive](https://github.com/ful1e5/Bibata_Cursor/releases/download/v2.0.6/Bibata-Modern-Ice.tar.xz) | Installed per-user after SHA-256 verification when the user has no explicit different cursor selection; no AUR helper |
 | GTK base theme | `adw-gtk-theme` — Arch Extra ([package](https://archlinux.org/packages/extra/any/adw-gtk-theme/)) | Required for generated Sparrow GTK theme source |
 | Kitty | `kitty` — Arch Extra | Required canonical terminal default |
 | Fish | `fish` — Arch Extra | Required Kitty shell default |
 | Starship | `starship` — Arch Extra | Required Fish prompt |
 | Thunar | `thunar` — Arch Extra ([package](https://archlinux.org/packages/extra/x86_64/thunar/)) | Required canonical file manager |
-| Thumbnails | `tumbler` — Arch Extra ([package](https://archlinux.org/packages/extra/x86_64/tumbler/)) | Recommended part of default Thunar integration |
+| Thumbnails | `tumbler` — Arch Extra ([package](https://archlinux.org/packages/extra/x86_64/tumbler/)) | Installed by default for the intended Thunar experience |
 | Portals | `xdg-desktop-portal`, `xdg-desktop-portal-gtk`, and `xdg-desktop-portal-gnome` ([Arch package](https://archlinux.org/packages/extra/x86_64/xdg-desktop-portal-gnome/)) | Required by the tracked GTK FileChooser + Niri ScreenCast profile |
 | Polkit agent | Existing user agent, otherwise `lxqt-policykit` (Arch Extra) | Added to required transaction only when no existing agent is detected; preserve other agents |
 | video wallpapers | `mpvpaper` | Required runtime; CachyOS repository package, or Arch AUR package installed by the user before rerunning Installer |
-| recording | `gpu-screen-recorder`, `slurp` | Optional GPU-dependent recorder; direct output capture and picker capabilities vary |
-| screenshot | Rishot upstream, `grim`, `wl-clipboard` | Optional separate application; do not bundle or silently run external installer |
-| Night Light / audio viz | `wlsunset`, `cava` — prefer official Extra where available | Optional features |
-| hardware | `brightnessctl`, `ddcutil` — official Arch packages; compatible `nvibrant` source/package varies | Optional and device-specific; never force onto host |
+| recording | `gpu-screen-recorder`, `slurp` | Installed by default; capture availability still depends on device/capabilities |
+| screenshot | Pinned Rishot upstream source, `grim`, `wl-clipboard` | Installed by default; preserves valid external Rishot and user config |
+| Night Light / audio viz | `wlsunset`, `cava` — prefer official Extra where available | Installed by default; user state remains off until enabled |
+| hardware | `brightnessctl`, `ddcutil` — compatible `nvibrant` source/package varies | Utilities installed by default; controls remain device/driver adaptive |
 | network, audio, battery | `networkmanager`, `bluez`, `bluez-utils`, `pipewire`, `wireplumber`, `upower`, `pipewire-pulse` as appropriate | Core surfaces rely on compatible user/system services; enabling can conflict with a host setup |
 | media & portal modules | Quickshell runtime modules, Qt Multimedia QML module, GTK3/4; check imports against installed package | Required modules should be preflighted, not guessed by package names across releases |
 | XWayland | `xwayland-satellite` (which depends on Xwayland) | Optional compatibility for X11-only apps, not needed for Wayland-native Sparrow |
@@ -172,10 +156,9 @@ Arch's package pages currently show `quickshell`, `niri`, `matugen`, `awww`,
 `python-pillow`, `inter-font`, `ttf-jetbrains-mono-nerd`, `adw-gtk-theme`,
 `kitty`, `fish`, `starship`, `thunar`, `tumbler`, `xdg-desktop-portal`, and
 `gpu-screen-recorder` in official repositories. The Bibata source recommends
-an AUR package. Rishot's upstream install script says its primary package is
-`rishot-git`; the project's README currently documents its own standalone
-installer rather than a package command. Verify AUR status at implementation
-time. Never assume `matugen-bin` is the Arch default.
+an AUR package. Rishot is fetched only from the immutable pinned commit and
+verified against the tracked SHA-256; the mutable upstream installer is not
+run. Never assume `matugen-bin` is the Arch default.
 
 ## Repository files to deploy
 
@@ -239,7 +222,7 @@ seeded with development-host contents.
 | wallpaper/recording thumbnails and video preview cache | `$XDG_CACHE_HOME/sparrow-shell/...`; preview downloads also use `/tmp` | helper scripts/Wallpaper/Recorder | Disposable; do not package or clear as install step |
 | recordings/screenshots | Flags-configured recordings default under `~/Videos/Recordings`; screenshots per Niri screenshot path / Rishot | User output | Never overwrite or include |
 | awww cache/socket | `$XDG_CACHE_HOME/awww`, `$XDG_RUNTIME_DIR` | awww | External daemon runtime/cache |
-| Rishot settings/lock/source | `~/.local/share/rishot`, `~/.local/bin/rishot`; runtime lock in `$XDG_RUNTIME_DIR` or cache fallback | Independent Rishot install | Separate app-owned files |
+| Rishot settings/source/lock | `$XDG_DATA_HOME/rishot`, `$HOME/.local/bin/rishot`; runtime lock in `$XDG_RUNTIME_DIR` or cache fallback | Pinned upstream integration; user config/state is unowned | Uninstall restores/removes only unchanged Sparrow-managed app files |
 
 Machine-specific values include output names/resolution/scale/position, display
 number labels, keyboard and input device choices, hardware probes, audio
@@ -323,17 +306,14 @@ Dynamic/Auto palette, Sparrow default image, Pill/Launcher/Settings, Niri
 Look/Display/Input/Keybind surfaces, system tray/media/audio/network/device
 surfaces, Qylock-derived Quickshell lock/PAM, Kitty/Fish/Starship, Thunar with
 Tumbler and scoped Sparrow GTK, Inter, JetBrains Mono Nerd Font, Bibata Modern
-Ice v2.0.6 after explicit installer consent, Sparrow's licensed icon subset, curl/wl-clipboard/
+Ice v2.0.6, Sparrow's licensed icon subset, curl/wl-clipboard/
 FFmpeg support tools, and GTK FileChooser/Niri ScreenCast portal integration.
-Rishot remains a separate upstream install. An existing explicit cursor choice
-is preserved; on a fresh home declining the pinned Bibata asset stops before
-Sparrow files are deployed. Optional app extras may be declined without
+Rishot is installed from the pinned upstream source by default. An existing
+explicit cursor choice is preserved. Optional app extras may be declined without
 removing the required terminal, file-manager, and GTK defaults.
 
-Keep adaptive extras as a compact optional list: Cava, Night
-Light, internal brightness, DDC, NVIDIA vibrance, GPU Screen Recorder,
-Rishot/grim, weather/search network endpoints, Hyprlock fallback and
-XWayland compatibility. These controls already gate or report missing
+Keep adaptive extras as a compact optional list: Hyprlock fallback and
+XWayland compatibility. Hardware-specific controls still gate on detected
 capabilities; do not install a package simply because an optional UI is
 present.
 
@@ -346,7 +326,7 @@ present.
 | Outfit Black font | `Lockscreen/font/OFL.txt` | Preserve OFL and copyright next to font; font is bundled |
 | Papirus-derived fixed icons | `icons/PAPIRUS-LICENSE.txt`, `icons/NOTICE.md`, GPL-3 | Preserve attribution/license; distribute modified/recolored source SVGs as applicable |
 | Sparrow Default wallpaper | `wallpapers/README.md`; original SpaceEngine Pro screenshot created by author; permission is for bundling as Sparrow's default | Keep author copyright and scoped redistribution permission; do not call it upstream art or assign an invented license |
-| Rishot | Separate upstream MIT project | Do not copy source/assets into Sparrow; link to upstream and retain separate license if installer offers it |
+| Rishot | Separate upstream MIT project | Installer checksum-verifies immutable upstream commit and installs its license; does not run upstream installer or alter user settings |
 | Arch packages/fonts/theme assets | Installed package projects keep their own licenses | Install packages through package managers rather than repackaging package files |
 
 `LICENSE`, `THIRD_PARTY.md`, and component notices now state the project license
@@ -355,11 +335,11 @@ added or if the lock/icon/font components change.
 
 ## Greeter and login boundary
 
-Sparrow tracks the tested stock tuigreet configuration. Package installation
-does not activate it; a separate prompt opts into changing system login
-management. The root helper enables tty2 recovery first, backs up system
-configs, asks separately before replacing existing configs or a display
-manager, and enables greetd without starting/restarting it. The next boot uses
+Sparrow tracks the tested stock tuigreet configuration. On a compatible fresh
+machine without a competing display manager, installation prepares tty2
+recovery, backs up system configs, and enables greetd for the next boot without
+starting/restarting it under the current session. A competing display manager
+or conflicting system config requires explicit consent. The next boot uses
 tty1 tuigreet and launches `niri-session`; Sparrow's Quickshell session lock
 is unchanged. Uninstall restores unchanged Sparrow-owned files and prior
 enablement while preserving user edits. The exact contract is in

@@ -138,7 +138,7 @@ PillSurface {
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: dial.label
-                color: Theme.faint
+                color: Theme.sectionText
                 font.family: Theme.font
                 font.pixelSize: 8.5 * root.s
                 font.weight: Font.Bold

@@ -24,16 +24,15 @@ The installer can install Niri as part of its required package set. Python is
 the bootstrap prerequisite; if it is missing, the launcher offers to install
 it with `sudo pacman`. When Niri is already installed, the planned Niri graph
 is validated before package changes. On a fresh system, required packages are
-installed after consent and the staged Niri graph is validated before any
-Sparrow/Niri files are deployed. Packages already installed are not removed if
-a later validation or file operation fails. Official package installation
-uses `sudo pacman` only after an explicit prompt. Required
-packages must be accepted for installation or already present. Sparrow never
-bootstraps an AUR helper. For a fresh account with no explicit cursor choice,
-the installer offers to fetch the official Bibata Modern Ice v2.0.6 archive,
-checks its pinned SHA-256, and installs it per-user; declining stops deployment
-before Sparrow files are written. mpvpaper and Rishot remain separate optional
-upstream projects and are not bundled.
+installed using `sudo pacman` and the staged Niri graph is validated before any
+Sparrow/Niri files are deployed. Packages already installed are skipped and
+never removed if a later validation or file operation fails. Sparrow never
+bootstraps an AUR helper. The default package transaction installs the complete
+tested Sparrow profile; Bibata Modern Ice v2.0.6 and Rishot are installed from
+checksum-pinned upstream sources. `./install.sh --yes` accepts normal default-
+yes operations but never overrides conflict, overwrite, or display-manager
+replacement decisions. `mpvpaper` must be installed or available in configured
+pacman repositories.
 
 Existing Niri configuration remains the user's file. Sparrow validates a
 staged include integration before applying it; Niri may automatically reload
@@ -41,6 +40,11 @@ that file when it changes. Existing monitor/output blocks, portal routes,
 app settings, cursor selections and default handlers are preserved unless a
 specific replacement is approved. Conflicting files are backed up before any
 replacement.
+
+On a clean system with no competing display manager, Sparrow prepares the
+tested greetd/tuigreet login for the next boot after enabling tty2 recovery.
+It asks before replacing another login manager or meaningful existing system
+configuration, and never starts/restarts greetd during the current session.
 
 The complete runtime is copied directly to the stable
 `$XDG_CONFIG_HOME/quickshell/sparrow` entry point (normally
@@ -69,7 +73,7 @@ include:
 - `Super+F`: Firefox
 - `Super+O`: Niri Overview
 - `Super+L`: Sparrow session lock
-- `Super+Shift+S`: Rishot screenshot (only if separately installed)
+- `Super+Shift+S`: Rishot screenshot
 
 Open Settings from the Pill to configure Niri appearance, displays, input,
 keybindings, idle behavior, palette mode and lock foreground. Hardware and

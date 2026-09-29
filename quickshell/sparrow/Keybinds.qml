@@ -317,7 +317,7 @@ PillSurface {
                             height: 20 * root.s
                             verticalAlignment: Text.AlignVCenter
                             text: categoryDelegate.modelData.name.toUpperCase()
-                            color: Theme.faint
+                            color: Theme.sectionText
                             font.family: Theme.font
                             font.pixelSize: 8.5 * root.s
                             font.weight: Font.DemiBold
@@ -408,7 +408,7 @@ PillSurface {
             spacing: 3 * root.s
             Text {
                 text: "DISPLAY · MANAGED IN DISPLAY SETTINGS"
-                color: Theme.faint
+                color: Theme.sectionText
                 font.family: Theme.font
                 font.pixelSize: 8 * root.s
                 font.weight: Font.DemiBold
@@ -429,7 +429,7 @@ PillSurface {
                     }
                     Text {
                         text: displayDelegate.modelData.label
-                        color: Theme.faint
+                        color: Theme.secondaryText
                         font.family: Theme.font
                         font.pixelSize: 9 * root.s
                     }
@@ -438,7 +438,7 @@ PillSurface {
             Text {
                 visible: root.displayShortcuts.length === 0
                 text: "No numbered display shortcuts assigned"
-                color: Theme.faint
+                color: Theme.mutedText
                 font.family: Theme.font
                 font.pixelSize: 9 * root.s
             }

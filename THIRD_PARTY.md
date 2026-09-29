@@ -49,9 +49,10 @@ is retained.
 
 Niri, Quickshell, Matugen, awww, mpvpaper, GTK/adw-gtk3, Kitty, Fish, Starship,
 Thunar, LXQt PolicyKit, Rishot, and other invoked package/application projects
-are installed separately by the user or distribution. Their licenses remain
-with their upstream packages; Sparrow does not bundle their executables or
-source. Rishot in particular is a separate application and is not vendored.
+are installed by the user or distribution. Their licenses remain with their
+upstream packages. Sparrow's installer downloads the official pinned Rishot
+source archive at install time and installs its MIT notice alongside the
+managed files; Rishot source is not vendored in this repository.
 
 ## License-file placement
 

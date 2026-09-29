@@ -18,13 +18,13 @@ generated state separate from portable source.
 | `user-binds.kdl` | Keybind settings saved by user | Mutable; do not copy from the reference host or seed. |
 | `~/.config/systemd/user/sparrow-{shell,idle,wallpaper,polkit-agent}.service` | Active user services; source unit files are tracked in `quickshell/sparrow/systemd/` | Installer copies units to the canonical systemd user directory, then daemon-reloads and enables selected units. No active unit needs the checkout path. |
 | `~/.config/sparrow/hyprlock.conf` | Simple screenshot-based fallback used only if Sparrow's Quickshell lock IPC is unavailable | An installer should preserve an existing user config and copy the portable fallback only when absent. This host's former Layout 9 config is backed up outside Git. |
-| `~/.local/bin/rishot` and `~/.local/share/rishot` | Separate upstream Rishot install, not Sparrow source | Install separately; do not vendor it. The portable Niri binding invokes `rishot` through `PATH`; installer warns if it is absent. |
+| `~/.local/bin/rishot`, `$XDG_DATA_HOME/rishot`, desktop entry and icon | Pinned upstream Rishot integration, not tracked Sparrow code | Installer checksum-verifies the upstream immutable commit archive; preserves valid PATH installs/user state and owns only unchanged deployed files. |
 | `~/.local/state/sparrow-shell/` | User preferences, selected wallpaper/output map, transaction journals, migrated flags/events and migration backups | Persistent machine/user state; never track. |
 | `~/.cache/sparrow-shell/` | Palette, thumbnails, weather location, recording thumbnails and transient outputs | Regenerable cache; never track. Startup migration now creates its root for clean first run. |
 | `~/Pictures/wallpapers/` | User-owned images and videos | Personal assets; not bundled. A missing directory is treated as an empty library. |
 | `~/Videos/Recordings/` | User recording destination | Personal output; not bundled. Recording selection/default path creates or handles it when used. |
 | `~/.config/environment.d/90-cursor.conf` | XCursor defaults for user-manager services and toolkit clients | Install after the pinned cursor asset is present and only when the user has no explicit different cursor choice. |
-| `$XDG_DATA_HOME/icons/Bibata-Modern-Ice` | Pinned external cursor asset | Installer offers official upstream v2.0.6, verifies its pinned SHA-256, and installs per-user with backup/update/uninstall ownership. No AUR helper or sudo. |
+| `$XDG_DATA_HOME/icons/Bibata-Modern-Ice` | Pinned external cursor asset | Installer automatically downloads official upstream v2.0.6 only when no explicit different cursor choice exists, verifies SHA-256, and installs per-user with backup/update/uninstall ownership. No AUR helper. |
 
 The live wallpaper unit is the exception among the current systemd links: its
 home-directory symlink is absolute and resolves into the current checkout,
@@ -170,12 +170,12 @@ The wrapper does not prepare avatars, wallpaper links, or generated color
 includes for Hyprlock. The Quickshell lock reads Sparrow's selected wallpaper
 and palette directly.
 
-Rishot remains upstream software. Its current upstream repository documents a
-standalone installer and describes the AUR package as its primary route; do
-not vendor its source into Sparrow. The installer places its runtime under
-`~/.local/share/rishot` and links the launcher to `~/.local/bin/rishot`.
-Sparrow's portable Niri shortcut invokes `rishot` through `PATH`; the
-installer checks that command is available and does not vendor Rishot.
+Rishot remains upstream software. The installer downloads its official archive
+at the pinned commit, verifies SHA-256, and deploys runtime files under
+`$XDG_DATA_HOME/rishot` plus a managed `$HOME/.local/bin/rishot` launcher.
+Sparrow's portable Niri shortcut invokes `rishot` through `PATH`; existing
+valid PATH installs and user configuration are preserved, and the upstream
+mutable installer is never executed.
 Rishot's required Arch dependencies are `quickshell`, Qt 6 declarative,
 SVG, 5compat and Wayland components, and `wl-clipboard`; on Niri, `grim` is the
 capture tool. Its optional conveniences include ImageMagick, cliphist, curl,
@@ -202,8 +202,8 @@ kdialog and libnotify.
 The implementation is `install.sh` plus `installer/sparrow_installer.py`.
 It copies the complete runtime tree to `$XDG_CONFIG_HOME/quickshell/sparrow`
 and copies tracked Sparrow files to known destinations. It seeds
-`user-input.kdl` only when absent, offers and verifies the pinned Bibata
-archive when needed, and stages/validates the captured Niri root and
+`user-input.kdl` only when absent, installs verified pinned Bibata and Rishot
+assets when needed, and stages/validates the captured Niri root and
 fragments before deployment. Existing conflicts require consent and are
 backed up under `$XDG_STATE_HOME/sparrow-shell/installer/`; content hashes
 support safe updates/restores. Package groups are in

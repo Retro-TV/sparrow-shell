@@ -266,7 +266,7 @@ class InstallerTests(unittest.TestCase):
         # already installed, while Sparrow files and user settings are absent.
         installer = self.installer()
         package_sets = installer.package_sets()
-        self.machine["packages"].update(package_sets["required"])
+        self.machine["packages"].update(package_sets["required"] + package_sets["defaults"])
         self.machine["packages"].add(package_sets["polkit_agent"]["package"])
         self.machine["commands"].update(package_sets["required_executables"])
         self.machine["commands"].add(package_sets["polkit_agent"]["executable"])
@@ -274,7 +274,7 @@ class InstallerTests(unittest.TestCase):
         self.machine.setdefault("themes", set()).add("Bibata-Modern-Ice")
 
         self.assertEqual(installer.install(), 0)
-        self.assertTrue(any("Required Sparrow desktop and runtime: already installed" in message for message in self.messages))
+        self.assertTrue(any("Complete Sparrow desktop: already installed" in message for message in self.messages))
         font_queries = [
             event[-1]
             for event in self.machine["events"]
@@ -749,7 +749,7 @@ class InstallerTests(unittest.TestCase):
         self.assertTrue(any("failed with exit status" in message for message in self.messages))
 
     def test_default_package_failure_stops_without_continuing_to_optional_prompt_or_deploying(self) -> None:
-        self.machine["pacman_failure_at_transaction"] = 2
+        self.machine["pacman_failure_at_transaction"] = 1
         installer = self.installer()
         self.assertEqual(installer.install(), 1)
         self.assertFalse(self.paths.config.exists())
@@ -792,21 +792,23 @@ class InstallerTests(unittest.TestCase):
         self.assertNotIn("text", kwargs)
 
     def test_interrupted_default_transaction_is_resumable_without_deployment(self) -> None:
-        self.machine["interrupt_at_transaction"] = 2
+        self.machine["interrupt_at_transaction"] = 1
         first = self.installer()
         self.assertEqual(first.install(), 130)
-        self.assertTrue(set(first.package_sets()["required"]).issubset(self.machine["packages"]))
+        self.assertTrue(set(first.package_sets()["required"]) & self.machine["packages"])
         self.assertFalse(self.paths.config.exists())
-        self.assertTrue(any("Pacman transaction for Default desktop profile was interrupted" in message for message in self.messages))
+        self.assertTrue(any("Pacman transaction for Complete Sparrow desktop was interrupted" in message for message in self.messages))
         self.assertFalse(any("Choose optional feature packages" in message for message in self.messages))
 
         self.machine["interrupt_at_transaction"] = None
+        installed_before_resume = set(self.machine["packages"])
         resumed = self.installer()
         self.assertEqual(resumed.install(), 0)
         self.assertTrue((self.paths.config / "niri/config.kdl").is_file())
         transactions = [event for event in self.machine["events"] if event[:3] == ("sudo", "pacman", "-S")]
-        self.assertEqual(len(transactions), 3)
-        self.assertTrue(any("Required Sparrow desktop and runtime: already installed" in message for message in self.messages))
+        self.assertEqual(len(transactions), 2)
+        resume_transaction = next(event for event in reversed(transactions) if event[:3] == ("sudo", "pacman", "-S"))
+        self.assertFalse(set(resume_transaction[4:]) & installed_before_resume)
         self.assertTrue((self.paths.config / "systemd/user/sparrow-shell.service").is_file())
 
     def test_prompt_interrupt_is_clean_and_does_not_traceback_or_deploy(self) -> None:
@@ -851,7 +853,7 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(self.machine["events"], [])
 
     def test_uninstall_after_interrupted_package_stage_is_safe_noop(self) -> None:
-        self.machine["interrupt_at_transaction"] = 2
+        self.machine["interrupt_at_transaction"] = 1
         self.assertEqual(self.installer().install(), 130)
         self.assertEqual(self.installer().uninstall(), 0)
         self.assertFalse(self.paths.config.exists())
@@ -875,30 +877,72 @@ class InstallerTests(unittest.TestCase):
         self.assertTrue(any("xdg-desktop-portal-gnome" in event for event in package_events))
         self.assertEqual(portal.read_bytes(), (REPO / "xdg-desktop-portal/niri-portals.conf").read_bytes())
 
-    def test_declining_replaceable_desktop_bundle_keeps_core_portal_and_shell(self) -> None:
+    def test_declining_complete_package_profile_deploys_no_sparrow_files(self) -> None:
         installer = self.installer(
-            confirm=lambda prompt, default: False if "recommended desktop apps" in prompt.lower() else default
+            confirm=lambda prompt, default: False if "install these official repository packages" in prompt.lower() else default
         )
-        self.assertEqual(installer.install(), 0)
+        self.assertEqual(installer.install(), 2)
         portal = self.paths.config / "xdg-desktop-portal/niri-portals.conf"
-        self.assertTrue(portal.is_file())
-        self.assertIn("xdg-desktop-portal-gnome", self.machine["packages"])
+        self.assertFalse(portal.exists())
+        self.assertNotIn("xdg-desktop-portal-gnome", self.machine["packages"])
         self.assertNotIn("firefox", self.machine["packages"])
 
-    def test_absent_optional_tools_do_not_block_clean_install(self) -> None:
+    def test_canonical_desktop_feature_packages_and_rishot_are_installed_by_default(self) -> None:
         installer = self.installer()
         self.assertEqual(installer.install(), 0)
-        self.assertNotIn("cava", self.machine["commands"])
-        self.assertNotIn("wlsunset", self.machine["commands"])
+        self.assertIn("cava", self.machine["commands"])
+        self.assertIn("wlsunset", self.machine["commands"])
+        self.assertIn("gpu-screen-recorder", self.machine["commands"])
+        self.assertIn("ddcutil", self.machine["commands"])
         self.assertIn("mpvpaper", self.machine["commands"])
-        self.assertTrue(any("Rishot" in message and "Super+Shift+S" in message for message in self.messages))
+        self.assertTrue((self.paths.home / ".local/bin/rishot").is_file())
+        self.assertTrue(os.access(self.paths.home / ".local/bin/rishot", os.X_OK))
+        self.assertTrue((self.paths.data / "rishot/src/shell.qml").is_file())
+        self.assertTrue((self.paths.data / "applications/rishot.desktop").is_file())
+        self.assertTrue((self.paths.data / "sparrow-shell/licenses/Rishot-LICENSE").is_file())
+        self.assertTrue(any("Installed pinned Rishot" in message for message in self.messages))
 
-    def test_greetd_packages_are_required_and_login_setup_is_opt_in(self) -> None:
+    def test_yes_accepts_default_yes_but_never_bypasses_default_no_safety(self) -> None:
+        installer = SparrowInstaller(
+            self.paths, REPO, testing=True, assume_yes=True,
+            test_machine=self.machine, output=self.messages.append,
+        )
+        self.assertTrue(installer._confirm("Install complete Sparrow profile?", True))
+        self.assertFalse(installer._confirm("Replace another display manager?", False))
+
+    def test_managed_rishot_rerun_is_idempotent_and_uninstall_preserves_user_config(self) -> None:
+        self.assertEqual(self.installer().install(), 0)
+        wrapper = self.paths.home / ".local/bin/rishot"
+        user_config = self.paths.config / "rishot/config.json"
+        user_config.parent.mkdir(parents=True)
+        user_config.write_text('{"user":"keep"}\n')
+
+        rerun = self.installer()
+        self.assertEqual(rerun.install(), 0)
+        self.assertTrue(any("already installed and unchanged" in message for message in self.messages))
+        self.assertEqual(user_config.read_text(), '{"user":"keep"}\n')
+        self.assertTrue(wrapper.is_file())
+
+        self.assertEqual(self.installer().uninstall(), 0)
+        self.assertFalse(wrapper.exists())
+        self.assertFalse((self.paths.data / "applications/rishot.desktop").exists())
+        self.assertFalse((self.paths.data / "rishot").exists())
+        self.assertTrue(user_config.is_file())
+        self.assertEqual(user_config.read_text(), '{"user":"keep"}\n')
+
+    def test_preexisting_path_rishot_is_preserved_without_managed_replacement(self) -> None:
+        self.machine["commands"].add("rishot")
+        self.assertEqual(self.installer().install(), 0)
+        self.assertFalse((self.paths.home / ".local/bin/rishot").exists())
+        self.assertFalse((self.paths.data / "rishot").exists())
+        self.assertTrue(any("preserving the existing installation" in message for message in self.messages))
+
+    def test_greetd_packages_and_clean_install_login_setup_are_default(self) -> None:
         sets = self.installer().package_sets()
         self.assertTrue({"greetd", "greetd-tuigreet"}.issubset(set(sets["required"])))
         installer = self.installer()
         self.assertEqual(installer.install(), 0)
-        self.assertFalse(self.machine.get("greetd_installed", False))
+        self.assertTrue(self.machine.get("greetd_installed", False))
 
     def test_greetd_setup_prepares_recovery_tty_and_only_enables_next_boot(self) -> None:
         def consent(prompt: str, default: bool) -> bool:
@@ -912,16 +956,6 @@ class InstallerTests(unittest.TestCase):
         self.assertFalse(any(event[:2] == ("systemctl", "start") or event[:2] == ("systemctl", "restart") for event in self.machine["system_events"]))
         root_manifest = json.loads(installer.manifest_path.read_text())
         self.assertTrue(root_manifest["greetd_managed"])
-
-    def test_declining_canonical_cursor_stops_before_deploying_sparrow(self) -> None:
-        installer = self.installer(
-            confirm=lambda prompt, default: False if "official Bibata" in prompt else self.confirm_full_profile(prompt, default)
-        )
-        self.assertEqual(installer.install(), 2)
-        self.assertFalse((self.paths.config / "niri/config.kdl").exists())
-        self.assertFalse((self.paths.config / "environment.d/90-cursor.conf").exists())
-        self.assertFalse((self.paths.config / "quickshell/sparrow").exists())
-        self.assertTrue(any("Bibata is required" in message for message in self.messages))
 
     def test_pinned_cursor_asset_is_deployed_per_user_and_restorable(self) -> None:
         installer = self.installer()
@@ -1118,6 +1152,7 @@ class InstallerTests(unittest.TestCase):
             self.paths, REPO, testing=False, run=systemctl_stub,
             confirm=lambda _prompt, default: default, output=self.messages.append,
         )
+        active_uninstaller.old["greetd_managed"] = False
         self.assertEqual(active_uninstaller.uninstall(), 0)
         self.assertTrue(runtime.is_dir())
         self.assertTrue(entry.is_dir())
@@ -1181,14 +1216,12 @@ class InstallerTests(unittest.TestCase):
     def test_package_sets_keep_unselected_aur_out_of_automatic_lists(self) -> None:
         sets = self.installer().package_sets()
         automatic = set(sets["required"] + sets["defaults"])
-        for group in sets["optional"].values():
-            automatic.update(group)
         self.assertNotIn("bibata-cursor-theme", automatic)
         self.assertIn("mpvpaper", sets["required_feature_packages"])
-        self.assertNotIn("mpvpaper", sets["manual_external"].values())
         self.assertNotIn("Bibata-Modern-Ice", automatic)
-        self.assertNotIn("Bibata Modern Ice cursor", sets["manual_external"])
+        self.assertIn("hyprlock", sets["optional"]["hyprlock-fallback"])
         self.assertEqual(self.installer().source_manifest()["cursor"]["version"], "v2.0.6")
+        self.assertEqual(sets["rishot"]["commit"], self.installer().source_manifest()["rishot"]["commit"])
 
 
 if __name__ == "__main__":

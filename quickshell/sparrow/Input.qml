@@ -258,7 +258,7 @@ SettingsSurface {
     component GroupLabel: Text {
         topPadding: 12 * root.s
         bottomPadding: 4 * root.s
-        color: Theme.faint
+        color: Theme.sectionText
         font.family: Theme.font
         font.pixelSize: 8.5 * root.s
         font.weight: Font.Bold
@@ -297,7 +297,7 @@ SettingsSurface {
             anchors.left: iconItem.visible ? iconItem.right : parent.left; anchors.leftMargin: 9 * root.s
             anchors.verticalCenter: parent.verticalCenter; spacing: 2 * root.s
             Text { text: field.label; color: Theme.cream; font.family: Theme.font; font.pixelSize: 11.5 * root.s; font.weight: Font.Medium }
-            Text { visible: (focusHover.hovered || field.focused) && field.caption.length > 0; text: field.caption; color: Theme.faint; font.family: Theme.font; font.pixelSize: 8.5 * root.s }
+            Text { visible: (focusHover.hovered || field.focused) && field.caption.length > 0; text: field.caption; color: Theme.mutedText; font.family: Theme.font; font.pixelSize: 8.5 * root.s }
         }
         Item {
             id: controls

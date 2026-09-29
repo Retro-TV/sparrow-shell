@@ -16,7 +16,7 @@ personal wallpaper library.
 | Niri input | Live's `input.kdl` and Git's bridge are byte-identical; live `user-input.kdl` supplies focus-follows-mouse alongside user-specific Num Lock/touchpad choices. The tracked `niri/defaults/user-input.kdl` holds focus-follows-mouse, tap-to-click, and Niri's existing 25/600 keyboard repeat defaults. Do **not** copy live device preferences. |
 | Niri generated colors | Live colors reflect the current bundled default wallpaper. Git contains the wallpaper, Matugen generator, and transaction helper, not a frozen palette. |
 | Displays and user binds | Live `display-outputs.kdl`, `display-binds.kdl`, `user-binds.kdl` are machine/user state; Git ships only the static fragments and the generators. |
-| Niri cursor | Live has Bibata inline. Git has the same block in a conditional fragment; the installer offers the pinned upstream v2.0.6 asset and installs it per-user before deploying that selection. |
+| Niri cursor | Live has Bibata inline. Git has the same block in a conditional fragment; the installer installs the pinned upstream v2.0.6 asset automatically when no explicit different cursor choice exists. |
 | Portal profile | Live has `Secret=gnome-keyring` without that backend installed. Git omits only that stale route; GTK FileChooser and Niri screencast/screenshot routes remain. |
 | GTK theme | Live GTK3/4 CSS is generated and current. The 106-byte Git stub was not a theme and has been removed. Git retains theme metadata and the generator; `adw-gtk-theme` supplies upstream GTK3/GTK4 CSS. Live `gtk-contained-dark.css` and `sparrow-colors.css` are stale historical files, not inputs to the active generator. |
 | Live service links | Their contents match tracked systemd units; live links point into the development checkout. Units themselves use `%h/.config/quickshell/sparrow`, not the checkout path. The installer deploys the runtime tree directly at that stable path. |
@@ -26,6 +26,12 @@ systemd and Quickshell files match their live counterparts. The existing
 `installer/test_installer.py` includes a file-level live source-map comparison;
 the Quickshell tree matched through its development symlink. No canonical
 Sparrow runtime source needs `/home/vrabko/Projects/sparrow-shell`.
+
+Rishot is an upstream MIT application rather than tracked Sparrow source. The
+installer fetches only its immutable commit archive, validates the pinned
+SHA-256, and places a managed PATH launcher and required files under XDG/user
+application locations. Existing PATH installs and Rishot user config are
+preserved; the separate screenshot binding stays `spawn "rishot"`.
 
 ### Niri 26.04 input limitation
 

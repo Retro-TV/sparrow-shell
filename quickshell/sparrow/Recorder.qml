@@ -1047,7 +1047,7 @@ PillSurface {
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
                 text: "SAVE TO"
-                color: Theme.faint
+                color: Theme.sectionText
                 font.family: Theme.font
                 font.pixelSize: 9 * root.s
                 font.weight: Font.Bold
@@ -1153,7 +1153,7 @@ PillSurface {
                     height: 16 * root.s
                     verticalAlignment: Text.AlignVCenter
                     text: "RECENT · " + ScreenRec.recentCount
-                    color: Theme.faint
+                    color: Theme.sectionText
                     font.family: Theme.font
                     font.pixelSize: 9 * root.s
                     font.weight: Font.Bold

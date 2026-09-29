@@ -14,6 +14,15 @@ Singleton {
     readonly property color vermDeep: Dyn.primaryContainer
     readonly property color cream: Dyn.cream
     readonly property color bright: Dyn.bright
+    // `cream` is the existing, live-verified on-surface foreground token.
+    // Keep this semantic alias on that token so primary labels use the same
+    // generated Matugen value consistently throughout the shell.
+    readonly property color primaryText: cream
+    readonly property color secondaryText: Dyn.onSurfaceVariant
+    readonly property color mutedText: Dyn.outline
+    readonly property color disabledText: Dyn.outlineVariant
+    readonly property color sectionText: Dyn.onSurfaceVariant
+    readonly property color accentText: Dyn.primary
     readonly property color dim: Dyn.dim
     readonly property color cardTop: Dyn.surfaceContainerHigh
     readonly property color cardBot: Dyn.surfaceContainerLow

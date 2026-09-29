@@ -392,7 +392,7 @@ PillSurface {
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
                             text: dayCol.modelData.day
-                            color: Theme.faint
+                            color: Theme.sectionText
                             font.family: Theme.font
                             font.pixelSize: 9 * root.s
                             font.weight: Font.DemiBold

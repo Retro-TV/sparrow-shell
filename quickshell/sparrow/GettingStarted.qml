@@ -65,91 +65,117 @@ PillSurface {
             showBack: true
         }
 
-        Item { width: 1; height: 8 * root.s }
+        Item { width: 1; height: 9 * root.s }
+
+        Text {
+            text: "Welcome to Sparrow"
+            color: Theme.primaryText
+            font.family: Theme.font
+            font.pixelSize: 17 * root.s
+            font.weight: Font.DemiBold
+        }
+
+        Item { width: 1; height: 3 * root.s }
 
         Text {
             width: parent.width
-            text: "The Pill is Sparrow’s main control. Hover to expand it, then choose an icon—or use a shortcut."
-            color: Theme.subtle
+            text: "Your desktop, gathered in one small Pill."
+            color: Theme.secondaryText
             font.family: Theme.font
-            font.pixelSize: 11.5 * root.s
-            wrapMode: Text.WordWrap
-            lineHeight: 1.2
+            font.pixelSize: 10.5 * root.s
         }
 
-        Item { width: 1; height: 12 * root.s }
+        Item { width: 1; height: 15 * root.s }
 
         Text {
-            text: "QUICK SHORTCUTS"
-            color: Theme.faint
+            text: "START HERE"
+            color: Theme.sectionText
             font.family: Theme.font
-            font.pixelSize: 9 * root.s
+            font.pixelSize: 8.5 * root.s
             font.weight: Font.DemiBold
             font.letterSpacing: 1.1 * root.s
         }
 
-        Column {
+        Item { width: 1; height: 6 * root.s }
+
+        Grid {
+            id: actions
             width: parent.width
-            spacing: 1 * root.s
+            columns: 2
+            rowSpacing: 6 * root.s
+            columnSpacing: 6 * root.s
 
             Repeater {
                 model: [
-                    { id: "launcher", title: "Launcher", detail: "Search installed apps", action: "launcher" },
-                    { id: "wallpaper-picker", title: "Wallpaper", detail: "Choose one · next: " + root.shortcut("wallpaper-next"), action: "wallpaper" },
-                    { id: "lock", title: "Lock", detail: "Lock the session", action: "" },
-                    { id: "recorder", title: "Recorder", detail: "Open screen recording controls", action: "recorder" }
+                    { id: "launcher", title: "Launcher", detail: "Find and open apps", icon: "app-window", action: "launcher" },
+                    { id: "wallpaper-picker", title: "Wallpaper", detail: "Choose your scene", icon: "monitor", action: "wallpaper" },
+                    { id: "keybinds", title: "Keybinds", detail: "See or edit shortcuts", icon: "keyboard", action: "keybinds" },
+                    { id: "recorder", title: "Recorder", detail: "Capture your screen", icon: "video", action: "recorder" }
                 ]
 
-                delegate: Item {
-                    id: shortcutRow
+                delegate: Rectangle {
+                    id: actionCard
                     required property var modelData
-                    width: parent.width
-                    height: 39 * root.s
+                    width: (actions.width - actions.columnSpacing) / 2
+                    height: 62 * root.s
+                    readonly property string shortcutLabel: root.shortcut(modelData.id)
+                    radius: 10 * root.s
+                    color: cardMouse.containsMouse ? Theme.frameBg : Theme.tileBg
+                    border.width: 1
+                    border.color: cardMouse.containsMouse ? Qt.alpha(Theme.vermLit, 0.4) : Theme.hairSoft
+                    Behavior on color { ColorAnimation { duration: Motion.fast } }
+                    Behavior on border.color { ColorAnimation { duration: Motion.fast } }
 
-                    readonly property bool actionable: modelData.action.length > 0
-
-                    Rectangle {
-                        anchors.fill: parent
-                        anchors.topMargin: 2 * root.s
-                        anchors.bottomMargin: 2 * root.s
-                        radius: 7 * root.s
-                        color: shortcutMouse.containsMouse ? Theme.frameBg : "transparent"
-                        Behavior on color { ColorAnimation { duration: Motion.fast } }
+                    GlyphIcon {
+                        anchors.left: parent.left
+                        anchors.leftMargin: 10 * root.s
+                        anchors.top: parent.top
+                        anchors.topMargin: 11 * root.s
+                        width: 16 * root.s
+                        height: 16 * root.s
+                        name: actionCard.modelData.icon
+                        color: Theme.accentText
+                        stroke: 1.8
                     }
 
-                    Column {
+                    Text {
                         anchors.left: parent.left
-                        anchors.leftMargin: 8 * root.s
+                        anchors.leftMargin: 10 * root.s
                         anchors.right: keycap.left
-                        anchors.rightMargin: 8 * root.s
-                        anchors.verticalCenter: parent.verticalCenter
-                        spacing: 2 * root.s
+                        anchors.rightMargin: 5 * root.s
+                        anchors.top: parent.top
+                        anchors.topMargin: 31 * root.s
+                        text: actionCard.modelData.title
+                        color: Theme.primaryText
+                        font.family: Theme.font
+                        font.pixelSize: 10 * root.s
+                        font.weight: Font.DemiBold
+                        elide: Text.ElideRight
+                    }
 
-                        Text {
-                            text: shortcutRow.modelData.title
-                            color: Theme.cream
-                            font.family: Theme.font
-                            font.pixelSize: 11.5 * root.s
-                            font.weight: Font.DemiBold
-                        }
-                        Text {
-                            width: parent.width
-                            text: shortcutRow.modelData.detail
-                            color: Theme.subtle
-                            font.family: Theme.font
-                            font.pixelSize: 9.5 * root.s
-                            elide: Text.ElideRight
-                        }
+                    Text {
+                        anchors.left: parent.left
+                        anchors.leftMargin: 10 * root.s
+                        anchors.right: keycap.left
+                        anchors.rightMargin: 5 * root.s
+                        anchors.top: parent.top
+                        anchors.topMargin: 45 * root.s
+                        text: actionCard.modelData.detail
+                        color: Theme.secondaryText
+                        font.family: Theme.font
+                        font.pixelSize: 8 * root.s
+                        elide: Text.ElideRight
                     }
 
                     Rectangle {
                         id: keycap
                         anchors.right: parent.right
-                        anchors.rightMargin: 7 * root.s
+                        anchors.rightMargin: 8 * root.s
                         anchors.verticalCenter: parent.verticalCenter
-                        width: keyText.implicitWidth + 14 * root.s
-                        height: 23 * root.s
-                        radius: 6 * root.s
+                        visible: actionCard.shortcutLabel !== "—"
+                        width: visible ? keyText.implicitWidth + 10 * root.s : 0
+                        height: 19 * root.s
+                        radius: 5 * root.s
                         color: Theme.frameBg
                         border.width: 1
                         border.color: Theme.hairSoft
@@ -157,97 +183,75 @@ PillSurface {
                         Text {
                             id: keyText
                             anchors.centerIn: parent
-                            text: root.shortcut(shortcutRow.modelData.id)
-                            color: Theme.cream
+                            text: actionCard.shortcutLabel
+                            color: Theme.secondaryText
                             font.family: Theme.font
-                            font.pixelSize: 9.5 * root.s
+                            font.pixelSize: 8 * root.s
                             font.weight: Font.DemiBold
                         }
                     }
 
                     MouseArea {
-                        id: shortcutMouse
+                        id: cardMouse
                         anchors.fill: parent
-                        enabled: shortcutRow.actionable
                         hoverEnabled: true
-                        cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                        onClicked: root.activateAction(shortcutRow.modelData.action)
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.activateAction(actionCard.modelData.action)
                     }
                 }
+            }
+        }
+
+        Item { width: 1; height: 12 * root.s }
+        Rectangle { width: parent.width; height: 1; color: Theme.hairSoft }
+        Item { width: 1; height: 9 * root.s }
+
+        Item {
+            width: parent.width
+            height: 18 * root.s
+
+            Row {
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 8 * root.s
+
+                GlyphIcon {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 15 * root.s
+                    height: 15 * root.s
+                    name: "lock"
+                    color: Theme.iconDim
+                    stroke: 1.8
+                }
+
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "Lock your session"
+                    color: Theme.secondaryText
+                    font.family: Theme.font
+                    font.pixelSize: 9.5 * root.s
+                }
+            }
+
+            Text {
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                text: root.shortcut("lock")
+                color: Theme.primaryText
+                font.family: Theme.font
+                font.pixelSize: 9 * root.s
+                font.weight: Font.DemiBold
             }
         }
 
         Item { width: 1; height: 9 * root.s }
-        Rectangle { width: parent.width; height: 1; color: Theme.hairSoft }
-        Item { width: 1; height: 8 * root.s }
 
         Text {
             width: parent.width
-            text: "Wallpapers use your configured folder; Sparrow Default is always available. Dynamic colors are the default and follow the wallpaper; choose a palette style under Settings → Appearance."
-            color: Theme.subtle
+            text: "Open the gear for settings. Wallpaper colors adapt automatically."
+            color: Theme.mutedText
             font.family: Theme.font
-            font.pixelSize: 10.5 * root.s
+            font.pixelSize: 9 * root.s
             wrapMode: Text.WordWrap
-            lineHeight: 1.18
-        }
-
-        Item { width: 1; height: 5 * root.s }
-
-        Text {
-            width: parent.width
-            text: "Click the Pill’s gear for Settings. Keybinds there lists and edits shortcuts."
-            color: Theme.subtle
-            font.family: Theme.font
-            font.pixelSize: 10.5 * root.s
-            wrapMode: Text.WordWrap
-            lineHeight: 1.18
-        }
-
-        Item { width: 1; height: 12 * root.s }
-
-        Row {
-            width: parent.width
-            spacing: 6 * root.s
-
-            Repeater {
-                model: [
-                    { label: "Launcher", action: "launcher", done: false },
-                    { label: "Wallpaper", action: "wallpaper", done: false },
-                    { label: "Keybinds", action: "keybinds", done: false },
-                    { label: "Done", action: "done", done: true }
-                ]
-
-                delegate: Rectangle {
-                    id: actionButton
-                    required property var modelData
-                    width: actionLabel.implicitWidth + 18 * root.s
-                    height: 27 * root.s
-                    radius: 7 * root.s
-                    color: actionMouse.containsMouse
-                        ? (modelData.done ? Theme.vermLit : Theme.frameBg)
-                        : (modelData.done ? Qt.alpha(Theme.vermLit, 0.18) : "transparent")
-                    border.width: modelData.done ? 1 : 0
-                    border.color: Qt.alpha(Theme.vermLit, 0.42)
-
-                    Text {
-                        id: actionLabel
-                        anchors.centerIn: parent
-                        text: actionButton.modelData.label
-                        color: actionButton.modelData.done ? Theme.cream : Theme.iconDim
-                        font.family: Theme.font
-                        font.pixelSize: 9.5 * root.s
-                        font.weight: Font.DemiBold
-                    }
-
-                    MouseArea {
-                        id: actionMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.activateAction(actionButton.modelData.action)
-                    }
-                }
-            }
         }
     }
 }

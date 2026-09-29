@@ -30,8 +30,12 @@
     "xdg-desktop-portal-gtk",
     "xdg-desktop-portal-gnome",
     "qt6-5compat",
+    "qt6-declarative",
     "qt6-multimedia",
     "qt6-multimedia-ffmpeg",
+    "qt6-svg",
+    "qt6-wayland",
+    "wl-clipboard",
     "pipewire",
     "wireplumber",
     "pipewire-pulse",
@@ -46,7 +50,6 @@
   ],
   "defaults": [
     "curl",
-    "wl-clipboard",
     "ffmpeg",
     "tumbler",
     "gvfs",
@@ -54,27 +57,32 @@
     "firefox",
     "pavucontrol",
     "xdg-utils",
-    "libnotify"
+    "libnotify",
+    "grim",
+    "gpu-screen-recorder",
+    "slurp",
+    "networkmanager",
+    "bluez",
+    "bluez-utils",
+    "upower",
+    "wlsunset",
+    "cava",
+    "brightnessctl",
+    "ddcutil",
+    "imagemagick"
   ],
-  "required_executables": ["niri", "qs", "python3", "bash", "jq", "matugen", "awww", "awww-daemon", "mpvpaper", "wpctl", "gtk-launch", "kitty", "fish", "starship", "greetd", "tuigreet", "thunar", "fc-match"],
+  "required_executables": ["niri", "qs", "python3", "bash", "jq", "matugen", "awww", "awww-daemon", "mpvpaper", "wpctl", "gtk-launch", "kitty", "fish", "starship", "greetd", "tuigreet", "thunar", "fc-match", "wl-copy", "wl-paste", "gpu-screen-recorder", "slurp", "nmcli", "bluetoothctl", "upower", "wlsunset", "cava", "brightnessctl", "ddcutil", "magick", "grim"],
   "required_feature_packages": ["mpvpaper"],
   "platform_executables": ["systemctl", "systemd-analyze", "env", "gio", "udevadm", "ps"],
   "required_python_modules": ["PIL.Image", "gi"],
   "polkit_agent": {"package": "lxqt-policykit", "executable": "lxqt-policykit-agent"},
   "optional": {
-    "recording": ["gpu-screen-recorder", "slurp"],
-    "network-bluetooth-battery": ["networkmanager", "bluez", "bluez-utils", "upower"],
-    "night-light": ["wlsunset"],
-    "audio-visualizer": ["cava"],
-    "brightness-hardware": ["brightnessctl", "ddcutil"],
-    "wallpaper-search": ["imagemagick"],
     "hyprlock-fallback": ["hyprlock"]
   },
-  "manual_external": {
-    "Rishot screenshot app (separate upstream project)": "rishot-git"
-  },
-  "manual_optional": {
-    "NVIDIA vibrance": "nvibrant has no Sparrow-selected official Arch package; source/package is user and driver specific.",
-    "Rishot": "Install using its upstream-supported method; Sparrow does not clone or run a remote installer."
+  "rishot": {
+    "commit": "a87427a9083981315a080133636c38d8ca565d0e",
+    "archive_url": "https://codeload.github.com/Gakuseei/rishot/tar.gz/a87427a9083981315a080133636c38d8ca565d0e",
+    "sha256": "b033609f65bf5cf1b39a7ad9fee5866a87f965b507ea33158648fe4567137ce9",
+    "license": "MIT"
   }
 }

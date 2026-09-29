@@ -228,6 +228,7 @@ class SparrowInstaller:
         repo: Path = ROOT,
         *,
         dry_run: bool = False,
+        assume_yes: bool = False,
         testing: bool = False,
         confirm: Callable[[str, bool], bool] | None = None,
         run: Callable[..., subprocess.CompletedProcess] | None = None,
@@ -237,6 +238,7 @@ class SparrowInstaller:
         self.paths = paths or XdgPaths.from_environment()
         self.repo = repo
         self.dry_run = dry_run
+        self.assume_yes = assume_yes
         self.testing = testing
         self.confirm = confirm or self._confirm
         if testing and run is not None:
@@ -281,9 +283,9 @@ class SparrowInstaller:
         self.bibata_defaults_enabled = False
         self.bibata_asset_source: Path | None = None
         self._bibata_temp: tempfile.TemporaryDirectory | None = None
-        self.skipped_optional_groups: list[str] = []
-        self.default_profile_skipped = False
         self.missing_manual: list[str] = []
+        self.rishot_installed = False
+        self.rishot_external = False
         self.settings_before: dict[str, str | None] = {}
 
     def _which(self, executable: str) -> str | None:
@@ -316,7 +318,11 @@ class SparrowInstaller:
             "greetd": {"greetd"}, "greetd-tuigreet": {"tuigreet"},
             "thunar": {"thunar"}, "fontconfig": {"fc-match"},
             "firefox": {"firefox"}, "pavucontrol": {"pavucontrol"},
-            "xdg-utils": {"xdg-open"}, "libnotify": {"notify-send"},
+            "xdg-utils": {"xdg-open"}, "libnotify": {"notify-send"}, "grim": {"grim"},
+            "gpu-screen-recorder": {"gpu-screen-recorder"}, "slurp": {"slurp"},
+            "networkmanager": {"nmcli"}, "bluez-utils": {"bluetoothctl"},
+            "upower": {"upower"}, "wlsunset": {"wlsunset"}, "cava": {"cava"},
+            "brightnessctl": {"brightnessctl"}, "ddcutil": {"ddcutil"}, "imagemagick": {"magick"},
         }
         if args[:2] == ["pacman", "-Qq"]:
             if self.test_machine["pacman_query_failure"]:
@@ -365,6 +371,8 @@ class SparrowInstaller:
                     break
         elif args and args[0] == "bash" and "-n" in args:
             pass
+        elif args and args[-1:] == ["--help"] and (args[0] == "rishot" or Path(args[0]).name == "rishot"):
+            stdout = "rishot - screenshot + annotate\n"
         elif args and args[0] == "fc-match":
             stdout = self.test_machine.get("fontconfig", {}).get(args[-1], args[-1])
         elif args and args[0] == "xdg-user-dir":
@@ -402,8 +410,14 @@ class SparrowInstaller:
 
     def _confirm(self, prompt: str, default: bool = False) -> bool:
         if not sys.stdin.isatty():
+            if self.assume_yes and default:
+                self.output(f"Non-interactive --yes: accepted default for: {prompt}")
+                return True
             self.output("Cannot ask for consent without an interactive terminal; treating this prompt as declined.")
             return False
+        if self.assume_yes and default:
+            self.output(f"--yes: accepted default for: {prompt}")
+            return True
         suffix = "Y/n" if default else "y/N"
         answer = input(f"{prompt} [{suffix}] ").strip().lower()
         if not answer:
@@ -605,6 +619,10 @@ class SparrowInstaller:
             raise ValueError("Installer package set 'polkit_agent' must specify a package and executable.")
         if not isinstance(sets.get("manual_external", {}), dict):
             raise ValueError("Installer package set 'manual_external' must be a JSON object.")
+        rishot = sets.get("rishot")
+        if not isinstance(rishot, dict) or any(not isinstance(rishot.get(key), str) for key in
+                ("commit", "archive_url", "sha256", "license")) or not re.fullmatch(r"[0-9a-f]{40}", rishot["commit"]) or not re.fullmatch(r"[0-9a-f]{64}", rishot["sha256"]):
+            raise ValueError("Installer package set must pin the upstream Rishot commit and archive SHA-256.")
         return sets
 
     def source_manifest(self) -> dict:
@@ -628,6 +646,14 @@ class SparrowInstaller:
             for key in ("theme", "version", "asset", "directory", "install_url", "install_directory", "sha256")
         ) or not re.fullmatch(r"[0-9a-f]{64}", cursor["sha256"]):
             raise ValueError("SOURCE-OF-TRUTH.json must pin the cursor asset URL, version, destination, and SHA-256.")
+        rishot = manifest.get("rishot")
+        if not isinstance(rishot, dict) or any(not isinstance(rishot.get(key), str) for key in
+                ("commit", "archive_url", "sha256", "license")) or not re.fullmatch(r"[0-9a-f]{40}", rishot["commit"]) or not re.fullmatch(r"[0-9a-f]{64}", rishot["sha256"]):
+            raise ValueError("SOURCE-OF-TRUTH.json must pin Rishot's upstream source commit and archive SHA-256.")
+        package_rishot = self.package_sets().get("rishot", {})
+        if any(package_rishot.get(key) != rishot.get(key)
+               for key in ("commit", "archive_url", "sha256", "license")):
+            raise ValueError("SOURCE-OF-TRUTH.json and package-sets.json must agree on the pinned Rishot source and license.")
         system_integrations = manifest.get("system_integrations", {})
         greetd = system_integrations.get("greetd") if isinstance(system_integrations, dict) else None
         if greetd is not None and (
@@ -762,7 +788,8 @@ class SparrowInstaller:
             required_packages.append(package)
         if not agent_exists:
             required_packages.append(sets["polkit_agent"]["package"])
-        for group, names in (("Required", required_packages), ("Defaults", sets["defaults"]), *sets["optional"].items()):
+        desktop_packages = list(dict.fromkeys([*required_packages, *sets["defaults"]]))
+        for group, names in (("Complete Sparrow desktop", desktop_packages), *sets["optional"].items()):
             present = sorted(set(names) & installed)
             missing = sorted(set(names) - installed)
             self.output(f"Detected {group} packages present: " + (", ".join(present) if present else "none"))
@@ -777,12 +804,12 @@ class SparrowInstaller:
         ):
             self.output(f"Detected {label}: {'available' if available else 'not found'}")
         if self.dry_run:
-            self.output("Manual external items (not installed by Sparrow): " + "; ".join(f"{k}: {v}" for k, v in sets["manual_external"].items()))
+            self.output("Rishot is pinned to upstream commit " + self.source_manifest()["rishot"]["commit"] + ".")
             if not bibata_available:
                 cursor = self.source_manifest()["cursor"]
-                self.output(f"Would offer to download the pinned Bibata {cursor['version']} archive to {cursor['install_directory']}.")
+                self.output(f"Would install pinned Bibata {cursor['version']} at {cursor['install_directory']}.")
             return True
-        if not self._install_package_list(required_packages, label="Required Sparrow desktop and runtime", required=True):
+        if not self._install_package_list(desktop_packages, label="Complete Sparrow desktop", required=True):
             return False
         if not self._verify_required_runtime(sets):
             return False
@@ -794,12 +821,7 @@ class SparrowInstaller:
         if wants_bibata_default and not self.bibata_available:
             asset = self.source_manifest()["cursor"]
             target = self.paths.data / "icons" / asset["directory"]
-            if not self.confirm(
-                f"Download the official Bibata {asset['version']} archive and install it for this user at {target}?",
-                True,
-            ):
-                self.output("Bibata is required for Sparrow's canonical fresh-install cursor. Install the pinned upstream asset as documented, then rerun; no Sparrow files were deployed.")
-                return False
+            self.output(f"Installing Sparrow's pinned Bibata {asset['version']} cursor asset for this user at {target}.")
             if not self._prepare_bibata_asset(asset):
                 self.output("No Sparrow files were deployed. Fix network/archive access and rerun the installer.")
                 return False
@@ -819,24 +841,8 @@ class SparrowInstaller:
         self.install_polkit_agent = not agent_exists and self._which(sets["polkit_agent"]["executable"]) is not None
         if not agent_exists and not self.install_polkit_agent:
             self.output("No existing or installed graphical Polkit agent was detected; privileged prompts will not have a Sparrow agent.")
-        if self.confirm("Install Sparrow's recommended desktop apps, fonts, GTK theme and portal integrations?", True):
-            defaults = list(sets["defaults"])
-            if not self._install_package_list(defaults, label="Default desktop profile"):
-                self.default_profile_skipped = True
-                self.output("Recommended desktop bundle declined. App shortcuts/integrations for uninstalled apps will be unavailable.")
-        else:
-            self.default_profile_skipped = True
-        optional = sets["optional"]
-        if self.confirm("Choose optional feature packages (recording, Night Light, visualizer, hardware integrations)?", False):
-            for group, packages in optional.items():
-                if self.confirm(f"  Include optional group '{group}' ({', '.join(packages)})?", False):
-                    if not self._install_package_list(packages, label=f"Optional {group}"):
-                        self.skipped_optional_groups.append(group)
-                else:
-                    self.skipped_optional_groups.append(group)
-        else:
-            self.skipped_optional_groups.extend(optional)
-        self.output("Sparrow does not install AUR or upstream applications. Manual external items: " + "; ".join(f"{k}: {v}" for k, v in sets["manual_external"].items()))
+        if sets["optional"].get("hyprlock-fallback"):
+            self.output("Optional Hyprlock fallback is not installed; Sparrow's Quickshell session lock remains primary.")
         greetd_plan = self._command([
             "python3", str(self.repo / "installer/greetd_system.py"), "plan", "--repo", str(self.repo),
         ])
@@ -848,18 +854,14 @@ class SparrowInstaller:
             except json.JSONDecodeError:
                 planned_login = {"display_manager": "unknown"}
             current_manager = planned_login.get("display_manager")
-            self.configure_greetd = self.confirm(
-                "Use Sparrow's tested greetd/tuigreet login manager for future boots? tty2 recovery is prepared first; the current session will not be stopped or restarted."
-                + (f" Existing {current_manager} would be disabled only for future boots." if current_manager else ""),
-                current_manager is None,
-            )
+            self.configure_greetd = current_manager is None
+            if current_manager:
+                self.configure_greetd = self.confirm(
+                    f"Replace {current_manager} with Sparrow's tested greetd/tuigreet login manager for future boots? tty2 recovery is prepared first; the current session will not be stopped or restarted.",
+                    False,
+                )
             if not self.configure_greetd:
                 self.output("Preserving the current login-manager setup; greetd files will not be installed or enabled.")
-        for executable, label in (("rishot", "Rishot screenshots"),):
-            if self._which(executable) is None:
-                self.missing_manual.append(label)
-        if self._which("rishot") is None:
-            self.output("Screenshot shortcut Super+Shift+S requires the separate Rishot application; install it manually from its upstream-supported source.")
         return True
 
     def _verify_required_runtime(self, sets: dict) -> bool:
@@ -980,6 +982,124 @@ class SparrowInstaller:
             self._bibata_temp.cleanup()
             self._bibata_temp = None
             return False
+
+    def _prepare_rishot_source(self, spec: dict) -> Path:
+        """Fetch and validate the immutable upstream source archive, never run its installer."""
+        self._rishot_temp = tempfile.TemporaryDirectory(prefix="sparrow-rishot-")
+        temporary_root = Path(self._rishot_temp.name)
+        archive = temporary_root / "rishot.tar.gz"
+        if self.testing:
+            source_root = temporary_root / f"rishot-{spec['commit']}"
+            (source_root / "src").mkdir(parents=True)
+            (source_root / "bin").mkdir()
+            (source_root / "packaging").mkdir()
+            (source_root / "src/shell.qml").write_text("// simulated pinned Rishot source\n")
+            (source_root / "bin/rishot").write_text("#!/bin/sh\n[ \"${1:-}\" = --help ] && exit 0\nexit 0\n")
+            (source_root / "LICENSE").write_text("MIT License\nCopyright (c) 2026 Gakuseei\n")
+            (source_root / "rishot.desktop").write_text("[Desktop Entry]\nName=rishot\nExec=rishot\nType=Application\n")
+            (source_root / "packaging/rishot.svg").write_text("<svg xmlns=\"http://www.w3.org/2000/svg\"/>\n")
+            self._rishot_source = source_root
+            return source_root
+
+        digest = hashlib.sha256()
+        try:
+            with urlopen(spec["archive_url"], timeout=45) as response, archive.open("wb") as output:
+                while chunk := response.read(1024 * 1024):
+                    digest.update(chunk)
+                    output.write(chunk)
+            if digest.hexdigest() != spec["sha256"]:
+                raise RuntimeError("downloaded source archive did not match the pinned SHA-256")
+            extracted = temporary_root / "extract"
+            extracted.mkdir()
+            expected_root = f"rishot-{spec['commit']}"
+            with tarfile.open(archive, "r:gz") as tar:
+                members = tar.getmembers()
+                for member in members:
+                    path = Path(member.name)
+                    if path.is_absolute() or ".." in path.parts or not (member.name == expected_root or member.name.startswith(expected_root + "/")):
+                        raise RuntimeError("archive contains a path outside the pinned Rishot source root")
+                    if member.issym() or member.islnk() or not (member.isdir() or member.isfile()):
+                        raise RuntimeError("archive contains an unsupported link or special file")
+                tar.extractall(extracted, members=members, filter="data")
+            source = extracted / expected_root
+            required = (source / "src/shell.qml", source / "bin/rishot", source / "LICENSE",
+                        source / "rishot.desktop", source / "packaging/rishot.svg")
+            if any(not path.is_file() for path in required):
+                raise RuntimeError("pinned archive is missing required source, launcher, icon, desktop entry, or license")
+            self._rishot_source = source
+            return source
+        except Exception:
+            self._rishot_temp.cleanup()
+            self._rishot_temp = None
+            raise
+
+    def _install_rishot(self) -> None:
+        wrapper = self.paths.home / ".local/bin/rishot"
+        old_record = self.managed.get(str(wrapper))
+        if self._which("rishot") is not None and old_record is None:
+            result = self._command(["rishot", "--help"])
+            if result.returncode == 0:
+                self.rishot_external = True
+                self.output("Rishot is already available on PATH; preserving the existing installation and configuration.")
+            else:
+                self.missing_manual.append("existing Rishot command failed its --help check; existing files were preserved")
+                self.output("An existing Rishot command is on PATH but did not pass --help; preserving it rather than replacing an unowned installation.")
+            return
+
+        spec = self.source_manifest()["rishot"]
+        root = self.paths.data / "rishot"
+        revision = root / ".sparrow-upstream-revision"
+        revision_record = self.managed.get(str(revision), {})
+        if (old_record and revision_record
+                and is_regular_file(revision)
+                and revision.read_text(encoding="utf-8").strip() == spec["commit"]
+                and sha256_file(wrapper) == old_record.get("sha256")
+                and is_regular_file(root / "bin/rishot")
+                and sha256_file(root / "bin/rishot") == self.managed.get(str(root / "bin/rishot"), {}).get("sha256")
+                and is_regular_file(revision.parent / "src/shell.qml")
+                and tree_digest(root / "src") == self.managed.get(str(root / "src"), {}).get("sha256")):
+            self.rishot_installed = True
+            self.output(f"Rishot {spec['commit'][:12]} is already installed and unchanged; keeping it.")
+            return
+
+        try:
+            source = self._prepare_rishot_source(spec)
+        except Exception as error:
+            raise RuntimeError(f"Could not prepare pinned Rishot {spec['commit'][:12]}: {error}") from error
+
+        if not self.write_tree(root / "src", source / "src", role="pinned upstream Rishot source"):
+            raise RuntimeError("Existing Rishot source was preserved; no competing launcher was installed.")
+        payloads = (
+            (root / "bin/rishot", source / "bin/rishot", 0o755, "pinned upstream Rishot launcher"),
+            (self.paths.data / "applications/rishot.desktop", source / "rishot.desktop", 0o644, "Rishot desktop entry"),
+            (self.paths.data / "icons/hicolor/scalable/apps/rishot.svg", source / "packaging/rishot.svg", 0o644, "Rishot application icon"),
+            (self.paths.data / "sparrow-shell/licenses/Rishot-LICENSE", source / "LICENSE", 0o644, "Rishot license notice"),
+            (revision, (spec["commit"] + "\n").encode(), 0o644, "Rishot upstream revision marker"),
+        )
+        for target, src, mode, role in payloads:
+            payload = src.read_bytes() if isinstance(src, Path) else src
+            if not self.write_file(target, payload, mode=mode, role=role):
+                raise RuntimeError(f"Existing file was preserved instead of installing Rishot: {target}")
+        wrapper_text = (
+            "#!/bin/sh\nset -eu\n"
+            'data="${XDG_DATA_HOME:-${HOME:?}/.local/share}"\n'
+            'exec "$data/rishot/bin/rishot" "$@"\n'
+        )
+        if not self.write_file(wrapper, wrapper_text.encode(), mode=0o755, role="Rishot PATH launcher"):
+            raise RuntimeError(f"Existing Rishot command was preserved: {wrapper}")
+        if self.testing:
+            self.test_machine["commands"].add("rishot")
+        check = self._command([str(wrapper), "--help"])
+        if check.returncode:
+            raise RuntimeError("installed Rishot launcher did not pass its non-mutating --help check")
+        self.rishot_installed = True
+        self.output(f"Installed pinned Rishot {spec['commit'][:12]} at {wrapper}; screenshot binding resolves it through PATH.")
+
+    def _cleanup_rishot_stage(self) -> None:
+        staged = getattr(self, "_rishot_temp", None)
+        if staged is not None:
+            staged.cleanup()
+            self._rishot_temp = None
 
     @staticmethod
     def _desktop_hidden_value(content: str) -> str | None:
@@ -1567,8 +1687,9 @@ class SparrowInstaller:
             # is intentionally deferred until after the approved transaction.
             _, niri_plan, _ = self._planned_niri(validate=False)
             plan = self._build_file_plan(niri_plan)
-            self.output("Planned: portable runtime, Niri defaults, user services, scoped portal/GTK integration, and selected desktop defaults.")
-            self.output("User state, wallpapers, generated palettes, caches, and monitor layout will be preserved.")
+            self.output("Sparrow Shell — complete desktop profile")
+            self.output("Plan: Niri + Quickshell, themes and fonts, screenshot/recording, wallpaper, tray and session integration.")
+            self.output("Preserved: your user choices, personal wallpapers, generated state, caches and monitor layout.")
             if self.dry_run:
                 for path, _, role, _ in plan:
                     self.output(f"  {role}: {path}")
@@ -1586,7 +1707,7 @@ class SparrowInstaller:
                         self.output("Stopped before changing Niri or Sparrow files.")
                         return 2
             if self.dry_run:
-                self.output("[2/6] Checking package availability (dry-run; no transactions)")
+                self.output("[2/6] Packages — checking availability (dry run; no transactions)")
                 if not self.resolve_packages():
                     return 2
                 self.output("Dry run complete; no files, packages, services, or user settings changed.")
@@ -1595,20 +1716,21 @@ class SparrowInstaller:
             # install it before validating the staged Niri graph, but validate
             # before modifying any user configuration. Shared packages are
             # intentionally never removed on a later deployment failure.
-            self.output("[2/6] Resolving required, recommended, and optional packages")
+            self.output("[2/6] Packages — install the complete Sparrow profile")
             if not self.resolve_packages():
                 self.output("Required packages were declined or unavailable; no Sparrow files were deployed.")
                 return 2
             _, niri_plan, _ = self._planned_niri(validate=True)
             plan = self._build_file_plan(niri_plan)
-            self.output("[3/6] Validating staged Niri configuration and Sparrow services")
+            self.output("[3/6] Configuration — validate Niri and user services")
             self._validate_units(plan)
             self.backup_root.mkdir(parents=True, exist_ok=True, mode=0o700)
-            self.output("[4/6] Deploying Sparrow runtime and selected configuration")
+            self.output("[4/6] Appearance and runtime — deploy Sparrow files and generate app integration")
             self._deploy_manifest_directories()
             self._restore_obsolete_development_runtime()
             # A live compositor reloads Niri config on file change. Stage validation happened above.
             self._apply_plan(plan)
+            self._install_rishot()
             self._drop_unselected_cursor_files()
             self._apply_sparrow_defaults()
             notices = self.paths.data / "sparrow-shell/licenses"
@@ -1626,9 +1748,9 @@ class SparrowInstaller:
             for relative, source in legal_sources:
                 if source.is_file():
                     self.write_file(notices / relative, source.read_bytes(), role="license/attribution notice")
-            self.output("[5/6] Verifying the installed Niri configuration")
+            self.output("[5/6] Validation — verify installed Niri configuration")
             self._validate_installed_niri()
-            self.output("[6/6] Enabling session integration and saving installer state")
+            self.output("[6/6] Services and login — enable user services, prepare safe next-boot login")
             self._ensure_wallpaper_library()
             self._activate_units()
             self._configure_greetd_system()
@@ -1654,18 +1776,14 @@ class SparrowInstaller:
             if self._bibata_temp is not None:
                 self._bibata_temp.cleanup()
                 self._bibata_temp = None
+            self._cleanup_rishot_stage()
         self.output(f"Sparrow installation succeeded. Backups and restore manifest: {self.backup_root}")
         self.output("Units were enabled but not started or restarted. Log out and back into Niri to test startup.")
         self.output("Portal routing/theme changes are not applied to already-running portal processes; they take effect after the next session start.")
         if self.greetd_managed:
             self.output("greetd is enabled for the next boot only; the installer did not start or restart it. tty2 is the recovery console.")
-        if self.default_profile_skipped:
-            self.output("Recommended desktop apps/integrations were skipped; some default shortcuts and app theming will be unavailable.")
-        if self.skipped_optional_groups:
-            self.output("Optional groups skipped: " + ", ".join(self.skipped_optional_groups))
-        if self.missing_manual:
-            self.output("Manual/external items still missing: " + ", ".join(self.missing_manual) + ".")
-        self.output("Next: log out, choose Niri in your session menu, and log in. If no session menu exists, start `niri-session` from a TTY.")
+        self.output("Complete Sparrow desktop components are installed by default. Optional Hyprlock fallback was not installed.")
+        self.output("Next: log out, choose Niri in your session menu, and log in; use tty2 as the recovery console if needed.")
         self.output("Uninstall later with `./uninstall.sh`; recovery state is kept under " + str(self.state_root) + ".")
         return 0
 
@@ -1869,6 +1987,20 @@ class SparrowInstaller:
                     restore_snapshot(path, record.get("initial", {"exists": False}))
             elif not self.dry_run:
                 remove_path(path)
+        rishot_root = self.paths.data / "rishot"
+        if (not self.dry_run and rishot_root.is_dir()
+                and any(record.get("role", "").startswith(("pinned upstream Rishot", "Rishot "))
+                        for record in self.old.get("managed", {}).values())):
+            for directory, subdirs, _files in os.walk(rishot_root, topdown=False):
+                for name in subdirs:
+                    try:
+                        (Path(directory) / name).rmdir()
+                    except OSError:
+                        pass
+            try:
+                rishot_root.rmdir()
+            except OSError:
+                pass
         if defer_runtime_cleanup:
             self.output("Sparrow is still active. Its runtime and entry point were preserved; run ./uninstall.sh again after logging out to finish cleanup.")
         if not self.dry_run:
@@ -1920,6 +2052,7 @@ class SparrowInstaller:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Install or restore Sparrow Shell user configuration.")
     parser.add_argument("--dry-run", action="store_true", help="show actions without changing files or packages")
+    parser.add_argument("--yes", action="store_true", help="accept normal default-yes actions; safety/conflict prompts remain interactive")
     parser.add_argument("--uninstall", action="store_true", help="remove Sparrow-owned integration and restore backups")
     parser.add_argument("--remove-instead-of-restore", action="store_true", help="remove unchanged Sparrow-owned files instead of restoring prior versions")
     parser.add_argument("--stop-now", action="store_true", help="during uninstall, stop active Sparrow units now")
@@ -1930,11 +2063,11 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("--testing-root is test-only")
         root = args.testing_root.resolve()
         paths = XdgPaths(root, root / ".config", root / ".local/share", root / ".local/state", root / ".cache")
-        installer = SparrowInstaller(paths, dry_run=args.dry_run, testing=True)
+        installer = SparrowInstaller(paths, dry_run=args.dry_run, assume_yes=args.yes, testing=True)
     else:
         if os.geteuid() == 0:
             parser.error("run as your normal user; Sparrow uses sudo only for approved package installation")
-        installer = SparrowInstaller(dry_run=args.dry_run)
+        installer = SparrowInstaller(dry_run=args.dry_run, assume_yes=args.yes)
     if args.uninstall:
         try:
             return installer.uninstall(stop_now=args.stop_now, restore=not args.remove_instead_of_restore)

@@ -26,6 +26,7 @@ shell to start.
 | `systemd` and `dbus` | User services, graphical-session target, session bus and Quickshell desktop-service integration. |
 | `pam` | System PAM stack used by Quickshell's primary secure session lock. |
 | `polkit` plus one graphical authentication agent | The daemon alone cannot display authorization prompts. Sparrow recommends `lxqt-policykit` only when the user has no existing agent; preserve an existing agent rather than starting a second. |
+| `greetd`, `greetd-tuigreet` | Sparrow's tested terminal login flow. Packages are installed/verified with the core set; enabling tty1 login remains an explicit system-level opt-in with tty2 recovery and backups. |
 
 Quickshell's Arch package depends on Qt 6 base/declarative/SVG/Wayland
 components. Sparrow's video preview additionally uses `qt6-multimedia` and

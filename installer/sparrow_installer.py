@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import tomllib
 from typing import Callable
 from urllib.request import urlopen
 
@@ -274,6 +275,8 @@ class SparrowInstaller:
         self.enabled_by_sparrow: set[str] = set(self.old.get("enabled_by_sparrow", []))
         self._installed_package_cache: set[str] | None = None
         self.install_polkit_agent = False
+        self.configure_greetd = False
+        self.greetd_managed = bool(self.old.get("greetd_managed", False))
         self.bibata_available = False
         self.bibata_defaults_enabled = False
         self.bibata_asset_source: Path | None = None
@@ -309,7 +312,9 @@ class SparrowInstaller:
             "curl": {"curl"}, "imagemagick": {"magick"}, "wl-clipboard": {"wl-copy", "wl-paste"},
             "gpu-screen-recorder": {"gpu-screen-recorder"}, "slurp": {"slurp"},
             "hyprlock": {"hyprlock"}, "kitty": {"kitty"}, "fish": {"fish"},
-            "starship": {"starship"}, "thunar": {"thunar"}, "fontconfig": {"fc-match"},
+            "starship": {"starship"},
+            "greetd": {"greetd"}, "greetd-tuigreet": {"tuigreet"},
+            "thunar": {"thunar"}, "fontconfig": {"fc-match"},
             "firefox": {"firefox"}, "pavucontrol": {"pavucontrol"},
             "xdg-utils": {"xdg-open"}, "libnotify": {"notify-send"},
         }
@@ -364,6 +369,23 @@ class SparrowInstaller:
             stdout = self.test_machine.get("fontconfig", {}).get(args[-1], args[-1])
         elif args and args[0] == "xdg-user-dir":
             stdout = self.test_machine["pictures_dir"]
+        elif args and args[0] == "python3" and len(args) > 2 and args[1].endswith("greetd_system.py") and args[2] == "plan":
+            stdout = json.dumps({"conflicting_files": self.test_machine.get("greetd_conflicts", []),
+                                 "display_manager": self.test_machine.get("display_manager_unit")})
+        elif args and args[0] == "sudo" and len(args) > 3 and args[1] == "python3" and args[2].endswith("greetd_system.py"):
+            if args[3] == "install":
+                self.test_machine["greetd_installed"] = True
+                self.test_machine["system_events"] = [
+                    ("systemctl", "enable", "--now", "getty@tty2.service"),
+                    ("systemctl", "daemon-reload"),
+                    ("systemctl", "enable", "greetd.service"),
+                ]
+                stdout = json.dumps({"status": "installed", "started": False})
+            elif args[3] == "uninstall":
+                self.test_machine["greetd_installed"] = False
+                stdout = json.dumps({"status": "restored"})
+            else:
+                code, stderr = 2, "unmodeled simulated greetd helper action"
         else:
             raise AssertionError(f"Test runner refused to execute unmodelled host command: {args!r}")
         return subprocess.CompletedProcess(args, code, stdout if text_result else stdout.encode(), stderr if text_result else stderr.encode())
@@ -606,6 +628,22 @@ class SparrowInstaller:
             for key in ("theme", "version", "asset", "directory", "install_url", "install_directory", "sha256")
         ) or not re.fullmatch(r"[0-9a-f]{64}", cursor["sha256"]):
             raise ValueError("SOURCE-OF-TRUTH.json must pin the cursor asset URL, version, destination, and SHA-256.")
+        system_integrations = manifest.get("system_integrations", {})
+        greetd = system_integrations.get("greetd") if isinstance(system_integrations, dict) else None
+        if greetd is not None and (
+            not isinstance(greetd, dict)
+            or not isinstance(greetd.get("sources"), list)
+            or not isinstance(greetd.get("destinations"), list)
+            or len(greetd["sources"]) != len(greetd["destinations"])
+            or any(not isinstance(value, str) for value in greetd["sources"] + greetd["destinations"])
+        ):
+            raise ValueError("SOURCE-OF-TRUTH.json greetd system integration must pair source files and system destinations.")
+        if greetd is not None:
+            if (not isinstance(greetd.get("packages"), list)
+                    or any(not isinstance(item, str) for item in greetd["packages"])
+                    or any(not Path(item).is_absolute() or Path(item).parts[:2] != ("/", "etc") for item in greetd["destinations"])
+                    or any(Path(item).is_absolute() or ".." in Path(item).parts for item in greetd["sources"])):
+                raise ValueError("SOURCE-OF-TRUTH.json greetd sources/destinations/packages are malformed or unsafe.")
         return manifest
 
     def _manifest_destination(self, destination: str) -> Path:
@@ -799,6 +837,24 @@ class SparrowInstaller:
         else:
             self.skipped_optional_groups.extend(optional)
         self.output("Sparrow does not install AUR or upstream applications. Manual external items: " + "; ".join(f"{k}: {v}" for k, v in sets["manual_external"].items()))
+        greetd_plan = self._command([
+            "python3", str(self.repo / "installer/greetd_system.py"), "plan", "--repo", str(self.repo),
+        ])
+        if greetd_plan.returncode:
+            self.output("Could not inspect greetd integration; leaving login-manager configuration untouched.")
+        else:
+            try:
+                planned_login = json.loads(greetd_plan.stdout)
+            except json.JSONDecodeError:
+                planned_login = {"display_manager": "unknown"}
+            current_manager = planned_login.get("display_manager")
+            self.configure_greetd = self.confirm(
+                "Use Sparrow's tested greetd/tuigreet login manager for future boots? tty2 recovery is prepared first; the current session will not be stopped or restarted."
+                + (f" Existing {current_manager} would be disabled only for future boots." if current_manager else ""),
+                current_manager is None,
+            )
+            if not self.configure_greetd:
+                self.output("Preserving the current login-manager setup; greetd files will not be installed or enabled.")
         for executable, label in (("rishot", "Rishot screenshots"),):
             if self._which(executable) is None:
                 self.missing_manual.append(label)
@@ -1362,6 +1418,30 @@ class SparrowInstaller:
             result = self._command(["bash", "-n", str(path)])
             if result.returncode:
                 raise RuntimeError(f"Shell syntax check failed: {path}")
+        helper = self.repo / "installer/greetd_system.py"
+        try:
+            compile(helper.read_text(encoding="utf-8"), str(helper), "exec")
+        except SyntaxError as error:
+            raise RuntimeError(f"Python syntax check failed: {helper}: {error}") from error
+        greetd_sources = self.source_manifest().get("system_integrations", {}).get("greetd", {}).get("sources", [])
+        for relative in greetd_sources:
+            source = self.repo / relative
+            if not source.is_file():
+                raise RuntimeError(f"Canonical greetd system source is missing: {source}")
+        greetd_config = tomllib.loads((self.repo / "greetd/config.toml").read_text(encoding="utf-8"))
+        tuigreet_config = tomllib.loads((self.repo / "greetd/tuigreet.toml").read_text(encoding="utf-8"))
+        if (greetd_config.get("terminal", {}).get("vt") != 1
+                or greetd_config.get("default_session", {}).get("user") != "greeter"
+                or "--cmd niri-session" not in greetd_config.get("default_session", {}).get("command", "")):
+            raise RuntimeError("Tracked greetd config no longer describes Sparrow's validated tty1 Niri login flow.")
+        expected_memory = {"username": True, "session": False, "user_session": True}
+        if (tuigreet_config.get("remember") != expected_memory
+                or tuigreet_config.get("keybindings", {}).get("sessions") != 3
+                or tuigreet_config.get("keybindings", {}).get("power") != 12
+                or tuigreet_config.get("background", {}).get("kind") != "none"):
+            raise RuntimeError("Tracked tuigreet config is missing an approved remember, keybinding, or stock-background setting.")
+        if any(key in tuigreet_config for key in ("theme", "colors", "greeting", "layout", "style")):
+            raise RuntimeError("Tracked tuigreet config must retain the approved stock visual appearance.")
         if self._which("qmllint"):
             qmls = [str(p) for p in (self.repo / "quickshell/sparrow").rglob("*.qml")]
             result = self._command(["qmllint", *qmls])
@@ -1457,6 +1537,7 @@ class SparrowInstaller:
             "last_backup": str(self.backup_root),
             "changed": self.changed,
             "enabled_by_sparrow": sorted(self.enabled_by_sparrow),
+            "greetd_managed": self.greetd_managed,
         }
         atomic_write(self.manifest_path, (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode(), 0o600)
 
@@ -1550,6 +1631,7 @@ class SparrowInstaller:
             self.output("[6/6] Enabling session integration and saving installer state")
             self._ensure_wallpaper_library()
             self._activate_units()
+            self._configure_greetd_system()
             self._save_manifest()
         except KeyboardInterrupt:
             self._installed_package_cache = None
@@ -1575,6 +1657,8 @@ class SparrowInstaller:
         self.output(f"Sparrow installation succeeded. Backups and restore manifest: {self.backup_root}")
         self.output("Units were enabled but not started or restarted. Log out and back into Niri to test startup.")
         self.output("Portal routing/theme changes are not applied to already-running portal processes; they take effect after the next session start.")
+        if self.greetd_managed:
+            self.output("greetd is enabled for the next boot only; the installer did not start or restart it. tty2 is the recovery console.")
         if self.default_profile_skipped:
             self.output("Recommended desktop apps/integrations were skipped; some default shortcuts and app theming will be unavailable.")
         if self.skipped_optional_groups:
@@ -1628,6 +1712,54 @@ class SparrowInstaller:
                 raise
             self.enabled_by_sparrow.update(to_enable)
 
+    def _configure_greetd_system(self) -> None:
+        if not self.configure_greetd:
+            return
+        if self.dry_run:
+            self.output("TEST/dry-run: greetd system files and login-manager enablement were not changed.")
+            return
+        helper = self.repo / "installer/greetd_system.py"
+        planned = self._command(["python3", str(helper), "plan", "--repo", str(self.repo)])
+        if planned.returncode:
+            self.output("Could not recheck the login-manager plan; leaving greetd unchanged.")
+            return
+        try:
+            plan = json.loads(planned.stdout)
+        except json.JSONDecodeError:
+            self.output("greetd planner returned invalid data; leaving the system login configuration unchanged.")
+            return
+        replace_files = False
+        replace_manager = False
+        conflicts = plan.get("conflicting_files", [])
+        manager = plan.get("display_manager")
+        if conflicts:
+            replace_files = self.confirm(
+                "Replace existing system login config(s) " + ", ".join(conflicts) + "? Sparrow keeps root-owned recoverable backups.",
+                False,
+            )
+            if not replace_files:
+                self.output("Preserved existing system login config; greetd was not enabled.")
+                return
+        if manager:
+            replace_manager = self.confirm(
+                f"Disable existing {manager} for future boots and use Sparrow greetd instead? It will not be stopped now.",
+                False,
+            )
+            if not replace_manager:
+                self.output("Preserved the existing display manager; greetd was not enabled.")
+                return
+        args = ["sudo", "python3", str(helper), "install", "--repo", str(self.repo)]
+        if replace_files:
+            args.append("--replace-existing")
+        if replace_manager:
+            args.append("--replace-display-manager")
+        result = self._command(args, inherit_stdio=True)
+        if result.returncode:
+            raise RuntimeError("greetd setup failed; the system helper attempted to restore its previous state.")
+        self.greetd_managed = True
+        if self.testing:
+            self.output("TEST simulator: greetd system changes were recorded without touching the host.")
+
     def uninstall(self, *, stop_now: bool = False, restore: bool = True) -> int:
         if not self.old:
             self.output("No Sparrow installer manifest exists; nothing is removed.")
@@ -1641,6 +1773,12 @@ class SparrowInstaller:
         if active and stop_now and not self.confirm("Stopping Sparrow now will close the shell and wallpaper. Continue?", False):
             self.output("Uninstall cancelled.")
             return 2
+        if self.old.get("greetd_managed") and not self.dry_run and not self.testing:
+            helper = self.repo / "installer/greetd_system.py"
+            result = self._command(["sudo", "python3", str(helper), "uninstall", "--repo", str(self.repo)])
+            if result.returncode:
+                self.output("greetd restoration failed; Sparrow's ownership manifest was retained. Resolve the system issue and rerun uninstall.")
+                return 1
         if not self.dry_run and not self.testing:
             owned_enabled = []
             for unit in self.old.get("enabled_by_sparrow", []):

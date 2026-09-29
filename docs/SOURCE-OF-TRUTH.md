@@ -96,6 +96,19 @@ live generated file was an input to the isolated bootstrap.
 
 ## Packages and nonportable state
 
+### Login integration
+
+`greetd/config.toml` and `greetd/tuigreet.toml` are tracked, manually tested
+system config sources. Their packages are installed/verified, but enabling
+greetd is an explicit opt-in. A root helper backs up existing `/etc` files,
+prepares `getty@tty2` before changing login-manager enablement, and enables
+greetd for a later boot without starting/restarting it in the current session.
+Existing display managers and custom system configs need explicit replacement
+consent. Root-owned recovery data is kept under `/var/backups/sparrow/greetd`
+and its ownership record under `/var/lib/sparrow-shell/installer/greetd`.
+Uninstall restores only files still matching Sparrow's installed bytes and
+preserves user-edited files. The Quickshell lock remains independent.
+
 The installer requires and verifies the intended font families: `Inter Black` in `Theme.qml` (`inter-font`),
 `JetBrains Mono Nerd Font` in Kitty (`ttf-jetbrains-mono-nerd`), Adwaita Sans
 for GTK/libadwaita (`adwaita-fonts`), and the bundled Outfit Black font for the

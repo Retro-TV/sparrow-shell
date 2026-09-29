@@ -134,6 +134,13 @@ Niri’s current “Important Software” guide calls out portals, notification 
 
 **Decision: C — keep greeter setup outside Sparrow v1.** Sparrow can document compatibility and let users retain their DM or use a TTY. If the user later requests a recommendation, offer tuigreet for minimal greetd or ReGreet for a graphical greetd experience, clearly state ReGreet’s single-monitor behavior, and do not write a custom greeter. No candidate should be installed/activated by the rice installer without explicit system-level opt-in.
 
+**Status update (after this review):** the owner later manually tested stock
+tuigreet and selected it for Sparrow. The installer now tracks those exact
+greetd/tuigreet files and offers an explicit opt-in; it prepares tty2 recovery,
+backs up root-owned system config, and never starts/restarts greetd during a
+graphical install. This supersedes the review-time recommendation above; no
+custom greeter or Sparrow lockscreen change was made.
+
 ## 4. Missing desktop basics and infrastructure
 
 | Finding | Type | Recommendation |

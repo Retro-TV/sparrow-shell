@@ -105,6 +105,7 @@ declaring those when a genuinely minimal install omits them.
 | `kitty` | Niri terminal bind; generated colors reload via `pkill -USR1` | Official Extra `kitty` ([manual/package](https://man.archlinux.org/man/kitty.1.en)) | Default app; change bind if user does not install/choose Kitty |
 | `fish` | Kitty login shell; user's Fish configuration | Official Extra `fish` | Default app dependency; Kitty shell launch fails or falls back depending Kitty handling |
 | `starship` | Fish prompt initialization | Official Extra `starship` | Optional for base Fish; Sparrow directory prompt absent if not installed |
+| `greetd`, `greetd-tuigreet` | Sparrow's tested tty1 login flow using `niri-session` | Official Arch/CachyOS packages | Packages are required; system enablement is explicit opt-in and prepares tty2 recovery before changing login-manager enablement. |
 | `zoxide`, `fastfetch` | Optional Fish startup integration and `ff` abbreviation | Official Extra packages | User-invoked Fish conveniences; not Sparrow shell requirements |
 | `thunar`, `env`, `gtk-launch` | Niri/default-files `.desktop` entry; launcher routes desktop entries via `gtk-launch` | `thunar` official Extra ([package](https://archlinux.org/packages/extra/x86_64/thunar/)); `gtk-launch` from GTK3/GLib stack; `env` base coreutils | Thunar is the configured default file manager; other desktop entries need their own installed apps |
 | `pavucontrol` | Sparrow Launcher recognizes its desktop ID and starts this external advanced-volume UI with app-scoped `GTK_THEME=Sparrow` | Recommended default bundle; GTK4/gtkmm4 supplied by its package | Optional app; the native Sparrow Mixer remains the primary control surface |
@@ -354,17 +355,15 @@ added or if the lock/icon/font components change.
 
 ## Greeter and login boundary
 
-Sparrow currently ships no display manager, greeter theme, or first-boot
-session selector. A clean Arch machine without a DM normally reaches a TTY;
-the user can launch `niri-session` from a getty. Arch Niri packages register a
-desktop entry that compatible display managers can select and invoke
-`niri-session`. Sparrow assumes an already-running Niri graphical session,
-systemd user manager, `graphical-session.target`, Wayland/Niri environment,
-and PAM access for its primary lock. It does not assume a particular DM. The
-absence of a greeter is not a technical blocker to installing the rice, but a
-“complete appliance-like install” must either document existing DM selection
-or ask the user whether they want a login manager. No greeter design should be
-invented by the installer.
+Sparrow tracks the tested stock tuigreet configuration. Package installation
+does not activate it; a separate prompt opts into changing system login
+management. The root helper enables tty2 recovery first, backs up system
+configs, asks separately before replacing existing configs or a display
+manager, and enables greetd without starting/restarting it. The next boot uses
+tty1 tuigreet and launches `niri-session`; Sparrow's Quickshell session lock
+is unchanged. Uninstall restores unchanged Sparrow-owned files and prior
+enablement while preserving user edits. The exact contract is in
+`SOURCE-OF-TRUTH.json` under `system_integrations.greetd`.
 
 ## Ricelin lineage and visible identity
 

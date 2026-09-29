@@ -69,5 +69,15 @@
     {"source": "Sparrow UI/user actions", "destination": "$XDG_CONFIG_HOME/niri/sparrow/{user-appearance.kdl,user-binds.kdl}", "category": "D", "dependencies": ["niri>=26.04"], "generation": "managed transactions after user changes; preserve customized fragments; migrate only exact known prior Sparrow Look defaults"},
     {"source": "Sparrow wallpaper picker and user media", "destination": "$XDG_STATE_HOME/sparrow-shell/{wallpaper,wallpaper-map,wallpaper-bag,flags.json}", "category": "D", "dependencies": ["awww", "mpvpaper required video backend"], "generation": "fresh state selects bundled default.png; never copy personal selection or collection; migrate only the exact prior Pill-gap default 1.0 to 1.1 while preserving other flags"},
     {"source": "Sparrow runtime", "destination": "$XDG_STATE_HOME/sparrow-shell/** and $XDG_CACHE_HOME/sparrow-shell/** except generated palette.json", "category": "D", "dependencies": [], "generation": "runtime histories, logs, thumbnails and transaction backups; never deploy"}
-  ]
+  ],
+  "system_integrations": {
+    "greetd": {
+      "packages": ["greetd", "greetd-tuigreet"],
+      "sources": ["greetd/config.toml", "greetd/tuigreet.toml"],
+      "destinations": ["/etc/greetd/config.toml", "/etc/tuigreet/config.toml"],
+      "activation": "explicit opt-in; enable greetd for next boot only; never start/restart it during install",
+      "recovery": "enable and start getty@tty2.service before altering login-manager enablement",
+      "ownership": "root helper keeps root-owned backups and hashes; uninstall restores only untouched Sparrow files and prior unit enablement"
+    }
+  }
 }

@@ -99,7 +99,12 @@ class InstallerTests(unittest.TestCase):
 
     @staticmethod
     def confirm_full_profile(prompt: str, _default: bool) -> bool:
-        return "optional feature" not in prompt.lower() and "include optional group" not in prompt.lower()
+        lowered = prompt.lower()
+        return (
+            "optional feature" not in lowered
+            and "include optional group" not in lowered
+            and "use sparrow's tested greetd/tuigreet" not in lowered
+        )
 
     def test_clean_cachyos_installs_packages_before_niri_and_systemd_validation(self) -> None:
         # The five missing binaries from the bare-metal report start absent.
@@ -341,6 +346,19 @@ class InstallerTests(unittest.TestCase):
 
         installer = self.installer()
         self.assertEqual(installer.install(), 0)
+        thunar_launcher = self.paths.data / "applications/sparrow-files.desktop"
+        gtk_settings = self.paths.config / "gtk-3.0/settings.ini"
+        icon_theme = self.paths.data / "icons/Sparrow/index.theme"
+        self.assertEqual(thunar_launcher.read_bytes(), (REPO / "applications/sparrow-files.desktop").read_bytes())
+        self.assertIn("Exec=env GTK_THEME=Sparrow thunar %U", thunar_launcher.read_text())
+        self.assertEqual(gtk_settings.read_bytes(), (REPO / "gtk/settings.ini").read_bytes())
+        self.assertIn("gtk-icon-theme-name=Sparrow", gtk_settings.read_text())
+        self.assertEqual(icon_theme.read_bytes(), (REPO / "icons/Sparrow/index.theme").read_bytes())
+        self.assertIn("Inherits=Adwaita,hicolor", icon_theme.read_text())
+        self.assertEqual(
+            (self.paths.data / "themes/Sparrow/index.theme").read_bytes(),
+            (REPO / "gtk/Sparrow/index.theme").read_bytes(),
+        )
         runtime = self.paths.config / "quickshell/sparrow"
         self.assertEqual(tree_digest(REPO / "quickshell/sparrow"), tree_digest(runtime))
         self.assertFalse((self.paths.config / "niri/sparrow/display-outputs.kdl").exists())
@@ -403,6 +421,20 @@ class InstallerTests(unittest.TestCase):
         self.assertIn(palette["primary"], generated["gtk3"].read_text())
         self.assertIn(palette["primary"], generated["gtk4"].read_text())
         self.assertIn(palette["primary"], generated["icon"].read_text())
+        generated_places = self.paths.data / "icons/Sparrow/scalable/places"
+        for name in (
+            "folder", "folder-open", "folder-documents", "folder-download", "folder-music",
+            "folder-pictures", "folder-publicshare", "folder-templates", "folder-videos",
+            "folder-remote", "folder-bookmarks", "folder-desktop", "user-desktop",
+            "system-file-manager",
+        ):
+            icon = generated_places / f"{name}.svg"
+            self.assertTrue(icon.is_file(), f"missing generated Sparrow Thunar icon alias: {name}")
+            self.assertIn(palette["primary"], icon.read_text(), name)
+        self.assertTrue((self.paths.data / "icons/Sparrow/symbolic/places/folder-symbolic.svg").is_file())
+        self.assertTrue((self.paths.data / "icons/Sparrow/scalable/mimetypes/text-x-generic.svg").is_file())
+        if shutil.which("gtk-update-icon-cache"):
+            self.assertTrue((self.paths.data / "icons/Sparrow/icon-theme.cache").is_file())
         validated = subprocess.run([real_niri, "validate", "-c", str(self.paths.config / "niri/config.kdl")],
                                    env=env, text=True, capture_output=True, timeout=30)
         self.assertEqual(validated.returncode, 0, validated.stderr or validated.stdout)
@@ -860,6 +892,26 @@ class InstallerTests(unittest.TestCase):
         self.assertNotIn("wlsunset", self.machine["commands"])
         self.assertIn("mpvpaper", self.machine["commands"])
         self.assertTrue(any("Rishot" in message and "Super+Shift+S" in message for message in self.messages))
+
+    def test_greetd_packages_are_required_and_login_setup_is_opt_in(self) -> None:
+        sets = self.installer().package_sets()
+        self.assertTrue({"greetd", "greetd-tuigreet"}.issubset(set(sets["required"])))
+        installer = self.installer()
+        self.assertEqual(installer.install(), 0)
+        self.assertFalse(self.machine.get("greetd_installed", False))
+
+    def test_greetd_setup_prepares_recovery_tty_and_only_enables_next_boot(self) -> None:
+        def consent(prompt: str, default: bool) -> bool:
+            return True if "use sparrow's tested greetd/tuigreet" in prompt.lower() else self.confirm_full_profile(prompt, default)
+
+        installer = self.installer(confirm=consent)
+        self.assertEqual(installer.install(), 0)
+        self.assertTrue(self.machine["greetd_installed"])
+        self.assertEqual(self.machine["system_events"][0], ("systemctl", "enable", "--now", "getty@tty2.service"))
+        self.assertEqual(self.machine["system_events"][-1], ("systemctl", "enable", "greetd.service"))
+        self.assertFalse(any(event[:2] == ("systemctl", "start") or event[:2] == ("systemctl", "restart") for event in self.machine["system_events"]))
+        root_manifest = json.loads(installer.manifest_path.read_text())
+        self.assertTrue(root_manifest["greetd_managed"])
 
     def test_declining_canonical_cursor_stops_before_deploying_sparrow(self) -> None:
         installer = self.installer(

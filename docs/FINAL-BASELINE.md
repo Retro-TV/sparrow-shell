@@ -304,6 +304,12 @@ online wallpaper functions, zoxide/Fastfetch, imagemagick conveniences, and
 Hyprlock fallback. Missing optional controls should remain absent/adaptive, not
 fail the main shell.
 
+The tested stock tuigreet profile is tracked. Installer package deployment is
+separate from the explicit system-login opt-in: the root helper prepares tty2,
+keeps backups, and only enables greetd for the next boot. It never starts or
+restarts greetd during an active graphical install. See
+`system_integrations.greetd` in `SOURCE-OF-TRUTH.json`.
+
 **Separate app:** Rishot is installed on this host via a user-local launcher
 and is not vendored. Niri's screenshot binding resolves `rishot` through
 `PATH`, so the installer must ensure its separate installation provides that
@@ -432,9 +438,10 @@ Installer v1 is intended to retain these conservative boundaries:
     Niri or logging out as an install side effect.
 
 Installer v1 is implemented by `install.sh`, `uninstall.sh`, and
-`installer/sparrow_installer.py`. It does not install a greeter, automatically
-install AUR packages, remove shared packages, seed machine state, or start
-services in the current session. The first bare-metal test failed because
+`installer/sparrow_installer.py`. It offers the tested greetd login setup as
+an explicit system-level opt-in, does not automatically install AUR packages,
+remove shared packages, seed machine state, or start/restart greetd in the
+current session. The first bare-metal test failed because
 systemd units were validated before pacman supplied `qs`, `awww`, and the
 conditional Polkit executable. The current working fix installs approved
 packages and checks required executables before staged Niri/unit validation;

@@ -293,6 +293,33 @@ class SparrowInstaller:
             return f"/simulated/bin/{executable}" if executable in self.test_machine["commands"] else None
         return shutil.which(executable)
 
+    def _qt6_qmllint(self) -> str | None:
+        """Find a Qt 6 qmllint; never accept a Qt 5 qmllint from PATH."""
+        candidates: list[str] = []
+        if self.testing:
+            packaged = self.test_machine.get("qt6_qmllint")
+            if packaged:
+                candidates.append(packaged)
+        else:
+            packaged_path = Path("/usr/lib/qt6/bin/qmllint")
+            if packaged_path.is_file() and os.access(packaged_path, os.X_OK):
+                candidates.append(str(packaged_path))
+
+        for name in ("qmllint-qt6", "qmllint6", "qmllint"):
+            path = self._which(name)
+            if path and path not in candidates:
+                candidates.append(path)
+
+        for candidate in candidates:
+            try:
+                result = self._command([candidate, "--version"])
+            except OSError:
+                continue
+            version = f"{result.stdout or ''}\n{result.stderr or ''}"
+            if result.returncode == 0 and re.search(r"(?i)\bqmllint\s+6\.\d+", version):
+                return candidate
+        return None
+
     def _test_run(self, args: list[str], **kwargs) -> subprocess.CompletedProcess:
         """A closed command simulator: installer tests never dispatch to the host."""
         self.test_machine["events"].append(tuple(args))
@@ -351,6 +378,11 @@ class SparrowInstaller:
         elif args and args[0] == "niri" and "validate" in args:
             if "niri" not in self.test_machine["commands"]:
                 code, stderr = 127, "simulated niri executable is missing"
+        elif args and Path(args[0]).name == "qmllint":
+            if args[-1:] == ["--version"]:
+                stdout = self.test_machine.get("qmllint_versions", {}).get(args[0], "qmllint 1.0")
+            else:
+                self.test_machine["qml_lint_path"] = args[0]
         elif args and args[0] == "python3" and "-c" in args:
             module = args[-1].split("import", 1)[-1].strip().split()[0]
             if module not in self.test_machine["modules"]:
@@ -1565,13 +1597,15 @@ class SparrowInstaller:
             raise RuntimeError("Tracked tuigreet config is missing an approved remember, keybinding, or stock-background setting.")
         if any(key in tuigreet_config for key in ("theme", "colors", "greeting", "layout", "style")):
             raise RuntimeError("Tracked tuigreet config must retain the approved stock visual appearance.")
-        if self._which("qmllint"):
+        qmllint = self._qt6_qmllint()
+        if qmllint:
             qmls = [str(p) for p in (self.repo / "quickshell/sparrow").rglob("*.qml")]
-            result = self._command(["qmllint", *qmls])
+            self.output(f"Validating Sparrow QML with Qt 6 qmllint: {qmllint}")
+            result = self._command([qmllint, *qmls])
             if result.returncode:
                 raise RuntimeError("QML lint failed: " + (result.stderr or result.stdout))
         else:
-            self.output("qmllint not found; source QML lint will need the documented developer tool.")
+            self.output("Qt 6 qmllint not found; skipping optional source QML lint (a non-Qt-6 PATH qmllint is ignored).")
 
     def _apply_plan(self, plan: list[tuple[Path, bytes, str, int]]) -> None:
         for path, content, role, mode in plan:

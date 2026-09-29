@@ -116,8 +116,10 @@ is a KDE/KWin capture path and is not required for Niri.
 
 ## Development/test only
 
-- `qmllint`/Qt declarative tooling for QML checks (provided by Qt 6 tooling on
-  the development host; not needed merely to run the installed shell).
+- Qt 6 `qmllint` for installer-time source validation (provided by the already
+  required `qt6-declarative` package; the installer prefers
+  `/usr/lib/qt6/bin/qmllint` and ignores a Qt 5 `qmllint` found first on
+  `PATH`). It is validation tooling, not an additional Sparrow runtime package.
 - `niri validate` for static config checking; comes with Niri.
 - Python standard-library `unittest` for the Niri config transaction tests.
 - `nodejs` for `quickshell/sparrow/lib/monitors.test.mjs`.

@@ -109,6 +109,28 @@ class InstallerTests(unittest.TestCase):
         self.assertIn('role)\n', source.read_text())
         self.assertIn('exec gtk-launch "$desktop_id"', source.read_text())
 
+    def test_qml_validation_uses_qt6_when_path_qmllint_is_qt5(self) -> None:
+        qt5_path = "/simulated/bin/qmllint"
+        qt6_path = "/usr/lib/qt6/bin/qmllint"
+        self.machine["commands"].add("qmllint")
+        self.machine["qt6_qmllint"] = qt6_path
+        self.machine["qmllint_versions"] = {
+            qt5_path: "qmllint 1.0",
+            qt6_path: "qmllint 6.11.2",
+        }
+
+        installer = self.installer()
+        installer._validate_sources()
+
+        qmls = tuple(str(path) for path in (REPO / "quickshell/sparrow").rglob("*.qml"))
+        calls = [args for args, _kwargs in self.machine["invocations"]]
+        self.assertEqual(installer._which("qmllint"), qt5_path)
+        self.assertIn((qt6_path, "--version"), calls)
+        self.assertIn((qt6_path, *qmls), calls)
+        self.assertNotIn((qt5_path, *qmls), calls)
+        self.assertEqual(self.machine["qml_lint_path"], qt6_path)
+        self.assertIn("qt6-declarative", installer.package_sets()["required"])
+
     def test_installer_rerun_preserves_managed_user_keybind_choices(self) -> None:
         target = self.paths.config / "niri/sparrow/user-binds.kdl"
         target.parent.mkdir(parents=True)

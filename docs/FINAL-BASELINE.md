@@ -64,7 +64,7 @@ been tested on a clean installation.
 | --- | --- |
 | **A — Final / intended** | Niri-native output/workspace/window integration; main pill and surfaces; desktop-entry Launcher; Wallpaper picker and image/video wallpaper backend; Matugen palette and shell theme; Niri Look/Display/Input/Keybind settings; PipeWire Mixer; notification/OSD/tray/media integration; Quickshell secure lock with PAM; power/idle policy; Kitty/Fish/Starship and Thunar/GTK defaults. |
 | **B — Final but needs polish** | Live GTK3 recoloring (running Thunar windows require closing/reopening); multi-output wallpaper-specific lock backgrounds share one global palette; some monitor/application/package assumptions remain host-dependent; app-default configs need conservative install/merge behavior. |
-| **C — Optional feature** | Night Light (`wlsunset`); spectrum (`cava`); internal brightness (`brightnessctl` plus a backlight device); DDC/CI (`ddcutil`); NVIDIA vibrance (`nvibrant` and NVIDIA device); recording (`gpu-screen-recorder`, with Niri selection helpers); screenshot integration through separately installed Rishot; optional online wallpaper search/download and optional zoxide/Fastfetch conveniences. |
+| **C — Adaptive or optional feature** | Night Light (`wlsunset`); spectrum (`cava`); internal/external brightness (default-installed `brightnessctl`/`ddcutil`, shown only for usable hardware); NVIDIA vibrance (`nvibrant` and NVIDIA device); recording (`gpu-screen-recorder`, with Niri selection helpers); optional online wallpaper search/download and optional zoxide/Fastfetch conveniences. |
 | **D — Compatibility / migration only** | `scripts/migrate-state.py` reads selected legacy Ricelin state paths and copies data into Sparrow XDG state only when the destination is absent, retaining a backup. Ricelin provenance comments and included notices are attribution, not runtime dependencies. |
 | **E — Development / testing only** | Python unit tests, Node test for monitor helpers, QML/config validation, transaction documentation, and the checked-in minimal QML test surface. These should remain available to contributors but are not session runtime requirements. |
 | **F — Legacy / dead / not part of Sparrow** | Ricelin's special workspaces/Stash/Private/Minimized model; Game Mode; Ricelin updater; AppImage/package manager UI; the Pill file installer; abandoned Hyprlock visual redesign/avatar and its generated palette/link architecture. No replacement special-workspace or package-manager system is intended. |
@@ -96,7 +96,7 @@ The visible/runtime feature set is:
 | Keybinds | Catalog-backed editing of Sparrow Niri bindings through generated user fragment and transaction helper. | Intended core; user customization must survive updates. |
 | Workspaces | Normal Niri dynamic workspaces with stable IDs and output association. | Intended core; explicitly not the old Ricelin special-workspace model. |
 | Wallpaper | awww images/still backdrop plus required mpvpaper animated playback per output, persisted per-output map, switching/search/picker and Matugen generation. | Core; video backend is installed/required, online search tools remain optional. |
-| Mixer | PipeWire volume/source, hardware brightness, optional DDC and NVIDIA vibrance. | Intended core with adaptive optional controls. |
+| Mixer | PipeWire volume/source; internal brightness and validated DDC brightness when available; NVIDIA vibrance only on supported systems. | Intended core with hardware-adaptive controls. |
 | Night Light | Quickshell-managed `wlsunset`, persisted off/on/scheduled mode. | Optional backend; runtime probe/restoration occurs at shell startup. |
 | Recorder | GPU Screen Recorder with Niri output/window/region selection and directory portal helper. | Optional feature requiring capture backend and portal integration. |
 | Notifications / DND | Quickshell notification service and Sparrow notification UI/state. | Intended core; depends on session D-Bus/notification service. |
@@ -298,8 +298,8 @@ generated Thunar theme; Thunar, Kitty, Fish, Starship and JetBrains Mono Nerd
 Font for the chosen default-app bundle; Bibata cursor assets for the selected
 cursor. Actual user app choices can be changed.
 
-**Optional:** wlsunset Night Light, cava, brightnessctl
-on backlight hardware, ddcutil, nvibrant on supported NVIDIA hardware, optional
+**Adaptive/optional:** wlsunset Night Light, cava, internal and external brightness controls
+only where usable hardware exists (their utilities install by default), nvibrant on supported NVIDIA hardware, optional
 online wallpaper functions, zoxide/Fastfetch, imagemagick conveniences, and
 Hyprlock fallback. Missing optional controls should remain absent/adaptive, not
 fail the main shell.
@@ -477,8 +477,8 @@ Suggested cases, in order:
 3. one and multiple outputs: per-output map, missing/disconnected output,
    reconnected output and global palette semantics;
 4. image, GIF and video with/without mpvpaper; verify one daemon/process owner;
-5. missing optional dependencies independently (wlsunset, cava, brightnessctl,
-   ddcutil, nvibrant, recorder, Rishot) and confirm main shell stays healthy;
+5. missing optional dependencies independently (wlsunset, cava, nvibrant,
+   recorder, Rishot) and confirm main shell stays healthy;
 6. launch ordinary desktop entries, inspect tray/menu, MPRIS, audio/network,
    theme generation and lock; test PAM success/failure and compositor recovery
    only in the disposable session;

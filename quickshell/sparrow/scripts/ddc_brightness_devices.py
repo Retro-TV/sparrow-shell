@@ -15,6 +15,46 @@ def parse_brightness(text: str) -> int:
     return int(match.group(1)) if match else -1
 
 
+def monitor_identity(block: str) -> tuple[str, str]:
+    """Return the EDID model and DRM connector from one ddcutil detect block."""
+    model_match = re.search(r"^[ \t]*Model:[ \t]*(.*?)[ \t]*$", block, re.MULTILINE)
+    connector_match = re.search(
+        r"^[ \t]*DRM connector:[ \t]+card\d+-(\S+)[ \t]*$", block, re.MULTILINE
+    )
+    model = " ".join(model_match.group(1).split()) if model_match else ""
+    connector = connector_match.group(1) if connector_match else ""
+    if model.lower() in {"unknown", "n/a", "none", "unspecified"}:
+        model = ""
+    return model, connector
+
+
+def label_monitors(monitors: list[dict[str, str | int]]) -> list[dict[str, str | int]]:
+    """Assign useful EDID labels, then connector or stable display-number fallbacks."""
+    ordered = sorted(
+        monitors,
+        key=lambda item: (str(item.get("connector", "")), str(item["bus"])),
+    )
+    labels: list[str] = []
+    for index, monitor in enumerate(ordered, start=1):
+        model = str(monitor.get("model", "")).strip()
+        connector = str(monitor.get("connector", "")).strip()
+        labels.append(model or connector or f"Display {index}")
+
+    totals = {label: labels.count(label) for label in labels}
+    seen: dict[str, int] = {}
+    result = []
+    for monitor, label in zip(ordered, labels):
+        if totals[label] > 1:
+            seen[label] = seen.get(label, 0) + 1
+            label = f"{label} · {seen[label]}"
+        result.append({
+            "bus": monitor["bus"],
+            "label": label,
+            "brightness": monitor["brightness"],
+        })
+    return result
+
+
 def backlight_connectors(root: Path = Path("/sys/class/backlight")) -> set[str]:
     """Resolve internal backlights to DRM connector names when sysfs exposes them."""
     connectors: set[str] = set()
@@ -46,7 +86,7 @@ def detect_monitors(
     """
     try:
         detected = run(
-            ["ddcutil", "detect", "--brief"],
+            ["ddcutil", "detect"],
             capture_output=True,
             text=True,
             timeout=10,
@@ -67,8 +107,7 @@ def detect_monitors(
         if bus in seen_buses:
             continue
         seen_buses.add(bus)
-        connector_match = re.search(r"DRM connector:\s+card\d+-(\S+)", block)
-        connector = connector_match.group(1) if connector_match else ""
+        model, connector = monitor_identity(block)
         if connector and connector in internal_connectors:
             continue
         try:
@@ -85,10 +124,11 @@ def detect_monitors(
             continue
         monitors.append({
             "bus": bus,
-            "label": connector or f"BUS {bus}",
+            "model": model,
+            "connector": connector,
             "brightness": brightness,
         })
-    return monitors
+    return label_monitors(monitors)
 
 
 if __name__ == "__main__":

@@ -46,7 +46,7 @@ Classifications: **CORE** is required for the Sparrow Niri desktop; **DEFAULT AP
 | Session lock and idle | CORE | Quickshell `WlSessionLock` + PAM is primary; Sparrow idle policy is a separate Quickshell instance/service. `sparrow-lock` falls back to Hyprlock only when Sparrow lock IPC is unavailable. Lock wallpaper follows per-output Sparrow wallpaper, including video. |
 | Notifications | CORE | Sparrow owns the Quickshell notification server/surface; no separate notification daemon is required for the shell’s own notifications. Other apps can use the same D-Bus notification service. |
 | Tray | CORE | Quickshell `SystemTray` with menu delegation; keeps separators, icons, check states, disabled entries, submenus and actions. Runtime null model entries are guarded at the delegate/model boundary. |
-| Mixer/audio | CORE surface; FEATURE DEPENDENCY backend | Quickshell PipeWire controls and OSD; actual device control requires a running PipeWire/WirePlumber-compatible session. Cava is optional. Internal backlight shares the live `Backlight` singleton used by OSD. DDC/NVIDIA controls are independent optional device-specific rows. |
+| Mixer/audio | CORE surface; hardware-adaptive controls | Quickshell PipeWire controls and OSD; actual audio control requires a running PipeWire/WirePlumber-compatible session. Cava is optional. Internal backlight shares the live `Backlight` singleton used by OSD. `brightnessctl` and `ddcutil` install by default; brightness rows appear only for usable hardware, and NVIDIA vibrance remains an optional device-specific row. |
 | Media | CORE surface; FEATURE DEPENDENCY backend | MPRIS players exposed through Quickshell `Players.qml`/surface; availability depends on active media players and their MPRIS interfaces. No separate Sparrow media daemon. |
 | Wi-Fi / Bluetooth / battery | CORE surfaces; FEATURE DEPENDENCY services | Wi-Fi controls use Quickshell Networking and `nmcli`/NetworkManager; Bluetooth uses Quickshell Bluetooth and BlueZ; battery uses UPower. These surfaces can be unavailable on systems without the corresponding service/device. Installing/enabling a competing network manager is unsafe. |
 | Recorder | FEATURE DEPENDENCY | GPU Screen Recorder, region/window helpers, folder selection through XDG FileChooser, and cache thumbnails. Requires GPU Screen Recorder for capture; portal and Python GObject/GIO are needed for folder picking. |
@@ -153,7 +153,7 @@ custom greeter or Sparrow lockscreen change was made.
 | Thumbnails | Feature dependency | Thunar + Tumbler are installed; video/image thumbnail generation also uses Sparrow helpers/ffmpeg. Current setup covers common previews. Some formats need optional plugins/codecs; do not promise all formats. |
 | Removable storage | Mostly covered | Host has GVFS and UDisks; Thunar’s common device workflow works through them. `gvfs-udisks2` is not a separate package here; GVFS ships the udisks2 volume monitor. UDisks service/permissions remain host/system policy. |
 | URL and MIME handlers | Covered with user choices | Sparrow-file-manager desktop entry handles directories only if selected; Firefox is the default Niri browser shortcut. Existing HTTP/HTTPS MIME owners must remain untouched unless chosen by user. |
-| XWayland | Covered as optional host compatibility | `xwayland-satellite` is installed on this host; it is not needed by Sparrow’s native shell. Offer only for legacy X11 clients, and preserve whichever XWayland integration user already has. |
+| XWayland | Covered as default host compatibility | `xwayland-satellite` is installed with the complete default package profile for legacy X11 clients. Modern Niri manages it automatically; Sparrow adds no startup integration. |
 | Clipboard interoperability | CLI only | No clipboard manager UI is intended. `wl-copy` provides copy for calculator/Rishot integration. Do not add a clipboard surface. |
 | Recording folder chooser | Covered with portal integration | Python GObject/GIO helper calls XDG FileChooser. A working backend plus the correct routing is required. The GTK theme service drop-in is scoped and should remain so. |
 
@@ -224,13 +224,13 @@ The repository’s `docs/INSTALL-INVENTORY.md` provides the exhaustive source-ca
 | `bluez`, `bluez-utils` | Bluetooth feature/`bluetoothctl`; service and adapter optional. |
 | `upower` | Battery data and some power reporting; device-dependent. |
 | `brightnessctl` | Internal backlight if exposed; hardware-specific. |
-| `ddcutil` | External DDC display brightness only; optional, absence remains quiet. |
+| `ddcutil` | Installed in the complete default profile for external DDC brightness; absence/incompatible hardware still leaves those controls hidden. |
 | `nvibrant` plus NVIDIA driver stack | NVIDIA vibrance only; vendor/package support varies. |
 | `nvidia-utils` (`nvidia-smi`) | NVIDIA GPU stats only. |
 | GNOME portal + PipeWire | Recommended default ScreenCast backend for Niri when no route already exists. The installer preserves an existing ScreenCast route and skips the GNOME backend package in that case. |
 | A Polkit authentication agent | Needed if graphical applications require authentication. Select/detect one; Polkit daemon alone is not a UI. |
 | `gnome-keyring` or `oo7-portal` | Secret portal only if chosen applications need secrets. Current live preference is inconsistent with installed packages. |
-| `xwayland-satellite` + Xwayland | Optional compatibility for legacy X11 clients. |
+| `xwayland-satellite` + Xwayland | Installed in the complete default profile for legacy X11 clients; Niri manages its use without Sparrow startup hooks. |
 
 ### DEVELOPMENT ONLY / EXTERNAL-SEPARATE TOOLS
 

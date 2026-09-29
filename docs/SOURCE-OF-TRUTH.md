@@ -126,7 +126,12 @@ separate; see `docs/DEPENDENCIES.md` for the current package groups.
 
 The live laptop exposes one internal backlight. The Mixer loads that control
 only with `Backlight.present` and `brightnessctlAvailable`, and separately
-repeats one external slider per `Devices.ddcMonitors`. `ddcutil` is absent on
-the SSD, so exactly one Mixer brightness control appears. Another machine can
-legitimately show additional DDC controls; that is hardware discovery, not a
-second internal brightness implementation.
+repeats one external slider per validated `Devices.ddcMonitors`. When multiple
+brightness controls exist, the labels use `Built-in Display` for the sysfs
+backlight and the DDC monitor's EDID model when available; the fallback order
+is connector name, then stable `Display N` labels. A single brightness control
+retains the prior compact label behavior. `brightnessctl` and `ddcutil` are in
+the complete default package profile, while visible controls remain dependent
+on hardware and readable VCP 10. The audited SSD did not have `ddcutil` at the
+time of the original inventory; that absence does not define the install
+profile.

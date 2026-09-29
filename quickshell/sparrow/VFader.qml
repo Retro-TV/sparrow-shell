@@ -146,8 +146,11 @@ Item {
         anchors.top: iconBox.bottom
         anchors.topMargin: 1 * root.s
         anchors.horizontalCenter: parent.horizontalCenter
+        width: Math.max(0, parent.width - 2 * root.s)
         text: root.subLabel
-        color: root.lit ? Theme.cream : Theme.faint
+        horizontalAlignment: Text.AlignHCenter
+        elide: Text.ElideRight
+        color: root.lit ? Theme.cream : (root.subPersistent ? Theme.secondaryText : Theme.faint)
         font.family: Theme.font
         font.pixelSize: 9 * root.s
         font.weight: Font.DemiBold

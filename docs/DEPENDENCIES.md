@@ -27,6 +27,7 @@ shell to start.
 | `pam` | System PAM stack used by Quickshell's primary secure session lock. |
 | `polkit` plus one graphical authentication agent | The daemon alone cannot display authorization prompts. Sparrow recommends `lxqt-policykit` only when the user has no existing agent; preserve an existing agent rather than starting a second. |
 | `greetd`, `greetd-tuigreet` | Sparrow's tested terminal login flow. Packages are installed with the default profile; on a clean system with no competing display manager, enablement prepares tty2 recovery and takes effect next boot. |
+| `xwayland-satellite` | Default compatibility backend for legacy/X11 applications such as Steam under Niri. Modern Niri manages it automatically; Sparrow adds no custom startup or environment configuration. |
 
 Quickshell's Arch package depends on Qt 6 base/declarative/SVG/Wayland
 components. Sparrow's video preview additionally uses `qt6-multimedia` and
@@ -62,8 +63,8 @@ components. Sparrow's video preview additionally uses `qt6-multimedia` and
 | `curl` | Default profile: weather and online wallpaper search/download/preview. The local wallpaper flow does not depend on network access. |
 | `wl-clipboard` | Default-profile requirement; Launcher copies calculator results and Rishot uses it for clipboard integration. |
 | `libnotify` | `notify-send` notices from Recorder and low-battery peripheral handling; Sparrow's internal notification UI does not use it. |
-| `brightnessctl` | Default-profile utility; internal brightness UI is only exposed when backlight hardware is detected. |
-| `ddcutil` | Default-profile utility; external brightness controls appear only for detected DDC/CI displays. |
+| `brightnessctl` | Default-profile utility; internal brightness control appears only when a sysfs backlight is detected. |
+| `ddcutil` | Default-profile utility; external brightness controls appear only for displays with a readable DDC/CI VCP 10 brightness value. Its package supplies the userspace tool and udev access rules; the kernel's I²C support and monitor capability remain hardware/system dependent. `coreutils` supplies the `timeout` wrapper used for writes. |
 | `nvibrant` | Optional NVIDIA vibrance backend; Sparrow checks its executable and NVIDIA device before exposing it. Not installed on the audited host. |
 | `tumbler` | Optional system D-Bus thumbnail service for Thunar image previews. |
 | `adw-gtk-theme` | Required source for Sparrow's generated GTK3/GTK4 CSS (Thunar, scoped pavucontrol, and GTK portal); palette generation fails clearly if the base is missing or incompatible. |

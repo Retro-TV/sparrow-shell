@@ -74,12 +74,16 @@
     {"source": "niri/sparrow/cursor.kdl + environment.d/90-cursor.conf", "destination": "GSettings org.gnome.desktop.interface cursor-theme/ cursor-size", "category": "B", "dependencies": ["Bibata-Modern-Ice installed", "python-gobject/Gio"], "generation": "when the cursor asset is present and the user has no explicit cursor theme, deploy both tracked selectors and seed Bibata-Modern-Ice/24 only for unset GSettings keys; track ownership and preserve later user choices"},
     {"source": "fonts.gtk", "destination": "GSettings org.gnome.desktop.interface font-name", "category": "D", "dependencies": ["adwaita-fonts", "python-gobject/Gio"], "generation": "seed Adwaita Sans 11 only when the user has no explicit value; track ownership and preserve later user choices"},
     {"source": "target Niri output inventory", "destination": "$XDG_CONFIG_HOME/niri/sparrow/{display-outputs.kdl,display-binds.kdl}", "category": "C", "dependencies": ["niri>=26.04"], "generation": "Display UI derives output names, modes, arrangement, numbering and focus for this machine"},
-    {"source": "target backlight/DDC devices", "destination": "Sparrow Mixer brightness controls", "category": "C", "dependencies": ["brightnessctl when internal backlight exists", "ddcutil when external DDC monitors exist"], "generation": "runtime hardware discovery; never copy reference SSD hardware state"},
+    {"source": "target backlight/DDC devices", "destination": "Sparrow Mixer brightness controls", "category": "C", "dependencies": ["brightnessctl and ddcutil are installed in the default package profile; each control remains gated by detected hardware and readable DDC VCP 10"], "generation": "runtime hardware discovery; never copy reference SSD hardware state"},
     {"source": "Sparrow UI/user actions", "destination": "$XDG_CONFIG_HOME/niri/sparrow/{user-appearance.kdl,user-binds.kdl}", "category": "D", "dependencies": ["niri>=26.04"], "generation": "managed transactions after user changes; preserve customized fragments; migrate only exact known prior Sparrow Look defaults"},
     {"source": "Sparrow wallpaper picker and user media", "destination": "$XDG_STATE_HOME/sparrow-shell/{wallpaper,wallpaper-map,wallpaper-bag,flags.json}", "category": "D", "dependencies": ["awww", "mpvpaper required video backend"], "generation": "fresh state selects bundled default.png; never copy personal selection or collection; migrate only the exact prior Pill-gap default 1.0 to 1.1 while preserving other flags"},
     {"source": "Sparrow runtime", "destination": "$XDG_STATE_HOME/sparrow-shell/** and $XDG_CACHE_HOME/sparrow-shell/** except generated palette.json", "category": "D", "dependencies": [], "generation": "runtime histories, logs, thumbnails and transaction backups; never deploy"}
   ],
   "system_integrations": {
+    "xwayland": {
+      "package": "xwayland-satellite",
+      "policy": "installed in the default desktop package profile; modern Niri manages compatibility automatically; Sparrow adds no startup command, environment override, or service"
+    },
     "greetd": {
       "packages": ["greetd", "greetd-tuigreet"],
       "sources": ["greetd/config.toml", "greetd/tuigreet.toml"],

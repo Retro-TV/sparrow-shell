@@ -80,7 +80,8 @@ declaring those when a genuinely minimal install omits them.
 | `wlsunset` | Quickshell-managed Night Light process | Official Extra package | Installed by default; the backend starts only when the user enables Night Light |
 | `cava` | Quickshell audio visualizer process | Official Extra `cava` | Installed by default; visualizer starts only when needed |
 | `brightnessctl` | Guarded Niri hardware-brightness binds and Mixer internal backlight | Official Extra `brightnessctl` | Installed by default; Mixer control still requires detected backlight hardware |
-| `ddcutil`, `timeout` | Mixer DDC detection/control; timeout bounds writes | Official `ddcutil` and `coreutils` | Installed by default; DDC control appears only for detected compatible displays |
+| `ddcutil`, `timeout` | Mixer DDC detection/control; timeout bounds writes | Official `ddcutil`; `coreutils` is already required | Installed by default; a slider appears only after VCP 10 is successfully read; EDID model identifies the display |
+| `xwayland-satellite` | Niri-managed XWayland compatibility for legacy/X11 applications such as Steam | Official Arch Extra package; depends on `xorg-xwayland` | Installed in the complete default profile; modern Niri manages startup automatically, with no Sparrow service or command |
 | `nvibrant` | NVIDIA vibrance control | Third-party/upstream package/source; identify compatible package only on NVIDIA targets | Optional; hidden unless command and NVIDIA modeset device exist |
 | `gpu-screen-recorder` | Recorder capture/record; process polling/stop | Official Extra `gpu-screen-recorder` ([package](https://archlinux.org/packages/extra/x86_64/gpu-screen-recorder/)) | Installed by default; capture remains device/session-dependent |
 | `slurp` | Recorder region and window-point selection helper | Official Extra `slurp` | Installed by default for Niri selection modes |
@@ -148,7 +149,7 @@ database. “Optional” means the desktop must remain useful when omitted.
 | hardware | `brightnessctl`, `ddcutil` — compatible `nvibrant` source/package varies | Utilities installed by default; controls remain device/driver adaptive |
 | network, audio, battery | `networkmanager`, `bluez`, `bluez-utils`, `pipewire`, `wireplumber`, `upower`, `pipewire-pulse` as appropriate | Core surfaces rely on compatible user/system services; enabling can conflict with a host setup |
 | media & portal modules | Quickshell runtime modules, Qt Multimedia QML module, GTK3/4; check imports against installed package | Required modules should be preflighted, not guessed by package names across releases |
-| XWayland | `xwayland-satellite` (which depends on Xwayland) | Optional compatibility for X11-only apps, not needed for Wayland-native Sparrow |
+| XWayland | `xwayland-satellite` (which depends on Xwayland) | Installed by default for legacy/X11 application compatibility |
 | Hyprlock fallback | `hyprlock` — Arch Extra | Optional only if retaining the simple fallback; not needed for primary lock |
 | icons | Tracked Sparrow icon subset and license notice; no need to install all Papirus theme | Sparrow's theme assets are tracked, while generated folder/doc artwork is runtime output |
 
@@ -306,16 +307,16 @@ Dynamic/Auto palette, Sparrow default image, Pill/Launcher/Settings, Niri
 Look/Display/Input/Keybind surfaces, system tray/media/audio/network/device
 surfaces, Qylock-derived Quickshell lock/PAM, Kitty/Fish/Starship, Thunar with
 Tumbler and scoped Sparrow GTK, Inter, JetBrains Mono Nerd Font, Bibata Modern
-Ice v2.0.6, Sparrow's licensed icon subset, curl/wl-clipboard/
-FFmpeg support tools, and GTK FileChooser/Niri ScreenCast portal integration.
+Ice v2.0.6, Sparrow's licensed icon subset, XWayland compatibility through
+`xwayland-satellite`, curl/wl-clipboard/FFmpeg support tools, and GTK
+FileChooser/Niri ScreenCast portal integration.
 Rishot is installed from the pinned upstream source by default. An existing
 explicit cursor choice is preserved. Optional app extras may be declined without
 removing the required terminal, file-manager, and GTK defaults.
 
-Keep adaptive extras as a compact optional list: Hyprlock fallback and
-XWayland compatibility. Hardware-specific controls still gate on detected
-capabilities; do not install a package simply because an optional UI is
-present.
+Keep adaptive extras as a compact optional list: Hyprlock fallback. Hardware-
+specific controls still gate on detected capabilities; their default-installed
+utilities do not imply that a device-specific control is available.
 
 ## Licensing and redistribution
 

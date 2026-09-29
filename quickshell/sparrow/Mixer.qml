@@ -66,6 +66,9 @@ PillSurface {
     property string openPicker: ""
 
     property int focusIndex: -1
+    readonly property bool backlightBrightnessAvailable: Backlight.present && Devices.brightnessctlAvailable
+    readonly property int brightnessControlCount: Devices.ddcMonitors.length + (backlightBrightnessAvailable ? 1 : 0)
+    readonly property bool multipleBrightnessControls: brightnessControlCount > 1
     readonly property int faderCount: faders.length
     readonly property var faders: {
         void brRep.count;
@@ -511,8 +514,8 @@ PillSurface {
                 width: faderRow.colW
                 s: root.s
                 icon: "sun"
-                subLabel: "Brightness"
-                subPersistent: false
+                subLabel: root.multipleBrightnessControls ? modelData.label : "Brightness"
+                subPersistent: root.multipleBrightnessControls
                 focused: root.focusIndex === index
                 value: pct / 100
                 valueLabel: pct + "%"
@@ -536,7 +539,7 @@ PillSurface {
 
         Loader {
             id: blLoader
-            active: Backlight.present && Devices.brightnessctlAvailable
+            active: root.backlightBrightnessAvailable
             visible: active
             width: active ? faderRow.colW : 0
 
@@ -544,8 +547,8 @@ PillSurface {
                 width: faderRow.colW
                 s: root.s
                 icon: "sun"
-                subLabel: "Brightness"
-                subPersistent: false
+                subLabel: root.multipleBrightnessControls ? "Built-in Display" : "Brightness"
+                subPersistent: root.multipleBrightnessControls
                 focused: root.focusIndex === brRep.count
                 value: root.previewBacklight >= 0 ? root.previewBacklight / 100 : Backlight.brightness
                 valueLabel: (root.previewBacklight >= 0 ? root.previewBacklight : Math.round(Backlight.brightness * 100)) + "%"

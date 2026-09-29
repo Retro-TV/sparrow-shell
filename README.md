@@ -80,6 +80,10 @@ not be there.
 - **A ready-to-use desktop:** Kitty, Fish, Starship, Thunar, scoped GTK
   integration, cursor/fonts, portals, and a greetd/tuigreet login option.
 
+Legacy/X11 applications such as Steam are supported through the included
+`xwayland-satellite`; modern Niri manages it without Sparrow-specific startup
+configuration.
+
 Hardware-dependent controls appear when the required device or backend is
 available. Sparrow's primary session lock is its Quickshell/PAM lockscreen;
 Hyprlock is only an optional fallback.

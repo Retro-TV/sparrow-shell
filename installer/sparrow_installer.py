@@ -311,6 +311,7 @@ class SparrowInstaller:
             "bluez-utils": {"bluetoothctl"}, "upower": {"upower"},
             "wlsunset": {"wlsunset"}, "cava": {"cava"},
             "brightnessctl": {"brightnessctl"}, "ddcutil": {"ddcutil"},
+            "xwayland-satellite": {"xwayland-satellite"},
             "curl": {"curl"}, "imagemagick": {"magick"}, "wl-clipboard": {"wl-copy", "wl-paste"},
             "gpu-screen-recorder": {"gpu-screen-recorder"}, "slurp": {"slurp"},
             "hyprlock": {"hyprlock"}, "kitty": {"kitty"}, "fish": {"fish"},

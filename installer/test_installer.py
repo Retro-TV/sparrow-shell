@@ -902,6 +902,55 @@ class InstallerTests(unittest.TestCase):
         self.assertTrue((self.paths.data / "sparrow-shell/licenses/Rishot-LICENSE").is_file())
         self.assertTrue(any("Installed pinned Rishot" in message for message in self.messages))
 
+    def test_default_profile_includes_xwayland_and_brightness_dependencies_and_repairs_missing_package(self) -> None:
+        sets = self.installer().package_sets()
+        defaults = set(sets["defaults"])
+        executables = set(sets["required_executables"])
+        self.assertIn("xwayland-satellite", defaults)
+        self.assertIn("xwayland-satellite", executables)
+        self.assertTrue({"brightnessctl", "ddcutil"}.issubset(defaults))
+        self.assertTrue({"brightnessctl", "ddcutil"}.issubset(executables))
+        self.assertIn("coreutils", sets["required"])
+
+        self.assertEqual(self.installer().install(), 0)
+        self.assertIn("xwayland-satellite", self.machine["packages"])
+        self.assertTrue({"brightnessctl", "ddcutil", "xwayland-satellite"}.issubset(
+            self.machine["commands"]
+        ))
+
+        self.machine["packages"].discard("xwayland-satellite")
+        self.machine["packages"].discard("brightnessctl")
+        self.machine["packages"].discard("ddcutil")
+        self.machine["commands"].discard("xwayland-satellite")
+        self.machine["commands"].discard("brightnessctl")
+        self.machine["commands"].discard("ddcutil")
+        self.messages.clear()
+        self.assertEqual(self.installer().install(), 0)
+        self.assertIn("xwayland-satellite", self.machine["packages"])
+        self.assertIn("brightnessctl", self.machine["packages"])
+        self.assertIn("ddcutil", self.machine["packages"])
+        self.assertTrue(any(
+            event[:3] == ("sudo", "pacman", "-S")
+            and {"xwayland-satellite", "brightnessctl", "ddcutil"}.issubset(set(event))
+            for event in self.machine["events"]
+        ))
+        transactions_after_repair = self.machine["pacman_transaction_count"]
+        self.assertEqual(self.installer().install(), 0)
+        self.assertEqual(self.machine["pacman_transaction_count"], transactions_after_repair)
+
+    def test_mixer_keeps_single_brightness_fader_compact_and_labels_multiple_displays(self) -> None:
+        mixer = (REPO / "quickshell/sparrow/Mixer.qml").read_text(encoding="utf-8")
+        fader = (REPO / "quickshell/sparrow/VFader.qml").read_text(encoding="utf-8")
+        self.assertIn(
+            'readonly property int brightnessControlCount: Devices.ddcMonitors.length + (backlightBrightnessAvailable ? 1 : 0)',
+            mixer,
+        )
+        self.assertIn('root.multipleBrightnessControls ? modelData.label : "Brightness"', mixer)
+        self.assertIn('root.multipleBrightnessControls ? "Built-in Display" : "Brightness"', mixer)
+        self.assertIn("subPersistent: root.multipleBrightnessControls", mixer)
+        self.assertIn("elide: Text.ElideRight", fader)
+        self.assertIn("Theme.secondaryText", fader)
+
     def test_yes_accepts_default_yes_but_never_bypasses_default_no_safety(self) -> None:
         installer = SparrowInstaller(
             self.paths, REPO, testing=True, assume_yes=True,
@@ -1036,6 +1085,31 @@ class InstallerTests(unittest.TestCase):
         installed = installer.write_file(target, b"Sparrow defaults\n", role="Kitty defaults")
         self.assertFalse(installed)
         self.assertEqual(target.read_text(), "user kitty config\n")
+
+    def test_managed_quickshell_runtime_upgrade_replaces_old_bytes_without_touching_user_state(self) -> None:
+        old_source = self.root / "runtime-v1"
+        new_source = self.root / "runtime-v2"
+        old_source.mkdir()
+        new_source.mkdir()
+        (old_source / "Mixer.qml").write_text("old managed runtime\n")
+        (new_source / "Mixer.qml").write_text("updated Sparrow runtime\n")
+        destination = self.paths.config / "quickshell/sparrow"
+
+        original_installer = self.installer()
+        self.assertTrue(original_installer.write_tree(destination, old_source, role="Quickshell runtime"))
+        state = self.paths.state / "sparrow-shell/wallpaper"
+        state.parent.mkdir(parents=True)
+        state.write_text("user-selected-wallpaper\n")
+        appearance = self.paths.config / "niri/sparrow/user-appearance.kdl"
+        appearance.parent.mkdir(parents=True)
+        appearance.write_text("// user Look choices\n")
+
+        upgrade_installer = self.installer()
+        upgrade_installer.managed = dict(original_installer.managed)
+        self.assertTrue(upgrade_installer.write_tree(destination, new_source, role="Quickshell runtime"))
+        self.assertEqual((destination / "Mixer.qml").read_text(), "updated Sparrow runtime\n")
+        self.assertEqual(state.read_text(), "user-selected-wallpaper\n")
+        self.assertEqual(appearance.read_text(), "// user Look choices\n")
 
     def test_unrelated_runtime_collision_stops_before_canonical_runtime(self) -> None:
         runtime = self.paths.config / "quickshell/sparrow"

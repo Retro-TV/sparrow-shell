@@ -44,10 +44,10 @@ INCLUDE_RE = re.compile(r'^\s*include\s+(?:optional=true\s+)?(?P<path>r#+".*?"#+
 KDL_STRING_RE = r'"(?:\\.|[^"\\])*"'
 
 # Stable IDs and shipped key assignments for the curated Keybinds surface.
-# Actions are copied from the tracked/default KDL bind file, never supplied by
-# the UI. User input is only a map from these IDs to a validated key chord.
+# Custom commands are validated as argv and serialized into Niri spawn actions;
+# the UI never supplies KDL.
 KEYBIND_DEFAULTS = {
-    "kitty": "Super+T", "thunar": "Super+E", "firefox": "Super+F",
+    "terminal": "Super+T", "file-manager": "Super+E", "browser": "Super+F",
     "lock": "Super+L", "screenshot": "Super+Shift+S", "recorder": "Super+D",
     "launcher": "Super+Space", "wallpaper-picker": "Super+C", "wallpaper-next": "Super+B",
     "close": "Super+Q", "floating": "Super+W",
@@ -66,6 +66,10 @@ KEYBIND_DEFAULTS = {
     "reset-height": "Super+Ctrl+R", "maximize-column": "Super+M",
     "fullscreen": "Super+Shift+F", "inhibit": "Super+Escape",
 }
+LEGACY_BIND_IDS = {"kitty": "terminal", "thunar": "file-manager", "firefox": "browser"}
+DEFAULT_APP_IDS = {"browser": "firefox", "terminal": "kitty", "file-manager": "sparrow-files"}
+CUSTOM_BIND_ID_RE = re.compile(r"^custom-[a-z0-9-]{1,48}$")
+DESKTOP_ID_RE = re.compile(r"^[A-Za-z0-9_.@+-]{1,200}$")
 CHORD_RE = re.compile(r"^(?:(?:Super|Ctrl|Alt|Shift)\+)*(?:[A-Za-z][A-Za-z0-9_-]*|[0-9])$")
 NIRI_NAMED_KEYS = {
     "Space", "Left", "Right", "Up", "Down", "Tab", "Escape", "Return", "Enter",
@@ -309,24 +313,85 @@ def _safe_user_input(content: str) -> bool:
     return True
 
 
-def _parse_user_bind_overrides(content: str) -> Optional[dict[str, str]]:
-    """Accept only a JSON mapping of curated action IDs to Niri key chords."""
+def _parse_user_bind_overrides(content: str) -> Optional[dict[str, object]]:
+    """Accept legacy chord maps or constrained v2 apps/custom shortcut data."""
     try:
         values = json.loads(content)
     except (json.JSONDecodeError, TypeError):
         return None
-    if not isinstance(values, dict) or len(values) > len(KEYBIND_DEFAULTS):
+    if not isinstance(values, dict):
         return None
-    result: dict[str, str] = {}
+    if "schemaVersion" not in values:
+        raw_overrides, apps, custom = values, {}, []
+    else:
+        if values.get("schemaVersion") != 2 or set(values) != {"schemaVersion", "overrides", "apps", "custom"}:
+            return None
+        raw_overrides, apps, custom = values["overrides"], values["apps"], values["custom"]
+        if not isinstance(raw_overrides, dict) or not isinstance(apps, dict) or not isinstance(custom, list):
+            return None
+    if len(raw_overrides) > len(KEYBIND_DEFAULTS):
+        return None
+    overrides: dict[str, str] = {}
     seen: set[str] = set()
-    for bind_id, chord in values.items():
+    for raw_id, chord in raw_overrides.items():
+        bind_id = LEGACY_BIND_IDS.get(raw_id, raw_id)
         if bind_id not in KEYBIND_DEFAULTS or not isinstance(chord, str) or not _valid_key_chord(chord):
             return None
-        if chord == KEYBIND_DEFAULTS[bind_id] or chord in seen:
+        if chord == KEYBIND_DEFAULTS[bind_id] or chord in seen or bind_id in overrides:
             return None
         seen.add(chord)
-        result[bind_id] = chord
-    return result
+        overrides[bind_id] = chord
+    if len(apps) > len(DEFAULT_APP_IDS) or any(
+            role not in DEFAULT_APP_IDS or not isinstance(desktop_id, str)
+            or not DESKTOP_ID_RE.fullmatch(desktop_id)
+            for role, desktop_id in apps.items()):
+        return None
+    if len(custom) > 128:
+        return None
+    normalized_custom: list[dict[str, str]] = []
+    ids: set[str] = set()
+    import shlex
+    for item in custom:
+        if not isinstance(item, dict) or item.get("kind") not in ("application", "command"):
+            return None
+        required = {"id", "chord", "kind", "label", "desktopId"} if item["kind"] == "application" else {"id", "chord", "kind", "label", "command"}
+        if set(item) != required:
+            return None
+        bind_id, chord, label = item["id"], item["chord"], item["label"]
+        if (not isinstance(bind_id, str) or not CUSTOM_BIND_ID_RE.fullmatch(bind_id) or bind_id in ids
+                or not isinstance(chord, str) or not _valid_key_chord(chord)
+                or not isinstance(label, str) or not label.strip() or len(label) > 100
+                or "\n" in label or "\r" in label):
+            return None
+        ids.add(bind_id)
+        normalized = {"id": bind_id, "chord": chord, "kind": item["kind"], "label": label.strip()}
+        if item["kind"] == "application":
+            desktop_id = item["desktopId"]
+            if not isinstance(desktop_id, str) or not DESKTOP_ID_RE.fullmatch(desktop_id):
+                return None
+            normalized["desktopId"] = desktop_id
+        else:
+            command = item["command"]
+            if not isinstance(command, str) or len(command) > 2048 or "\x00" in command:
+                return None
+            try:
+                argv = shlex.split(command, posix=True)
+            except ValueError:
+                return None
+            if not argv or len(argv) > 64 or any(not arg or "\n" in arg or "\r" in arg for arg in argv):
+                return None
+            normalized["command"] = command
+        normalized_custom.append(normalized)
+    occupied = {chord: bind_id for bind_id, chord in KEYBIND_DEFAULTS.items() if bind_id not in overrides}
+    for bind_id, chord in overrides.items():
+        if chord in occupied:
+            return None
+        occupied[chord] = bind_id
+    for item in normalized_custom:
+        if item["chord"] in occupied:
+            return None
+        occupied[item["chord"]] = item["id"]
+    return {"overrides": overrides, "apps": dict(apps), "custom": normalized_custom}
 
 
 def _valid_key_chord(chord: str) -> bool:
@@ -365,9 +430,12 @@ class ConfigTransaction:
         return self.command_runner(args, text=True, capture_output=True, timeout=timeout, check=False)
 
     def _render_user_binds(self, content: str) -> str:
-        overrides = _parse_user_bind_overrides(content)
-        if overrides is None:
+        parsed = _parse_user_bind_overrides(content)
+        if parsed is None:
             raise ValueError("shortcut overrides are malformed or outside Sparrow's curated actions")
+        overrides = parsed["overrides"]
+        apps = parsed["apps"]
+        custom = parsed["custom"]
         default_file = self.config_root / "sparrow" / "binds.kdl"
         if not default_file.is_file() or default_file.is_symlink():
             raise ValueError("Sparrow default binds.kdl is missing or unsafe")
@@ -395,7 +463,13 @@ class ConfigTransaction:
                 raise ValueError(f"{chord} is reserved for a generated display shortcut")
             occupied[chord] = bind_id
 
-        lines = ["// Generated by Sparrow Keybinds; do not edit.", "binds {"]
+        lines = ["// Generated by Sparrow Keybinds; do not edit."]
+        for role, desktop_id in apps.items():
+            if desktop_id != DEFAULT_APP_IDS[role]:
+                lines.append(f"// app: {role} = {desktop_id}")
+        for item in custom:
+            lines.append("// custom: " + json.dumps(item, ensure_ascii=True, separators=(",", ":")))
+        lines.append("binds {")
         for bind_id in KEYBIND_DEFAULTS:
             chord = overrides.get(bind_id)
             if not chord:
@@ -404,6 +478,20 @@ class ConfigTransaction:
             lines.append(f"    // override: {bind_id} = {chord}")
             lines.append(f"    {chord} {actions[bind_id]}")
             lines.append(f'    {default_chord} {{ spawn "true"; }}')
+        import shlex
+        for item in custom:
+            if item["chord"] in display_chords:
+                raise ValueError(f"{item['chord']} is reserved for a generated display shortcut")
+            if item["chord"] in occupied:
+                raise ValueError(f"{item['chord']} is already assigned to {occupied[item['chord']]}")
+            occupied[item["chord"]] = item["id"]
+            if item["kind"] == "application":
+                argv = ["sparrow-launch-app", "desktop", item["desktopId"]]
+            else:
+                argv = shlex.split(item["command"], posix=True)
+            kdl_args = " ".join(json.dumps(arg, ensure_ascii=False) for arg in argv)
+            title = json.dumps(item["label"], ensure_ascii=False)
+            lines.append(f"    {item['chord']} hotkey-overlay-title={title} {{ spawn {kdl_args}; }}")
         lines.append("}")
         return "\n".join(lines) + "\n"
 

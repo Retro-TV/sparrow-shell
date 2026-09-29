@@ -1,8 +1,8 @@
 binds {
     // Applications.
-    Super+T hotkey-overlay-title="Open Kitty" { spawn "kitty"; }
-    Super+E hotkey-overlay-title="Open Sparrow Files" { spawn "env" "GTK_THEME=Sparrow" "thunar"; }
-    Super+F hotkey-overlay-title="Open Firefox" { spawn "firefox"; }
+    Super+T hotkey-overlay-title="Open Terminal" { spawn "sparrow-launch-app" "role" "terminal"; }
+    Super+E hotkey-overlay-title="Open File manager" { spawn "sparrow-launch-app" "role" "file-manager"; }
+    Super+F hotkey-overlay-title="Open Browser" { spawn "sparrow-launch-app" "role" "browser"; }
     Super+L hotkey-overlay-title="Lock session" { spawn-sh "\"$HOME/.config/quickshell/sparrow/scripts/sparrow-lock\""; }
     Super+Shift+S hotkey-overlay-title="Screenshot with Rishot" { spawn "rishot"; }
     Super+D hotkey-overlay-title="Open Sparrow Recorder" { spawn-sh "qs ipc --path \"$HOME/.config/quickshell/sparrow\" call pill recorder ''"; }

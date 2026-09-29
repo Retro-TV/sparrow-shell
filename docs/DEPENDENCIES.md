@@ -22,6 +22,7 @@ shell to start.
 | `findutils`, `coreutils`, `grep`, `gawk`, `sed`, `procps-ng`, `util-linux` | Base commands used by scripts (`find`, `timeout`, `pgrep`, `flock`, `shuf`, text processing, filesystem utilities). |
 | `pipewire`, `wireplumber` | Quickshell PipeWire service, mixer/OSD, Cava source, recording audio; `wpctl` comes from WirePlumber and `pw-dump` from PipeWire. |
 | `gtk3` | `gtk-launch` starts selected `.desktop` entries in Sparrow Launcher. Ordinary desktop-entry discovery is not a package manager. |
+| `gtk-launch` + Sparrow `sparrow-launch-app` | Niri's Browser/Terminal/File manager role shortcuts resolve a desktop ID and launch the desktop entry (so Sparrow Files retains its app-scoped GTK theme). |
 | Arch/CachyOS base session | `systemctl`, `systemd-analyze`, `env`, `gio`, and `udevadm` come from the existing systemd/glib/base installation; the installer checks the commands needed for session and config validation. |
 | `systemd` and `dbus` | User services, graphical-session target, session bus and Quickshell desktop-service integration. |
 | `pam` | System PAM stack used by Quickshell's primary secure session lock. |
@@ -50,7 +51,7 @@ components. Sparrow's video preview additionally uses `qt6-multimedia` and
 | `xdg-desktop-portal`, `xdg-desktop-portal-gtk` | Required for the tracked FileChooser route; GTK theme remains scoped to the GTK portal service. |
 | `xdg-desktop-portal-gnome` | Required for the tracked Niri ScreenCast route in the canonical Sparrow portal profile ([Niri screencasting](https://github.com/niri-wm/niri/wiki/Screencasting)). Existing user portal config is backed up before replacement. |
 | `lxqt-policykit` (conditional required agent) | Provides `/usr/bin/lxqt-policykit-agent`; added to required packages only when no running/autostart/user-unit graphical Polkit agent is detected. Existing agents are preserved and Sparrow's own unit is omitted. |
-| `xdg-utils` | `xdg-open` integration used by Recorder for recordings and folders. |
+| `xdg-utils` | `xdg-open` integration used by Recorder for recordings and folders; `xdg-settings` synchronizes a Browser choice with the desktop's default browser. |
 | `qt6-multimedia`, `qt6-multimedia-ffmpeg` | Needed for Sparrow's wallpaper video previews in the picker. |
 | `wlsunset` | Default-profile Night Light backend; Sparrow starts it only when the user enables Night Light. |
 | `inter-font` | Required; supplies Sparrow's core UI family `Inter Black`. |

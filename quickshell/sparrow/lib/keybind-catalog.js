@@ -1,9 +1,4 @@
 var groups = [
-    { name: "Applications", items: [
-        { id: "kitty", label: "Open Kitty", key: "Super+T" },
-        { id: "thunar", label: "Open Sparrow Files", key: "Super+E" },
-        { id: "firefox", label: "Open Firefox", key: "Super+F" }
-    ]},
     { name: "Sparrow", items: [
         { id: "lock", label: "Lock session", key: "Super+L" },
         { id: "screenshot", label: "Screenshot", key: "Super+Shift+S" },

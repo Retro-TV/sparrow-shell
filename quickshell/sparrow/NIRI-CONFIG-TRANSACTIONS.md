@@ -44,15 +44,23 @@ KDL strings and validated by the installed Niri parser before commit.
 
 `niri/sparrow/binds.kdl` in the repository is the portable default keymap;
 the installed `~/.config/niri/sparrow/binds.kdl` is its deployed copy.
-`user-binds.kdl` is optional and contains only changes to stable IDs in the
-Keybinds catalog. Quickshell submits a JSON ID-to-chord map, not arbitrary KDL
-or commands. The transaction helper obtains actions from the default bind file,
-rejects collisions with other curated shortcuts and generated display binds,
-then validates the complete staged config with Niri. Niri has no native bind
-unset directive, so moving a default chord installs a harmless `spawn "true"`
-binding at its former chord and binds the same curated action at the new chord.
-Resetting that action removes its override and restores the shipped default.
-Display shortcuts remain owned by Display and are not editable here.
+`user-binds.kdl` is optional user state. The Keybinds surface sends a constrained
+schema containing stable default-action chord overrides, selected desktop IDs
+for Browser/Terminal/File manager, and custom application/command bindings.
+The helper validates every field, obtains default actions from tracked KDL, and
+serializes command text with `shlex` into Niri's direct `spawn` argv form; it
+never generates `spawn-sh` or accepts caller-supplied KDL. Default application
+roles are dispatched through the managed `sparrow-launch-app` PATH command.
+Choosing Browser also asks `xdg-settings` to set that desktop entry as the
+user's default web browser; installation itself does not alter MIME defaults.
+Terminal and File manager remain Sparrow shortcut roles because there is no
+uniform XDG default-terminal/file-manager interface. Sparrow Files still runs
+its desktop entry, preserving its app-scoped `GTK_THEME=Sparrow` behavior.
+Niri has no native bind-unset directive, so moving a default chord places a
+harmless `spawn "true"` at its previous chord. Conflicts with Sparrow defaults,
+other custom shortcuts, and generated display binds are rejected before staging.
+Reset restores Sparrow's role/chord defaults while retaining independent
+user-created shortcuts. Display shortcuts remain owned by Display.
 
 ## Transaction contract
 

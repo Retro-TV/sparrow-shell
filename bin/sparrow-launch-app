@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+config_home=${XDG_CONFIG_HOME:-"$HOME/.config"}
+fragment="$config_home/niri/sparrow/user-binds.kdl"
+
+case "${1:-}" in
+    role)
+        case "${2:-}" in
+            browser) role=browser; fallback=firefox ;;
+            terminal) role=terminal; fallback=kitty ;;
+            file-manager) role=file-manager; fallback=sparrow-files ;;
+            *) exit 2 ;;
+        esac
+        desktop_id=$fallback
+        if [[ -r $fragment ]]; then
+            saved=$(sed -nE 's#^// app: '"$role"' = ([A-Za-z0-9_.@+-]+)$#\1#p' "$fragment" | tail -n 1)
+            [[ -z $saved ]] || desktop_id=$saved
+        fi
+        ;;
+    desktop)
+        desktop_id=${2:-}
+        [[ $desktop_id =~ ^[A-Za-z0-9_.@+-]+$ ]] || exit 2
+        ;;
+    *) exit 2 ;;
+esac
+
+exec gtk-launch "$desktop_id"

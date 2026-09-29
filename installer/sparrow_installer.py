@@ -675,6 +675,7 @@ class SparrowInstaller:
 
     def _manifest_destination(self, destination: str) -> Path:
         roots = {
+            "$HOME": self.paths.home,
             "$XDG_CONFIG_HOME": self.paths.config,
             "$XDG_DATA_HOME": self.paths.data,
             "$XDG_STATE_HOME": self.paths.state,
@@ -697,7 +698,7 @@ class SparrowInstaller:
                     raise ValueError(f"Source-of-truth source is missing: {source}")
                 continue
             if not any(entry["destination"] == token or entry["destination"].startswith(token + "/")
-                       for token in ("$XDG_CONFIG_HOME", "$XDG_DATA_HOME", "$XDG_STATE_HOME", "$XDG_CACHE_HOME")):
+                       for token in ("$HOME", "$XDG_CONFIG_HOME", "$XDG_DATA_HOME", "$XDG_STATE_HOME", "$XDG_CACHE_HOME")):
                 if category == "A":
                     raise ValueError(f"Canonical source has a non-deployable destination: {entry['destination']}")
                 continue

@@ -59,8 +59,8 @@ Singleton {
 
     /**
      * Submit content for an explicitly Sparrow-managed fragment. Most callers
-     * send constrained KDL; user-binds sends a curated ID-to-chord JSON map.
-     * The helper owns staging, validation, backups, atomic replacement, reload,
+     * send constrained KDL; user-binds sends constrained role/chord/custom data.
+     * The helper owns schema validation, argv serialization, staging, validation, backups, atomic replacement, reload,
      * and rollback. IDs, never filesystem paths, are accepted at this boundary.
      */
     function writeManagedFragment(fragmentId, content, confirm = false) {

@@ -300,15 +300,15 @@ class TransactionTests(unittest.TestCase):
         self.assertFalse(TRANSACTION._safe_user_input(base.replace("    keyboard {\n", "    keyboard {\n        numlock\n        numlock\n")))
         self.assertFalse(TRANSACTION._safe_user_input(base.replace("    keyboard {\n", "    keyboard {\n        keymap \"us\"\n")))
 
-    def test_user_binds_accept_only_curated_chord_overrides_and_stage_complete_config(self):
+    def test_user_binds_migrate_legacy_chords_to_roles_and_stage_safe_config(self):
         candidate = json.dumps({"kitty": "Super+Y", "overview": "Super+Shift+O"})
         self.assertTrue(TRANSACTION.ConfigTransaction._safe_fragment_payload("user-binds", candidate))
         result = self.transaction().transact("user-binds", candidate)
         self.assertEqual(result["status"], "success", result)
         target = self.config_root / "sparrow" / "user-binds.kdl"
         written = target.read_text(encoding="utf-8")
-        self.assertIn("// override: kitty = Super+Y", written)
-        self.assertIn('Super+Y hotkey-overlay-title="Open Kitty" { spawn "kitty"; }', written)
+        self.assertIn("// override: terminal = Super+Y", written)
+        self.assertIn('Super+Y hotkey-overlay-title="Open Terminal" { spawn "sparrow-launch-app" "role" "terminal"; }', written)
         self.assertIn('Super+T { spawn "true"; }', written)
         self.assertIn("// override: overview = Super+Shift+O", written)
         self.assertEqual(self.reload_count, 1)
@@ -345,11 +345,84 @@ class TransactionTests(unittest.TestCase):
         result = self.transaction().transact("user-binds", '{"firefox":"Super+Alt+F"}')
         self.assertEqual(result["status"], "success", result)
         written = (self.config_root / "sparrow" / "user-binds.kdl").read_text(encoding="utf-8")
-        self.assertNotIn("override: kitty", written)
+        self.assertNotIn("override: terminal", written)
         self.assertNotIn('Super+T { spawn "true"; }', written)
-        self.assertIn("// override: firefox = Super+Alt+F", written)
+        self.assertIn("// override: browser = Super+Alt+F", written)
         self.assertIn('Super+F { spawn "true"; }', written)
         self.validate_active_fixture()
+
+    def test_user_binds_store_app_role_and_custom_desktop_shortcut(self):
+        payload = {
+            "schemaVersion": 2,
+            "overrides": {"browser": "Super+Alt+F"},
+            "apps": {"browser": "org.mozilla.firefox"},
+            "custom": [{"id": "custom-blender", "chord": "Super+Shift+B", "kind": "application",
+                        "label": "Blender", "desktopId": "blender"}],
+        }
+        result = self.transaction().transact("user-binds", json.dumps(payload))
+        self.assertEqual(result["status"], "success", result)
+        written = (self.config_root / "sparrow" / "user-binds.kdl").read_text(encoding="utf-8")
+        self.assertIn("// app: browser = org.mozilla.firefox", written)
+        self.assertIn('Super+Alt+F hotkey-overlay-title="Open Browser" { spawn "sparrow-launch-app" "role" "browser"; }', written)
+        self.assertIn('Super+Shift+B hotkey-overlay-title="Blender" { spawn "sparrow-launch-app" "desktop" "blender"; }', written)
+        self.validate_active_fixture()
+
+    def test_changing_only_browser_role_leaves_its_chord_unchanged(self):
+        payload = {"schemaVersion": 2, "overrides": {}, "apps": {"browser": "librewolf"}, "custom": []}
+        result = self.transaction().transact("user-binds", json.dumps(payload))
+        self.assertEqual(result["status"], "success", result)
+        text = (self.config_root / "sparrow/user-binds.kdl").read_text()
+        self.assertIn("// app: browser = librewolf", text)
+        self.assertNotIn("override: browser", text)
+        self.assertIn('Super+F hotkey-overlay-title="Open Browser" { spawn "sparrow-launch-app" "role" "browser"; }',
+                      (self.config_root / "sparrow/binds.kdl").read_text())
+        self.validate_active_fixture()
+
+    def test_user_binds_custom_edit_delete_and_default_reset_preserve_custom_entries(self):
+        custom = {"id": "custom-blender", "chord": "Super+Shift+B", "kind": "application",
+                  "label": "Blender", "desktopId": "blender"}
+        original = {"schemaVersion": 2, "overrides": {"browser": "Super+Alt+F"},
+                    "apps": {"browser": "librewolf"}, "custom": [custom]}
+        self.assertEqual(self.transaction().transact("user-binds", json.dumps(original))["status"], "success")
+
+        edited = dict(custom, chord="Super+Shift+G", label="Blender editor")
+        next_state = {"schemaVersion": 2, "overrides": {}, "apps": {}, "custom": [edited]}
+        self.assertEqual(self.transaction().transact("user-binds", json.dumps(next_state))["status"], "success")
+        written = (self.config_root / "sparrow/user-binds.kdl").read_text()
+        self.assertNotIn("app: browser =", written)
+        self.assertIn('Super+Shift+G hotkey-overlay-title="Blender editor"', written)
+        self.assertNotIn("Super+Shift+B hotkey-overlay-title", written)
+
+        deleted = dict(next_state, custom=[])
+        self.assertEqual(self.transaction().transact("user-binds", json.dumps(deleted))["status"], "success")
+        written = (self.config_root / "sparrow/user-binds.kdl").read_text()
+        self.assertNotIn("custom-blender", written)
+        self.assertNotIn("Super+Shift+G", written)
+        self.validate_active_fixture()
+
+    def test_user_binds_serialize_advanced_command_as_spawn_argv_not_shell(self):
+        payload = {
+            "schemaVersion": 2, "overrides": {}, "apps": {},
+            "custom": [{"id": "custom-cmd", "chord": "Super+Shift+X", "kind": "command",
+                        "label": "notify-send", "command": "notify-send 'Sparrow %F' \"hello world\""}],
+        }
+        result = self.transaction().transact("user-binds", json.dumps(payload))
+        self.assertEqual(result["status"], "success", result)
+        written = (self.config_root / "sparrow" / "user-binds.kdl").read_text(encoding="utf-8")
+        self.assertIn('Super+Shift+X hotkey-overlay-title="notify-send" { spawn "notify-send" "Sparrow %F" "hello world"; }', written)
+        self.assertNotIn("spawn-sh", written)
+        self.validate_active_fixture()
+
+    def test_user_binds_reject_conflicting_or_unsafe_custom_shortcuts(self):
+        payload = {"schemaVersion": 2, "overrides": {}, "apps": {}, "custom": [
+            {"id": "custom-a", "chord": "Super+F", "kind": "application", "label": "Other", "desktopId": "other"}
+        ]}
+        self.assertIsNone(TRANSACTION._parse_user_bind_overrides(json.dumps(payload)))
+        payload["custom"][0]["chord"] = "Super+F1"
+        self.assertEqual(self.transaction().transact("user-binds", json.dumps(payload))["status"], "invalid_content")
+        payload["custom"][0]["chord"] = "Super+Shift+X"
+        payload["custom"][0]["desktopId"] = "../../bad"
+        self.assertEqual(self.transaction().transact("user-binds", json.dumps(payload))["status"], "invalid_content")
 
     def test_user_binds_reload_failure_restores_previous_overrides(self):
         original = self.transaction().transact("user-binds", '{"kitty":"Super+Y"}')

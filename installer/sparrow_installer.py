@@ -357,6 +357,17 @@ class SparrowInstaller:
                 code, stderr = 1, "simulated pacman query failure"
             else:
                 stdout = "\n".join(sorted(self.test_machine["packages"]))
+        elif args[:2] == ["pacman", "-T"]:
+            if self.test_machine.get("pacman_query_failure"):
+                code, stderr = 1, "simulated pacman capability query failure"
+            else:
+                providers = self.test_machine.get("package_providers", {})
+                requirements = args[3:] if len(args) > 2 and args[2] == "--" else args[2:]
+                missing = [requirement for requirement in requirements
+                           if requirement not in self.test_machine["packages"]
+                           and not (set(providers.get(requirement, [])) & self.test_machine["packages"])]
+                stdout = "\n".join(missing)
+                code = 127 if missing else 0
         elif args[:2] == ["pacman", "-Si"]:
             if args[-1] not in self.test_machine.get("repo_packages", {"mpvpaper"}):
                 code, stderr = 1, f"simulated repository package unavailable: {args[-1]}"
@@ -750,8 +761,27 @@ class SparrowInstaller:
         self._installed_package_cache = set(result.stdout.splitlines())
         return self._installed_package_cache
 
+    def missing_package_requirements(self, packages: list[str]) -> list[str]:
+        """Return unsatisfied package requirements, honoring pacman's Provides graph."""
+        installed = self.installed_packages()
+        unresolved = sorted(set(packages) - installed)
+        if not unresolved:
+            return []
+        result = self._command(["pacman", "-T", "--", *unresolved])
+        if result.returncode == 0:
+            return []
+        if result.returncode == 127 and not (result.stderr or "").strip():
+            missing = [line.strip() for line in (result.stdout or "").splitlines() if line.strip()]
+            # Be conservative if Pacman returned an unexpected format.
+            return missing if missing else unresolved
+        raise PackageTransactionError(
+            "Could not verify installed package providers with pacman -T: "
+            + (result.stderr or result.stdout or f"exit status {result.returncode}"),
+            result.returncode,
+        )
+
     def _install_package_list(self, packages: list[str], *, label: str, required: bool = False) -> bool:
-        missing = sorted(set(packages) - self.installed_packages())
+        missing = self.missing_package_requirements(packages)
         if not missing:
             self.output(f"{label}: already installed")
             return True
@@ -778,7 +808,7 @@ class SparrowInstaller:
                 result.returncode,
             )
         self._installed_package_cache = None
-        still_missing = sorted(set(missing) - self.installed_packages())
+        still_missing = self.missing_package_requirements(missing)
         if still_missing:
             raise PackageTransactionError(
                 f"Pacman returned success for {label}, but package verification still finds these missing: "
@@ -805,7 +835,6 @@ class SparrowInstaller:
             self.output("pacman is unavailable; install/repair pacman before running Sparrow Installer.")
             return False
         sets = self.package_sets()
-        installed = self.installed_packages()
         agent_exists = self.has_existing_polkit_agent()
         required_packages = list(sets["required"])
         for package in sets.get("required_feature_packages", []):
@@ -824,8 +853,8 @@ class SparrowInstaller:
             required_packages.append(sets["polkit_agent"]["package"])
         desktop_packages = list(dict.fromkeys([*required_packages, *sets["defaults"]]))
         for group, names in (("Complete Sparrow desktop", desktop_packages), *sets["optional"].items()):
-            present = sorted(set(names) & installed)
-            missing = sorted(set(names) - installed)
+            missing = self.missing_package_requirements(list(names))
+            present = sorted(set(names) - set(missing))
             self.output(f"Detected {group} packages present: " + (", ".join(present) if present else "none"))
             if missing:
                 self.output(f"  not installed: {', '.join(missing)}")

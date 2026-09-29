@@ -1,5 +1,10 @@
 # Sparrow Installer v1 — second bare-metal CachyOS test
 
+> Historical test procedure, superseded by later successful bare-metal runs.
+> The separate/manual Rishot statements below describe an older installer
+> baseline; current `install.sh` installs the pinned Rishot integration by
+> default. Do not use this page as current installation instructions.
+
 This is the manual acceptance run after the first fresh-install attempt stopped
 before installing packages. Keep this machine separate from the development
 checkout and record the complete terminal output and every installer answer.

@@ -64,12 +64,19 @@ PillSurface {
 
     readonly property string hsCon: "SparrowHotspot"
     readonly property string hsIface: wifiDev ? (wifiDev.name || "wlan0") : "wlan0"
+    readonly property string hotspotHelper: (Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config"))
+        + "/quickshell/sparrow/scripts/hotspot-profile.py"
     property string hsName: "Sparrow"
     property string hsPw: ""
+    property bool hsProfileExists: false
     property bool hsActive: false
     property bool hsBusy: false
+    property string hsPendingAction: ""
     property string hsEdit: ""
     property string hsDraft: ""
+    property string hsError: ""
+    property bool hsReveal: false
+    property bool hsUpstream: false
 
     /**
      * Draft of the password being typed for `expandedSsid`. Lives on the root so
@@ -254,11 +261,16 @@ PillSurface {
             connSpinTimer.stop();
             connectFailed = false;
             hsEdit = "";
+            hsPendingAction = "";
+            hsError = "";
+            hsDraft = "";
+            hsReveal = false;
             hidePassword();
         }
     }
 
     onWifiOnChanged: if (!wifiOn) stopScan()
+    onHsActiveChanged: if (hsActive) hsRouteProc.running = true
 
     onExpandedSsidChanged: if (revealedSsid !== expandedSsid) hidePassword()
 
@@ -270,6 +282,8 @@ PillSurface {
         }
         if (root.active && root.wifiDev)
             detailProc.running = true;
+        if (root.active && root.hsActive)
+            hsRouteProc.running = true;
     }
 
     Binding {
@@ -297,26 +311,50 @@ PillSurface {
         command: ["nmcli", "dev", "wifi", "rescan"]
     }
 
-    /**
-     * Brings the shared AP up with the current name and password, creating the
-     * persistent connection on first use and modifying it on later changes. Name
-     * and password are passed as positional arguments, never spliced into the
-     * shell string, so an odd character cannot break or inject the command.
-     */
-    function applyHotspot() {
-        if (hsBusy || hsPw.length < 8)
+    function profilePayload() {
+        return JSON.stringify({ name: hsName, password: hsPw, interface: hsIface }) + "\n";
+    }
+
+    function validHotspotPassword(value) {
+        if (value.length === 64)
+            return /^[0-9a-fA-F]{64}$/.test(value);
+        return value.length >= 8 && value.length <= 63 && /^[\x20-\x7e]+$/.test(value);
+    }
+
+    function requestHotspot() {
+        if (hsBusy)
             return;
+        if (validHotspotPassword(hsPw)) {
+            runHotspotProfile("apply");
+        } else if (hsProfileExists) {
+            // An existing NM profile may have an agent-owned secret that nmcli
+            // cannot reveal. Activate it unchanged rather than replacing it.
+            hsBusy = true;
+            hsUpExistingProc.running = true;
+        } else {
+            hsPendingAction = "apply";
+            hsDraft = "";
+            hsEdit = "pw";
+            hsError = "Set an 8–63 character password";
+        }
+    }
+
+    function runHotspotProfile(action) {
         hsBusy = true;
-        hsApplyProc.command = ["sh", "-c",
-            'c="' + hsCon + '"; '
-            + 'if nmcli -t connection show "$c" >/dev/null 2>&1; then '
-            +   'nmcli connection modify "$c" 802-11-wireless.ssid "$1" 802-11-wireless-security.key-mgmt wpa-psk 802-11-wireless-security.psk "$2"; '
-            + 'else '
-            +   'nmcli connection add type wifi ifname "$3" con-name "$c" autoconnect no 802-11-wireless.ssid "$1" 802-11-wireless.mode ap 802-11-wireless-security.key-mgmt wpa-psk 802-11-wireless-security.psk "$2" ipv4.method shared; '
-            + 'fi; '
-            + 'nmcli connection up "$c"',
-            "sh", hsName, hsPw, hsIface];
-        hsApplyProc.running = true;
+        if (action === "apply") {
+            hsApplyProc.command = ["python3", hotspotHelper, "apply"];
+            hsApplyProc.running = true;
+        } else {
+            hsSaveProc.command = ["python3", hotspotHelper, "save"];
+            hsSaveProc.running = true;
+        }
+    }
+
+    /** NetworkManager receives the credential through libnm over D-Bus, not argv. */
+    function applyHotspot() {
+        if (hsBusy || !validHotspotPassword(hsPw))
+            return;
+        runHotspotProfile("apply");
     }
 
     function stopHotspot() {
@@ -329,73 +367,82 @@ PillSurface {
     function refreshHotspot() {
         hsStateProc.running = true;
         hsReadProc.running = true;
+        hsRouteProc.running = true;
     }
 
     /**
-     * Commits an inline name or password edit, ignoring a password shorter than
-     * the 8-character WPA2 minimum. The connection profile is written either
-     * way, so an edit made while the hotspot is down survives a pill restart;
-     * a live hotspot is additionally re-applied so the change takes effect at
-     * once. The NM profile stays the single source of truth for both fields.
+     * NetworkManager's profile is the only persistent source of credentials.
+     * An incomplete new hotspot remains an in-memory draft until the user
+     * enters a valid WPA-PSK.
      */
     function commitHotspotEdit() {
         if (hsEdit === "name") {
             if (hsDraft.length)
                 hsName = hsDraft;
         } else if (hsEdit === "pw") {
-            if (hsDraft.length >= 8)
-                hsPw = hsDraft;
+            if (!validHotspotPassword(hsDraft)) {
+                hsError = "Use 8–63 ASCII characters or 64 hex digits";
+                return;
+            }
+            hsPw = hsDraft;
+            hsDraft = "";
         }
         hsEdit = "";
+        hsError = "";
+        if (!validHotspotPassword(hsPw))
+            return;
+        var action = hsPendingAction;
+        hsPendingAction = "";
+        if (action === "apply") {
+            applyHotspot();
+            return;
+        }
         if (hsActive)
             applyHotspot();
         else
             saveHotspot();
     }
 
-    /**
-     * Persists name and password into the SparrowHotspot profile without
-     * bringing it up, creating the profile on first edit. A missing or short
-     * password is generated here, since a WPA profile with an empty psk would
-     * be broken; the field shows the generated value right away.
-     */
+    /** Save only complete user-chosen credentials; never synthesize a secret. */
     function saveHotspot() {
-        if (hsPw.length < 8)
-            hsPw = generatePw();
-        hsSaveProc.command = ["sh", "-c",
-            'c="' + hsCon + '"; '
-            + 'if nmcli -t connection show "$c" >/dev/null 2>&1; then '
-            +   'nmcli connection modify "$c" 802-11-wireless.ssid "$1" 802-11-wireless-security.key-mgmt wpa-psk 802-11-wireless-security.psk "$2"; '
-            + 'else '
-            +   'nmcli connection add type wifi ifname "$3" con-name "$c" autoconnect no 802-11-wireless.ssid "$1" 802-11-wireless.mode ap 802-11-wireless-security.key-mgmt wpa-psk 802-11-wireless-security.psk "$2" ipv4.method shared; '
-            + 'fi',
-            "sh", hsName, hsPw, hsIface];
-        hsSaveProc.running = true;
-    }
-
-    /**
-     * Builds an eight-character WPA2 password from an unambiguous alphabet, used
-     * when the hotspot is switched on before a password has been set.
-     */
-    function generatePw() {
-        var cs = "abcdefghijkmnpqrstuvwxyz23456789";
-        var s = "";
-        for (var i = 0; i < 8; i++)
-            s += cs.charAt(Math.floor(Math.random() * cs.length));
-        return s;
+        if (validHotspotPassword(hsPw))
+            runHotspotProfile("save");
     }
 
     Process {
         id: hsApplyProc
-        onExited: {
+        stdinEnabled: true
+        stdout: StdioCollector {}
+        stderr: StdioCollector {}
+        onStarted: write(root.profilePayload())
+        onExited: function(exitCode) {
             root.hsBusy = false;
+            if (exitCode !== 0) {
+                root.hsError = "Could not start hotspot";
+                console.warn("Sparrow hotspot activation failed (exit status " + exitCode + ")");
+            } else {
+                root.hsError = "";
+            }
             root.refreshHotspot();
         }
     }
 
     Process {
         id: hsSaveProc
-        onExited: root.refreshHotspot()
+        stdinEnabled: true
+        stdout: StdioCollector {}
+        stderr: StdioCollector {}
+        onStarted: write(root.profilePayload())
+        onExited: function(exitCode) {
+            root.hsBusy = false;
+            if (exitCode !== 0) {
+                root.hsError = "Could not save hotspot";
+                console.warn("Sparrow hotspot save failed (exit status " + exitCode + ")");
+            } else {
+                root.hsError = "";
+            }
+            root.refreshHotspot();
+        }
     }
 
     Process {
@@ -408,10 +455,36 @@ PillSurface {
     }
 
     Process {
+        id: hsUpExistingProc
+        command: ["nmcli", "connection", "up", root.hsCon]
+        stdout: StdioCollector {}
+        stderr: StdioCollector {}
+        onExited: function(exitCode) {
+            root.hsBusy = false;
+            if (exitCode !== 0)
+                root.hsError = "Could not start hotspot · set a password";
+            root.refreshHotspot();
+        }
+    }
+
+    Process {
         id: hsStateProc
         command: ["sh", "-c", "nmcli -t -f NAME connection show --active | grep -qx \"$1\" && echo on || echo off", "sh", root.hsCon]
         stdout: StdioCollector {
             onStreamFinished: root.hsActive = this.text.trim() === "on"
+        }
+    }
+
+    Process {
+        id: hsRouteProc
+        command: ["ip", "route", "show", "default"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                root.hsUpstream = this.text.split("\n").some(function(line) {
+                    var match = line.match(/\bdev\s+(\S+)/);
+                    return match && match[1] !== root.hsIface;
+                });
+            }
         }
     }
 
@@ -426,6 +499,11 @@ PillSurface {
                 if (lines.length >= 2 && lines[1].length)
                     root.hsPw = lines[1];
             }
+        }
+        onExited: function(exitCode) {
+            root.hsProfileExists = exitCode === 0;
+            if (exitCode !== 0)
+                root.hsPw = "";
         }
     }
 
@@ -601,7 +679,7 @@ PillSurface {
             Text {
                 anchors.verticalCenter: parent.verticalCenter
                 text: "· " + root.statusText
-                color: root.activeNet ? Theme.vermLit : Theme.faint
+                color: root.activeNet ? Theme.vermLit : Theme.secondaryText
                 font.family: Theme.font
                 font.pixelSize: 9.5 * root.s
                 font.weight: Font.Medium
@@ -806,7 +884,7 @@ PillSurface {
                             visible: netItem.isActive && root.connDetail.length > 0
                             width: parent.width
                             text: root.connDetail
-                            color: Theme.faint
+                            color: Theme.secondaryText
                             font.family: Theme.font
                             font.pixelSize: 9.5 * root.s
                             font.weight: Font.Medium
@@ -828,7 +906,7 @@ PillSurface {
                                 anchors.rightMargin: 8 * root.s
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: netItem.isActive ? "Connected" : "Saved network"
-                                color: Theme.faint
+                                color: Theme.secondaryText
                                 font.family: Theme.font
                                 font.pixelSize: 9.5 * root.s
                                 font.weight: Font.Medium
@@ -954,7 +1032,7 @@ PillSurface {
                                 anchors.leftMargin: 10 * root.s
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: "PASSWORD"
-                                color: Theme.faint
+                                color: Theme.sectionText
                                 font.family: Theme.font
                                 font.pixelSize: 9 * root.s
                                 font.weight: Font.Medium
@@ -968,7 +1046,7 @@ PillSurface {
                                 anchors.rightMargin: 10 * root.s
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: "no saved password"
-                                color: Theme.faint
+                                color: Theme.secondaryText
                                 font.family: Theme.font
                                 font.pixelSize: 10 * root.s
                                 font.weight: Font.Medium
@@ -988,7 +1066,7 @@ PillSurface {
                                 wrapMode: TextEdit.NoWrap
                                 clip: true
                                 text: root.revealedSsid === netItem.ssid ? root.revealedPw : ""
-                                color: Theme.flameCore
+                                color: Theme.primaryText
                                 font.family: Theme.font
                                 font.pixelSize: 11.5 * root.s
                                 font.weight: Font.Medium
@@ -1121,15 +1199,17 @@ PillSurface {
                 property string value: ""
                 property bool secret: false
                 readonly property bool editing: root.hsEdit === cr.field
+                onEditingChanged: if (editing) Qt.callLater(crField.forceActiveFocus)
                 width: parent ? parent.width : 0
                 height: 22 * root.s
 
                 Text {
+                    id: crLabel
                     anchors.left: parent.left
                     anchors.leftMargin: 8 * root.s
                     anchors.verticalCenter: parent.verticalCenter
                     text: cr.label
-                    color: Theme.faint
+                    color: Theme.sectionText
                     font.family: Theme.font
                     font.pixelSize: 9 * root.s
                     font.weight: Font.Medium
@@ -1139,11 +1219,15 @@ PillSurface {
 
                 Text {
                     visible: !cr.editing
+                    anchors.left: crLabel.right
+                    anchors.leftMargin: 8 * root.s
                     anchors.right: parent.right
-                    anchors.rightMargin: 8 * root.s
+                    anchors.rightMargin: cr.secret ? 47 * root.s : 8 * root.s
                     anchors.verticalCenter: parent.verticalCenter
-                    text: cr.value.length ? cr.value : "tap to set"
-                    color: cr.value.length ? (cr.secret ? Theme.flameCore : Theme.cream) : Theme.faint
+                    horizontalAlignment: Text.AlignRight
+                    elide: Text.ElideRight
+                    text: cr.value.length ? (cr.secret && !root.hsReveal ? "••••••••" : cr.value) : "tap to set"
+                    color: cr.value.length ? Theme.primaryText : Theme.mutedText
                     font.family: Theme.font
                     font.pixelSize: 12 * root.s
                     font.weight: Font.Medium
@@ -1164,23 +1248,47 @@ PillSurface {
                 TextField {
                     id: crField
                     visible: cr.editing
+                    anchors.left: crLabel.right
+                    anchors.leftMargin: 8 * root.s
                     anchors.right: parent.right
-                    anchors.rightMargin: 8 * root.s
+                    anchors.rightMargin: cr.secret ? 47 * root.s : 8 * root.s
                     anchors.verticalCenter: parent.verticalCenter
-                    width: 150 * root.s
                     horizontalAlignment: TextInput.AlignRight
                     background: null
                     padding: 0
                     color: Theme.cream
                     font.family: Theme.font
                     font.pixelSize: 12 * root.s
-                    placeholderText: cr.field === "pw" ? "8+ characters" : "Name"
+                    placeholderText: cr.field === "pw" ? "8–63 characters" : "Name"
                     placeholderTextColor: Theme.faint
                     selectByMouse: true
                     selectionColor: Theme.verm
                     text: cr.editing ? root.hsDraft : ""
-                    onTextEdited: root.hsDraft = text
+                    maximumLength: cr.field === "pw" ? 64 : 32
+                    echoMode: cr.secret && !root.hsReveal ? TextInput.Password : TextInput.Normal
+                    onTextEdited: {
+                        root.hsDraft = text;
+                        if (cr.secret && root.validHotspotPassword(text))
+                            root.hsError = "";
+                    }
                     onAccepted: root.commitHotspotEdit()
+                }
+
+                Text {
+                    visible: cr.secret
+                    anchors.right: parent.right
+                    anchors.rightMargin: 8 * root.s
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: root.hsReveal ? "Hide" : "Show"
+                    color: Theme.secondaryText
+                    font.family: Theme.font
+                    font.pixelSize: 9 * root.s
+                    MouseArea {
+                        anchors.fill: parent
+                        anchors.margins: -4 * root.s
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.hsReveal = !root.hsReveal
+                    }
                 }
             }
 
@@ -1216,8 +1324,8 @@ PillSurface {
                         font.weight: Font.DemiBold
                     }
                     Text {
-                        text: root.hsBusy ? "…" : (root.hsActive ? "Active" : "Off")
-                        color: root.hsActive ? Theme.flameGlow : Theme.dim
+                        text: root.hsBusy ? "…" : (root.hsActive ? (root.hsUpstream ? "Active" : "No upstream connection") : "Off")
+                        color: root.hsActive ? Theme.secondaryText : Theme.mutedText
                         font.family: Theme.font
                         font.pixelSize: 9.5 * root.s
                         font.weight: Font.Medium
@@ -1229,14 +1337,13 @@ PillSurface {
                     anchors.right: parent.right
                     anchors.rightMargin: 8 * root.s
                     anchors.verticalCenter: parent.verticalCenter
+                    enabled: !root.hsBusy
                     on: root.hsActive
                     onToggled: {
                         if (root.hsActive) {
                             root.stopHotspot();
                         } else {
-                            if (root.hsPw.length < 8)
-                                root.hsPw = root.generatePw();
-                            root.applyHotspot();
+                            root.requestHotspot();
                         }
                     }
                 }
@@ -1253,6 +1360,15 @@ PillSurface {
                 label: "Password"
                 value: root.hsPw
                 secret: true
+            }
+            Text {
+                visible: root.hsError.length > 0
+                width: parent.width
+                text: root.hsError
+                color: Theme.accentText
+                font.family: Theme.font
+                font.pixelSize: 9 * root.s
+                elide: Text.ElideRight
             }
         }
     }

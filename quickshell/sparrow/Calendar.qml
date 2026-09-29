@@ -49,7 +49,9 @@ PillSurface {
     readonly property real editorW: 196 * s
     readonly property real gutter: 16 * s
 
-    readonly property bool weatherShown: Weather.ready
+    // Keep the location editor reachable even before first configuration or
+    // after a typo/network failure; the unconfigured state performs no request.
+    readonly property bool weatherShown: true
     readonly property bool editorShown: selectedDate.length > 0
 
     /**
@@ -241,7 +243,29 @@ PillSurface {
             anchors.rightMargin: 6 * root.s
             spacing: 9 * root.s
 
+            Text {
+                visible: !Weather.ready
+                text: Weather.configured ? "WEATHER · CHECKING CITY" : "WEATHER · OPTIONAL"
+                color: Theme.sectionText
+                font.family: Theme.font
+                font.pixelSize: 8.5 * root.s
+                font.weight: Font.DemiBold
+                font.letterSpacing: 0.8 * root.s
+            }
+            Text {
+                visible: !Weather.ready
+                width: parent.width - 6 * root.s
+                text: !Weather.configured ? "Choose a city to fetch its forecast from Open-Meteo."
+                    : !Weather.located ? (Weather.locationFailed ? "City not found. Choose another city." : "Looking up city…")
+                    : "Forecast unavailable. Check the network or city below."
+                color: Theme.secondaryText
+                font.family: Theme.font
+                font.pixelSize: 9 * root.s
+                wrapMode: Text.WordWrap
+            }
+
             Row {
+                visible: Weather.ready
                 spacing: 9 * root.s
 
                 GlyphIcon {
@@ -277,16 +301,11 @@ PillSurface {
                 width: parent.width
                 spacing: 8 * root.s
 
-                /**
-                 * IP geolocation only ever resolves to the ISP city, so the town
-                 * is editable in place: tap to type, which sets Flags.weatherCity
-                 * and re-geocodes through Open-Meteo for the exact spot. Blank it
-                 * to fall back to auto IP detection.
-                 */
+                /** Explicit city input; blank disables weather lookup entirely. */
                 Item {
                     id: cityBox
                     anchors.verticalCenter: parent.verticalCenter
-                    width: parent.width - humidityRow.width - 8 * root.s
+                    width: parent.width - (Weather.ready ? humidityRow.width + 8 * root.s : 0)
                     height: 14 * root.s
 
                     property bool editing: false
@@ -297,7 +316,7 @@ PillSurface {
                         anchors.left: parent.left
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
-                        text: Weather.city.length > 0 ? Weather.city : "set town"
+                        text: Weather.city.length > 0 ? Weather.city : "choose city"
                         color: cityArea.containsMouse ? Theme.subtle : Theme.dim
                         font.family: Theme.font
                         font.pixelSize: 9 * root.s
@@ -348,6 +367,7 @@ PillSurface {
                 }
                 Row {
                     id: humidityRow
+                    visible: Weather.ready
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: 3 * root.s
 

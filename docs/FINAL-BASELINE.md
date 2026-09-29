@@ -1,5 +1,9 @@
 # Sparrow current baseline
 
+> Historical baseline, superseded by the current installer and later
+> successful fresh CachyOS bare-metal tests. Its pending-test and
+> separate-Rishot notes below no longer describe current behavior.
+
 This document records the repository and the active development machine as
 audited on 2026-09-27. It describes the implementation as it exists; it is not
 an installer, a promise that every optional feature is available everywhere,
@@ -7,8 +11,7 @@ or a replacement for user configuration. Do not treat the live home directory
 as a clean-install template. Installer v1 is implemented in this working
 baseline. Its first real bare-metal CachyOS test exposed validation-before-
 installation ordering. The ordering fix and isolated regression coverage are in
-place; the second bare-metal run is still required before clean-install
-acceptance is claimed.
+place; subsequent bare-metal testing superseded the pending acceptance status.
 
 ## Current SSD source-of-truth capture (2026-09-28)
 

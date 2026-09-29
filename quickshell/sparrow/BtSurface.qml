@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell.Io
 import Quickshell.Bluetooth
+import "lib/bluetooth-name.js" as Names
 import "Singletons"
 
 /**
@@ -29,8 +30,8 @@ PillSurface {
 
     /**
      * BlueZ hands the cache out in arbitrary order; sort connected first,
-     * then paired, then named devices, nameless MACs last so a discovery scan
-     * doesn't churn the useful rows around. Reads connectedCount so a
+     * then paired, then named devices. Anonymous unpaired advertisements are
+     * presentation-filtered below. Reads connectedCount so a
      * connect flip re-sorts, which the raw device list never signals.
      */
     readonly property var devicesSorted: {
@@ -39,12 +40,12 @@ PillSurface {
             if (!d) return 3;
             if (d.connected) return 0;
             if (d.paired) return 1;
-            return (d.name && d.name.length) ? 2 : 3;
+            return Names.friendlyName(d) !== "Unknown device" ? 2 : 3;
         }
         return devices.slice().sort(function(a, b) {
             var r = rank(a) - rank(b);
             if (r !== 0) return r;
-            return String((a && a.name) || "").localeCompare(String((b && b.name) || ""));
+            return Names.friendlyName(a).localeCompare(Names.friendlyName(b));
         });
     }
 
@@ -66,7 +67,9 @@ PillSurface {
             rows.push({ bt: null, up: usb[j] });
         return rows;
     }
-    readonly property var nearbyRows: devicesSorted.filter(function(d) { return d && !d.connected; })
+    readonly property var nearbyRows: devicesSorted.filter(function(d) {
+        return d && !d.connected && Names.shouldDisplay(d);
+    })
     readonly property bool discovering: adapter ? adapter.discovering === true : false
 
     property string pairingAddress: ""
@@ -105,7 +108,8 @@ PillSurface {
             var st = BluetoothDeviceState.toString(d.state);
             if (st && st.length > 0 && parts.indexOf(st.toLowerCase()) === -1) parts.push(st.toLowerCase());
         }
-        if (d.address && d.address.length) parts.push(d.address);
+        if (Names.friendlyName(d) === "Unknown device" && d.address)
+            parts.push(Names.addressLabel(d.address));
         return parts.join(" · ");
     }
 
@@ -117,7 +121,7 @@ PillSurface {
     }
 
     function rowName(row) {
-        if (row.bt) return row.bt.deviceName || row.bt.name || "Unknown";
+        if (row.bt) return Names.friendlyName(row.bt);
         return (row.up && row.up.model) ? row.up.model : "Unknown";
     }
 
@@ -182,6 +186,20 @@ PillSurface {
             expandedAddress = "";
             if (adapter && adapter.discovering)
                 adapter.discovering = false;
+        }
+    }
+
+    Connections {
+        target: root.adapter
+        function onEnabledChanged() {
+            if (!root.adapter || !root.active) return;
+            if (root.adapter.enabled) {
+                root.adapter.discovering = true;
+                scanTimer.restart();
+            } else {
+                scanTimer.stop();
+                root.expandedAddress = "";
+            }
         }
     }
 
@@ -605,7 +623,8 @@ PillSurface {
                                     anchors.bottom: parent.bottom
                                     anchors.bottomMargin: -2 * root.s
                                     visible: !conItem.hasBattery
-                                    text: "No battery reading"
+                                    text: conItem.bt && root.rowName(conItem.modelData) === "Unknown device"
+                                        ? Names.addressLabel(conItem.bt.address) : "No battery reading"
                                     color: Theme.faint
                                     font.family: Theme.font
                                     font.pixelSize: 9 * root.s
@@ -689,7 +708,7 @@ PillSurface {
 
                                 Text {
                                     width: parent.width
-                                    text: devItem.modelData ? (devItem.modelData.deviceName || devItem.modelData.name || "Unknown") : "Unknown"
+                                    text: Names.friendlyName(devItem.modelData)
                                     color: Theme.subtle
                                     font.family: Theme.font
                                     font.pixelSize: 11.5 * root.s

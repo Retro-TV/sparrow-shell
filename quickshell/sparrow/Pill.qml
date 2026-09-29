@@ -135,7 +135,7 @@ Item {
     readonly property real wifiW: 272 * s
     readonly property real btW: 286 * s
     readonly property real settingsW: 392 * s
-    readonly property real keybindsW: 460 * s
+    readonly property real keybindsW: 430 * s
     readonly property real recorderW: 384 * s
     readonly property real sysmonW: 392 * s
     readonly property real appearanceW: 392 * s

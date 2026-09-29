@@ -5,12 +5,10 @@ import Quickshell.Io
 
 /**
  * Live weather for the pill's hover glance, served by Open-Meteo with no API key.
- * Location resolves once and is cached so a restart never re-hits the network for
- * coordinates: by default the city, latitude and longitude come from a keyless IP
- * lookup (ip-api), but a non-empty `Flags.weatherCity` override geocodes that name
- * via Open-Meteo's geocoder instead. Once coordinates are known the forecast runs
- * immediately and then every 20 minutes, exposing the current conditions plus a
- * 24-hour hourly strip.
+ * Weather is opt-in by location: with no `Flags.weatherCity`, this singleton stays
+ * unconfigured and makes no network request. A chosen city is geocoded over HTTPS;
+ * resolved coordinates are cached against that exact city and forecasts refresh
+ * every 20 minutes.
  *
  * Everything is async through `Process` + `curl`, mirroring how Sysmon and Devices
  * fetch, so startup never blocks on a slow or absent connection. Every JSON parse
@@ -37,6 +35,10 @@ Singleton {
     property real lat: 0
     property real lon: 0
     property bool located: false
+    property string locationQuery: ""
+    property string forecastQuery: ""
+    property bool locationFailed: false
+    readonly property bool configured: Flags.weatherCity.trim().length > 0
 
     /** Map a WMO weather code to the matching vector weather icon. */
     function glyphFor(code, day) {
@@ -74,26 +76,29 @@ Singleton {
 
     /** Persist resolved coordinates so a restart skips the location round-trip. */
     function writeLoc() {
-        locCache.setText(JSON.stringify({ city: root.city, lat: root.lat, lon: root.lon }));
+        locCache.setText(JSON.stringify({ query: Flags.weatherCity.trim().toLowerCase(),
+            city: root.city, lat: root.lat, lon: root.lon }));
     }
 
     function fetchWeather() {
-        if (!located || wxProc.running)
+        if (!located || !configured || wxProc.running)
             return;
+        root.forecastQuery = Flags.weatherCity.trim().toLowerCase();
         wxProc.running = true;
     }
 
-    /**
-     * Loads cached coordinates synchronously (blockLoading) and fetches at once;
-     * an absent or malformed cache falls through to a fresh location lookup.
-     */
+    /** Only reuse a coordinate cache created for the currently configured city. */
     Component.onCompleted: {
+        if (!root.configured)
+            return;
         try {
             var c = JSON.parse(locCache.text());
-            if (c && typeof c.lat === "number" && typeof c.lon === "number") {
+            if (c && c.query === Flags.weatherCity.trim().toLowerCase()
+                    && typeof c.lat === "number" && typeof c.lon === "number") {
                 root.city = c.city || "";
                 root.lat = c.lat;
                 root.lon = c.lon;
+                root.locationQuery = c.query;
                 root.located = true;
                 root.fetchWeather();
                 return;
@@ -109,37 +114,42 @@ Singleton {
         printErrors: false
     }
 
-    /** Resolve coordinates: geocode the manual city override, else fall back to IP. */
+    /** Resolve only a location the user explicitly entered. */
     function locate() {
-        if (Flags.weatherCity && Flags.weatherCity.trim().length > 0)
-            geoProc.running = true;
-        else
-            ipProc.running = true;
+        if (!root.configured) {
+            geoProc.running = false;
+            wxProc.running = false;
+            root.clearLocation();
+            return;
+        }
+        root.ready = false;
+        root.located = false;
+        root.locationFailed = false;
+        geoProc.running = false;
+        wxProc.running = false;
+        root.locationQuery = Flags.weatherCity.trim().toLowerCase();
+        geoProc.running = true;
+    }
+
+    function clearLocation() {
+        root.tempNow = 0;
+        root.codeNow = 0;
+        root.humidity = 0;
+        root.city = "";
+        root.hourly = [];
+        root.daily = [];
+        root.ready = false;
+        root.located = false;
+        root.locationFailed = false;
+        root.lat = 0;
+        root.lon = 0;
+        root.locationQuery = "";
+        root.forecastQuery = "";
     }
 
     Connections {
         target: Flags
         function onWeatherCityChanged() { root.locate(); }
-    }
-
-    Process {
-        id: ipProc
-        command: ["curl", "-s", "--max-time", "8", "http://ip-api.com/json?fields=lat,lon,city"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                try {
-                    var d = JSON.parse(this.text);
-                    if (typeof d.lat === "number" && typeof d.lon === "number") {
-                        root.city = d.city || "";
-                        root.lat = d.lat;
-                        root.lon = d.lon;
-                        root.located = true;
-                        root.writeLoc();
-                        root.fetchWeather();
-                    }
-                } catch (e) {}
-            }
-        }
     }
 
     Process {
@@ -150,6 +160,8 @@ Singleton {
             "--data-urlencode", "count=1"]
         stdout: StdioCollector {
             onStreamFinished: {
+                if (!root.configured || root.locationQuery !== Flags.weatherCity.trim().toLowerCase())
+                    return;
                 try {
                     var d = JSON.parse(this.text);
                     var r = d.results && d.results[0];
@@ -160,9 +172,17 @@ Singleton {
                         root.located = true;
                         root.writeLoc();
                         root.fetchWeather();
+                    } else {
+                        root.locationFailed = true;
                     }
-                } catch (e) {}
+                } catch (e) { root.locationFailed = true; }
             }
+        }
+        onExited: function(exitCode) {
+            if (exitCode !== 0 && root.configured
+                    && root.locationQuery === Flags.weatherCity.trim().toLowerCase()
+                    && !root.located)
+                root.locationFailed = true;
         }
     }
 
@@ -176,6 +196,8 @@ Singleton {
             + "&daily=weather_code,temperature_2m_max,relative_humidity_2m_mean&forecast_days=5&timezone=auto"]
         stdout: StdioCollector {
             onStreamFinished: {
+                if (!root.configured || root.forecastQuery !== Flags.weatherCity.trim().toLowerCase())
+                    return;
                 try {
                     var d = JSON.parse(this.text);
                     var cur = d.current;
@@ -221,7 +243,7 @@ Singleton {
 
     Timer {
         interval: 1200000
-        running: true
+        running: root.located
         repeat: true
         onTriggered: root.fetchWeather()
     }

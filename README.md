@@ -11,7 +11,7 @@
 
 <br><br>
 
-<img src="docs/assets/hero-desktop.webp" alt="Sparrow's quiet Saturn desktop with its small resting pill" width="100%">
+<img src="docs/assets/hero-desktop.webp" alt="Sparrow's Saturn desktop with the compact resting clock pill at the top" width="100%">
 
 </div>
 
@@ -77,8 +77,8 @@ not be there.
   through Rishot, both integrated with Sparrow's shortcuts and surfaces.
 - **Wallpaper-led appearance:** still and animated wallpapers, with a generated
   palette shared by Sparrow, Niri, Kitty, and Sparrow-integrated GTK apps.
-- **A ready-to-use desktop:** Kitty, Fish, Starship, Thunar, scoped GTK
-  integration, cursor/fonts, portals, and a greetd/tuigreet login option.
+- **A ready-to-use desktop:** Kitty, Fish, Starship, Thunar, generated GTK
+  theming, cursor/fonts, portals, and a greetd/tuigreet login option.
 
 Legacy/X11 applications such as Steam are supported through the included
 `xwayland-satellite`; modern Niri manages it without Sparrow-specific startup
@@ -102,7 +102,7 @@ Hyprlock is only an optional fallback.
 </table>
 
 <p align="center">
-  <img src="docs/assets/wallpaper-picker.webp" alt="Wallpaper picker showing Sparrow's built-in Saturn wallpaper selected" width="82%"><br>
+  <img src="docs/assets/wallpaper-picker.webp" alt="Close view of Sparrow's wallpaper picker, with the built-in Saturn wallpaper selected" width="82%"><br>
   <sub>Choose a still or animated wallpaper; the selected scene feeds Sparrow's palette.</sub>
 </p>
 
@@ -112,10 +112,12 @@ Sparrow's wallpaper flow feeds the palette used across the shell and desktop:
 
 **Wallpaper → Matugen palette → Sparrow · Niri · Kitty · selected GTK apps**
 
-Changing wallpaper can update the palette as well. GTK theming is deliberately
-scoped to Sparrow-integrated applications such as Thunar, the GTK file chooser,
-and pavucontrol; Sparrow does not globally force its GTK theme onto unrelated
-apps or browsers.
+Changing wallpaper can update the palette as well. GTK3 uses Sparrow's
+user-level GTK theme setting, so other GTK3 applications may inherit the
+generated theme too. Sparrow additionally scopes `GTK_THEME=Sparrow` to
+integrated launcher and portal paths. GTK4/libadwaita follows the dark color
+scheme preference rather than being forced through `GTK_THEME`; this does not
+recolor every application or browser.
 
 Use Sparrow's Appearance and Look surfaces for the controls they expose. Niri
 user overrides and personal state are kept separate from portable defaults;
@@ -135,13 +137,17 @@ Common defaults:
 | --- | --- |
 | `Super+Space` | Launcher |
 | `Super+C` / `Super+B` | Wallpaper picker / next wallpaper |
-| `Super+T` / `Super+E` / `Super+F` | Kitty / Thunar / Firefox |
+| `Super+T` / `Super+E` / `Super+F` | Terminal / File manager / Browser (Kitty, Sparrow Files, and Firefox by default) |
 | `Super+O` | Niri Overview |
 | `Super+L` | Lock session |
 | `Super+Shift+S` | Screenshot with Rishot |
 
-The Keybinds surface shows the current bindings and supports the key changes
-Sparrow exposes.
+In **Keybinds**, Browser, Terminal, and File manager are application roles: you
+can choose another installed app without changing its shortcut. Browser choice
+also updates the XDG default browser. You can add custom shortcuts for installed
+applications or command lines (arguments are passed without shell expansion),
+then edit or delete them; Reset restores Sparrow's default roles and bindings
+while keeping your custom shortcuts.
 
 ## Update and restore
 
@@ -177,6 +183,14 @@ the tested CachyOS setup should be treated as unverified.
 - [Runtime paths and configuration ownership](docs/PORTABILITY-ARCHITECTURE.md)
 - [Wallpaper and palette behavior](quickshell/sparrow/WALLPAPER-PALETTE.md)
 - [Third-party licenses and attribution](THIRD_PARTY.md)
+
+## Reporting a problem
+
+Please include the Sparrow commit (`git rev-parse --short HEAD`), distribution
+and version, Niri version (`niri --version`), the affected display/monitor
+setup for graphics issues, and relevant logs (for example,
+`journalctl --user -b -u 'quickshell*' --no-pager`). Remove personal paths,
+network names, and other private information before posting. [Open an issue](https://github.com/Retro-TV/sparrow-shell/issues).
 
 Sparrow incorporates and adapts work from Ricelin and Qylock, includes a
 Papirus-derived icon subset and the Outfit font, and installs Rishot from its

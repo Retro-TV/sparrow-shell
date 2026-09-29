@@ -1,5 +1,9 @@
 # Sparrow pre-installer product review
 
+> Historical review. Its pre-installer recommendations and Rishot/manual
+> installation notes are superseded by the current installer, README, and
+> `docs/INSTALL-INVENTORY.md`. Retained as a record of the earlier audit.
+
 This document preserves the earlier architecture audit. Its original
 merge/reconstruction recommendations are historical; the authoritative SSD
 capture and current direct-copy policy are recorded in the final section and

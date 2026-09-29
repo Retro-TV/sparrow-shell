@@ -1,5 +1,9 @@
 # Fresh-install / zero-state audit
 
+> Historical snapshot. Its architecture observations predate the current
+> source-of-truth installer and its Rishot deployment; current user-facing
+> behavior is documented in the README and `docs/INSTALL-INVENTORY.md`.
+
 Audit date: 2026-09-27. This is a first-run investigation with follow-up
 verification of Dynamic palette defaults and the built-in wallpaper picker,
 plus one narrow QML null guard. It is not an installer and does not replace a

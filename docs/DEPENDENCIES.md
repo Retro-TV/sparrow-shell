@@ -59,7 +59,7 @@ theme. No additional Qt theme-control package is installed.
 | `hyprlock` | Optional fallback only. The primary lock is Sparrow's Quickshell `WlSessionLock` + PAM flow; `sparrow-lock` invokes Hyprlock only when Sparrow lock IPC is unavailable. |
 | `gpu-screen-recorder` | Installed by the default profile for Sparrow's Recorder capture/record operation. |
 | `slurp` | Installed by the default profile for Niri's recorder region/window selection helper. |
-| `python-gobject` | Required; used by Sparrow's recording-folder FileChooser integration and Gio-backed first-user defaults. |
+| `python-gobject` + NetworkManager's `libnm` GI typelib | Required; Python GObject serves the recording-folder FileChooser and Gio defaults, and Sparrow's hotspot helper updates the NetworkManager-owned profile through libnm without placing its password in process arguments. `networkmanager` supplies `libnm`; no additional package is needed. |
 | `xdg-desktop-portal`, `xdg-desktop-portal-gtk` | Required for the tracked FileChooser route; GTK theme remains scoped to the GTK portal service. |
 | `xdg-desktop-portal-gnome` | Required for the tracked Niri ScreenCast route in the canonical Sparrow portal profile ([Niri screencasting](https://github.com/niri-wm/niri/wiki/Screencasting)). Existing user portal config is backed up before replacement. |
 | `lxqt-policykit` (conditional required agent) | Provides `/usr/bin/lxqt-policykit-agent`; added to required packages only when no running/autostart/user-unit graphical Polkit agent is detected. Existing agents are preserved and Sparrow's own unit is omitted. |
@@ -73,7 +73,7 @@ theme. No additional Qt theme-control package is installed.
 | `networkmanager` | Default-profile Wi-Fi backend (`nmcli`); availability still depends on the host daemon and adapter. |
 | `bluez`, `bluez-utils` | Default-profile Bluetooth integration; availability still depends on the daemon and adapter. |
 | `upower` | Default-profile battery/peripheral status integration when supported hardware is present. |
-| `curl` | Default profile: weather and online wallpaper search/download/preview. The local wallpaper flow does not depend on network access. |
+| `curl` | Default profile: user-configured city geocoding/forecast and online wallpaper search/download/preview. Weather makes no location request until a city is configured; local wallpaper use is offline. |
 | `wl-clipboard` | Default-profile requirement; Launcher copies calculator results and Rishot uses it for clipboard integration. |
 | `libnotify` | `notify-send` notices from Recorder and low-battery peripheral handling; Sparrow's internal notification UI does not use it. |
 | `brightnessctl` | Default-profile utility; internal brightness control appears only when a sysfs backlight is detected. |

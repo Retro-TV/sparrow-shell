@@ -218,7 +218,7 @@ seeded with development-host contents.
 | Kitty palette | `~/.config/kitty/sparrow-colors.conf` | `wallcolors.py` | Generated; optional include is quiet before first generation |
 | GTK theme CSS | `$XDG_DATA_HOME/themes/Sparrow/gtk-3.0/gtk.css` | palette generator based on installed adw-gtk-theme | Generated; not a copy of current palette |
 | Sparrow icon colors/cache | `$XDG_DATA_HOME/icons/Sparrow` generated SVGs / icon cache | palette generator | Static licensed icon subset + generated colors; cache refresh optional |
-| weather location/cache | `$XDG_STATE_HOME/sparrow-shell/weather-loc.json` and cache roots | Weather singleton | User/derived location state; no install seed; external requests optional |
+| weather location/cache | `weatherCity` in Sparrow Flags under `$XDG_STATE_HOME`; coordinates in `$XDG_CACHE_HOME/sparrow-shell/weather-loc.json` | Weather singleton | City is user state; coordinates are derived and keyed to that city. No location or forecast request occurs until a city is configured. |
 | event/notification history | `$XDG_STATE_HOME/sparrow-shell/events.json` and related state | Events/Notifs | Runtime state; empty on new install |
 | Launcher usage | `$XDG_STATE_HOME/sparrow-shell/launcher-usage.json` | Launcher | Runtime-created ranking data |
 | vibrance value | `$XDG_STATE_HOME/sparrow-shell/nvibrant-value` | Devices | Device-specific setting; don't restore across machines |

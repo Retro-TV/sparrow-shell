@@ -443,39 +443,23 @@ PillSurface {
                 color: Theme.iconDim
                 stroke: 2.2
             }
-        }
-
-        Item { width: 1; height: 8 * root.s }
-
-        Item {
-            width: parent.width
-            height: 30 * root.s
-            Text {
-                anchors.left: parent.left
-                anchors.right: resetAll.left
-                anchors.rightMargin: 8 * root.s
-                anchors.verticalCenter: parent.verticalCenter
-                text: "Reset Sparrow defaults · keep custom"
-                color: Theme.subtle
-                font.family: Theme.font
-                font.pixelSize: 11 * root.s
-            }
             Rectangle {
                 id: resetAll
                 anchors.right: parent.right
+                anchors.rightMargin: 25 * root.s
                 anchors.verticalCenter: parent.verticalCenter
-                width: root.confirmResetAll ? 90 * root.s : 62 * root.s
-                height: 25 * root.s
+                width: root.confirmResetAll ? 88 * root.s : 50 * root.s
+                height: 22 * root.s
                 radius: 7 * root.s
                 color: resetAllArea.containsMouse ? Qt.alpha(Theme.verm, 0.22) : Theme.frameBg
                 border.width: 1
                 border.color: root.confirmResetAll ? Theme.vermLit : Theme.hairSoft
                 Text {
                     anchors.centerIn: parent
-                    text: root.confirmResetAll ? "Confirm reset" : "Reset defaults"
-                    color: root.confirmResetAll ? Theme.vermLit : Theme.cream
+                    text: root.confirmResetAll ? "Confirm reset" : "Reset"
+                    color: root.confirmResetAll ? Theme.vermLit : Theme.primaryText
                     font.family: Theme.font
-                    font.pixelSize: 9.5 * root.s
+                    font.pixelSize: 9 * root.s
                     font.weight: Font.DemiBold
                 }
                 MouseArea {
@@ -488,9 +472,11 @@ PillSurface {
             }
         }
 
+        Item { width: 1; height: 8 * root.s }
+
         Flickable {
             width: parent.width
-            height: Math.min(360 * root.s, groups.height)
+            height: Math.min(350 * root.s, groups.height)
             clip: true
             contentHeight: groups.height
             boundsBehavior: Flickable.StopAtBounds
@@ -523,7 +509,19 @@ PillSurface {
                             color: root.customDraft.chord ? Theme.frameBg : Qt.alpha(Theme.vermLit, 0.12)
                             border.width: 1
                             border.color: Theme.hairSoft
-                            Text { anchors.centerIn: parent; text: root.listening && root.captureKind === "custom" ? "Press shortcut…" : (root.customDraft.chord || "Capture shortcut"); color: Theme.cream; font.family: Theme.font; font.pixelSize: 9 * root.s }
+                            Text {
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.leftMargin: 5 * root.s
+                                anchors.rightMargin: 5 * root.s
+                                anchors.verticalCenter: parent.verticalCenter
+                                horizontalAlignment: Text.AlignHCenter
+                                elide: Text.ElideLeft
+                                text: root.listening && root.captureKind === "custom" ? "Press shortcut…" : (root.customDraft.chord || "Capture shortcut")
+                                color: Theme.primaryText
+                                font.family: Theme.font
+                                font.pixelSize: 9 * root.s
+                            }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.beginCustomCapture() }
                         }
                         Rectangle {
@@ -553,7 +551,7 @@ PillSurface {
                         visible: root.customDraft.kind === "application"
                         spacing: 7 * root.s
                         Text {
-                            width: 220 * root.s
+                            width: parent.width - 97 * root.s
                             anchors.verticalCenter: parent.verticalCenter
                             text: root.customDraft.label || "Choose an installed application"
                             color: root.customDraft.label ? Theme.secondaryText : Theme.mutedText
@@ -594,7 +592,7 @@ PillSurface {
                             font.pixelSize: 9 * root.s
                             clip: true
                             onTextChanged: root.customDraft = Object.assign({}, root.customDraft, { command: text })
-                            Text { anchors.fill: parent; verticalAlignment: Text.AlignVCenter; text: "Command with arguments · no shell expansion"; color: Theme.mutedText; font: parent.font; visible: parent.text.length === 0 }
+                            Text { anchors.fill: parent; verticalAlignment: Text.AlignVCenter; text: "Command and arguments"; color: Theme.mutedText; font: parent.font; visible: parent.text.length === 0; elide: Text.ElideRight }
                         }
                     }
                     Row {
@@ -627,20 +625,12 @@ PillSurface {
                     width: parent.width
                     height: 18 * root.s
                     verticalAlignment: Text.AlignVCenter
-                    text: "APPLICATIONS"
+                    text: "DEFAULT APPS"
                     color: Theme.sectionText
                     font.family: Theme.font
                     font.pixelSize: 8.5 * root.s
                     font.weight: Font.DemiBold
                     font.letterSpacing: 1 * root.s
-                }
-                Text {
-                    width: parent.width
-                    text: "Browser changes also update the desktop default · other roles stay Sparrow-only"
-                    color: Theme.mutedText
-                    font.family: Theme.font
-                    font.pixelSize: 8 * root.s
-                    wrapMode: Text.WordWrap
                 }
                 Repeater {
                     model: root.appRoles
@@ -696,7 +686,7 @@ PillSurface {
                             anchors.right: changeApp.left
                             anchors.rightMargin: 6 * root.s
                             anchors.verticalCenter: parent.verticalCenter
-                            width: Math.max(54 * root.s, roleChord.implicitWidth + 14 * root.s)
+                            width: Math.min(92 * root.s, Math.max(54 * root.s, roleChord.implicitWidth + 14 * root.s))
                             height: 23 * root.s
                             radius: 6 * root.s
                             color: Theme.frameBg
@@ -704,12 +694,18 @@ PillSurface {
                             border.color: Theme.hairSoft
                             Text {
                                 id: roleChord
-                                anchors.centerIn: parent
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.leftMargin: 5 * root.s
+                                anchors.rightMargin: 5 * root.s
+                                anchors.verticalCenter: parent.verticalCenter
                                 text: root.listening && root.captureKind === "role" && root.captureId === appRoleRow.modelData.id
                                     ? "Press key…" : root.configuredKeys[appRoleRow.modelData.id]
                                 color: root.listening && root.captureId === appRoleRow.modelData.id ? Theme.flameGlow : Theme.secondaryText
                                 font.family: Theme.font
                                 font.pixelSize: 8.5 * root.s
+                                horizontalAlignment: Text.AlignHCenter
+                                elide: Text.ElideLeft
                             }
                             MouseArea {
                                 anchors.fill: parent
@@ -765,6 +761,14 @@ PillSurface {
                     font.weight: Font.DemiBold
                     font.letterSpacing: 1 * root.s
                 }
+                Text {
+                    width: parent.width
+                    visible: root.customShortcuts.length === 0
+                    text: "No custom shortcuts"
+                    color: Theme.secondaryText
+                    font.family: Theme.font
+                    font.pixelSize: 9 * root.s
+                }
                 Repeater {
                     model: root.customShortcuts
                     delegate: Item {
@@ -805,10 +809,13 @@ PillSurface {
                             anchors.right: editCustom.left
                             anchors.rightMargin: 6 * root.s
                             anchors.verticalCenter: parent.verticalCenter
+                            width: Math.min(112 * root.s, Math.max(42 * root.s, parent.width * 0.27))
                             text: customRow.modelData.chord
                             color: Theme.secondaryText
                             font.family: Theme.font
                             font.pixelSize: 8.5 * root.s
+                            horizontalAlignment: Text.AlignRight
+                            elide: Text.ElideLeft
                         }
                         Rectangle {
                             id: editCustom
@@ -827,7 +834,7 @@ PillSurface {
                             anchors.right: parent.right
                             anchors.rightMargin: 3 * root.s
                             anchors.verticalCenter: parent.verticalCenter
-                            width: 28 * root.s
+                            width: root.deleteCustomId === customRow.modelData.id ? 42 * root.s : 28 * root.s
                             height: 22 * root.s
                             radius: 6 * root.s
                             color: deleteArea.containsMouse || root.deleteCustomId === customRow.modelData.id ? Qt.alpha(Theme.verm, 0.2) : "transparent"
@@ -913,13 +920,16 @@ PillSurface {
                                 }
                                 Text {
                                     id: shortcut
-                                    anchors.right: reset.left
-                                    anchors.rightMargin: 7 * root.s
+                                    anchors.right: reset.visible ? reset.left : parent.right
+                                    anchors.rightMargin: reset.visible ? 7 * root.s : 4 * root.s
                                     anchors.verticalCenter: parent.verticalCenter
+                                    width: Math.min(130 * root.s, parent.width * 0.4)
                                     text: bindDelegate.editing ? "Esc cancels" : (root.configuredKeys[bindDelegate.modelData.id] || bindDelegate.modelData.key)
                                     color: bindDelegate.editing ? Theme.flameGlow : Theme.subtle
                                     font.family: Theme.font
                                     font.pixelSize: 9.5 * root.s
+                                    horizontalAlignment: Text.AlignRight
+                                    elide: Text.ElideLeft
                                 }
                                 Rectangle {
                                     id: reset
@@ -957,50 +967,61 @@ PillSurface {
                         }
                     }
                 }
-            }
-        }
-
-        Item { width: 1; height: 5 * root.s }
-        Rectangle { width: parent.width; height: 1; color: Theme.hairSoft }
-        Item { width: 1; height: 6 * root.s }
-        Column {
-            width: parent.width
-            spacing: 3 * root.s
-            Text {
-                text: "DISPLAY · MANAGED IN DISPLAY SETTINGS"
-                color: Theme.sectionText
-                font.family: Theme.font
-                font.pixelSize: 8 * root.s
-                font.weight: Font.DemiBold
-                font.letterSpacing: 0.7 * root.s
-            }
-            Repeater {
-                model: root.displayShortcuts
-                delegate: Row {
-                    id: displayDelegate
-                    required property var modelData
+                Rectangle { width: parent.width; height: 1; color: Theme.hairSoft }
+                Column {
                     width: parent.width
-                    spacing: 8 * root.s
+                    spacing: 3 * root.s
                     Text {
-                        text: displayDelegate.modelData.chord
-                        color: Theme.subtle
+                        text: "DISPLAY SHORTCUTS"
+                        color: Theme.sectionText
                         font.family: Theme.font
-                        font.pixelSize: 9 * root.s
+                        font.pixelSize: 8.5 * root.s
+                        font.weight: Font.DemiBold
+                        font.letterSpacing: 1 * root.s
+                    }
+                    Repeater {
+                        model: root.displayShortcuts
+                        delegate: Item {
+                            id: displayDelegate
+                            required property var modelData
+                            width: parent.width
+                            height: Math.max(displayLabel.implicitHeight, displayChord.implicitHeight)
+                            Text {
+                                id: displayLabel
+                                anchors.left: parent.left
+                                anchors.leftMargin: 8 * root.s
+                                anchors.right: displayChord.left
+                                anchors.rightMargin: 8 * root.s
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: displayDelegate.modelData.label
+                                color: Theme.secondaryText
+                                font.family: Theme.font
+                                font.pixelSize: 9 * root.s
+                                elide: Text.ElideRight
+                            }
+                            Text {
+                                id: displayChord
+                                anchors.right: parent.right
+                                anchors.rightMargin: 4 * root.s
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: Math.min(130 * root.s, parent.width * 0.4)
+                                text: displayDelegate.modelData.chord
+                                color: Theme.secondaryText
+                                font.family: Theme.font
+                                font.pixelSize: 9 * root.s
+                                horizontalAlignment: Text.AlignRight
+                                elide: Text.ElideLeft
+                            }
+                        }
                     }
                     Text {
-                        text: displayDelegate.modelData.label
-                        color: Theme.secondaryText
+                        visible: root.displayShortcuts.length === 0
+                        text: "No display shortcuts assigned"
+                        color: Theme.mutedText
                         font.family: Theme.font
                         font.pixelSize: 9 * root.s
                     }
                 }
-            }
-            Text {
-                visible: root.displayShortcuts.length === 0
-                text: "No numbered display shortcuts assigned"
-                color: Theme.mutedText
-                font.family: Theme.font
-                font.pixelSize: 9 * root.s
             }
         }
         Text {
@@ -1064,6 +1085,7 @@ PillSurface {
                 }
             }
             ListView {
+                id: appList
                 width: parent.width
                 height: Math.max(60 * root.s, parent.height - 78 * root.s)
                 clip: true
@@ -1114,7 +1136,7 @@ PillSurface {
                     anchors.centerIn: parent
                     visible: root.appResults.length === 0
                     text: "No installed applications found"
-                    color: Theme.mutedText
+                    color: Theme.secondaryText
                     font.family: Theme.font
                     font.pixelSize: 9 * root.s
                 }

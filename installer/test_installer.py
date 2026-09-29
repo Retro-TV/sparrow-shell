@@ -131,6 +131,23 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(self.machine["qml_lint_path"], qt6_path)
         self.assertIn("qt6-declarative", installer.package_sets()["required"])
 
+    def test_pacman_provided_matugen_satisfies_requirement_without_conflict_install(self) -> None:
+        self.machine["packages"].add("matugen-bin")
+        self.machine["package_providers"] = {"matugen": ["matugen-bin"]}
+        self.machine["commands"].add("matugen")
+        installer = self.installer()
+
+        self.assertEqual(installer.missing_package_requirements(["matugen"]), [])
+        self.assertTrue(installer._install_package_list(["matugen"], label="Matugen", required=True))
+        self.assertEqual(self.machine["pacman_transaction_count"], 0)
+        self.assertFalse(any(event[:3] == ("sudo", "pacman", "-S") for event in self.machine["events"]))
+
+    def test_pacman_provider_satisfaction_is_general_for_package_lists(self) -> None:
+        self.machine["packages"].add("alternate-provider")
+        self.machine["package_providers"] = {"virtual-desktop-service": ["alternate-provider"]}
+        installer = self.installer()
+        self.assertEqual(installer.missing_package_requirements(["virtual-desktop-service"]), [])
+
     def test_installer_rerun_preserves_managed_user_keybind_choices(self) -> None:
         target = self.paths.config / "niri/sparrow/user-binds.kdl"
         target.parent.mkdir(parents=True)

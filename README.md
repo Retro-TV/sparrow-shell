@@ -11,9 +11,7 @@
 
 <br><br>
 
-<img src="docs/assets/sparrow-desktop.jpg" alt="Sparrow desktop with the compact Getting Started pill open" width="100%">
-<br>
-<img src="docs/assets/resting-pill.jpg" alt="Sparrow's small resting pill" width="54%">
+<img src="docs/assets/hero-desktop.webp" alt="Sparrow's quiet Saturn desktop with its small resting pill" width="100%">
 
 </div>
 
@@ -88,10 +86,21 @@ Hyprlock is only an optional fallback.
 
 ## In the pill
 
-<div align="center">
-<img src="docs/assets/getting-started.jpg" alt="Sparrow Getting Started surface" width="49%">
-<img src="docs/assets/look.jpg" alt="Sparrow Look settings" width="41%">
-</div>
+<table>
+  <tr>
+    <td width="50%"><img src="docs/assets/launcher.webp" alt="Sparrow's app launcher expanded over the wallpaper"><br><sub>Launcher</sub></td>
+    <td width="50%"><img src="docs/assets/getting-started.webp" alt="Sparrow Getting Started with quick actions"><br><sub>Getting Started</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/assets/look.webp" alt="Niri window, animation and pill settings"><br><sub>Look</sub></td>
+    <td width="50%"><img src="docs/assets/appearance.webp" alt="Wallpaper-driven palette and appearance controls"><br><sub>Appearance</sub></td>
+  </tr>
+</table>
+
+<p align="center">
+  <img src="docs/assets/wallpaper-picker.webp" alt="Wallpaper picker showing Sparrow's built-in Saturn wallpaper selected" width="82%"><br>
+  <sub>Choose a still or animated wallpaper; the selected scene feeds Sparrow's palette.</sub>
+</p>
 
 ## Wallpaper and theming
 

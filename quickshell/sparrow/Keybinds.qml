@@ -175,7 +175,7 @@ PillSurface {
     }
 
     function capture(key, modifiers) {
-        if (key === Qt.Key_Escape) {
+        if (key === Qt.Key_Escape && Chord.modNames(modifiers).length === 0) {
             listening = false;
             if (captureKind === "default") formOpen = false;
             captureId = "";

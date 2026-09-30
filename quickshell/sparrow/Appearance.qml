@@ -68,7 +68,6 @@ SettingsSurface {
         result.push(
             { item: lockTextRow, kind: "seg", vals: ["auto", "light", "dark"], get: function () { return Flags.lockForegroundMode; }, set: function (v) { Flags.lockForegroundMode = v; } },
             { item: randomRow, kind: "seg", vals: ["all", "cursor"], get: function () { return Flags.randomScope; }, set: function (v) { Flags.randomScope = v; } },
-            { item: scaleRow, kind: "seg", vals: [0.9, 1.0, 1.1, 1.25], get: function () { return Flags.uiScale; }, set: function (v) { Flags.uiScale = v; } },
             { item: motionRow, kind: "toggle", get: function () { return Flags.reduceMotion; }, set: function (v) { Flags.reduceMotion = v; } },
             { item: fontRow, kind: "nav", surface: "fontpicker" }
         );
@@ -231,20 +230,6 @@ SettingsSurface {
                 options: [{ label: "All screens", value: "all" }, { label: "Cursor screen", value: "cursor" }]
                 value: Flags.randomScope
                 onPicked: (v) => Flags.randomScope = v
-            }
-        }
-
-        SettingsRow {
-            id: scaleRow
-            surface: root
-            name: "UI scale"
-            icon: "scaling"
-
-            SettingsSeg {
-                s: root.s
-                options: [{ label: "90%", value: 0.9 }, { label: "100%", value: 1.0 }, { label: "110%", value: 1.1 }, { label: "125%", value: 1.25 }]
-                value: Flags.uiScale
-                onPicked: (v) => Flags.uiScale = v
             }
         }
 

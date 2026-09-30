@@ -15,6 +15,7 @@ SettingsSurface {
 
     rows: [
         { item: appearanceRow, kind: "nav", surface: "appearance" },
+        { item: pillRow, kind: "nav", surface: "pillsettings" },
         { item: lookRow, kind: "nav", surface: "look" },
         { item: displayRow, kind: "nav", surface: "display" },
         { item: inputRow, kind: "nav", surface: "input" },
@@ -46,6 +47,21 @@ SettingsSurface {
                 height: 16 * root.s
                 name: "chevron-right"
                 color: root.focusRowItem === appearanceRow ? Theme.cream : Theme.iconDim
+                stroke: 2.2
+            }
+        }
+
+        SettingsRow {
+            id: pillRow
+            surface: root
+            icon: "pill"
+            name: "Pill"
+
+            GlyphIcon {
+                width: 16 * root.s
+                height: 16 * root.s
+                name: "chevron-right"
+                color: root.focusRowItem === pillRow ? Theme.cream : Theme.iconDim
                 stroke: 2.2
             }
         }

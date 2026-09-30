@@ -5,7 +5,7 @@ import Quickshell
 import Quickshell.Io
 import "Singletons"
 
-/** Niri-native window appearance, motion presets, and Sparrow pill spacing. */
+/** Niri-native window appearance and motion presets. */
 SettingsSurface {
     id: root
 
@@ -22,11 +22,10 @@ SettingsSurface {
     property int shadowSoftness: 12
     property string animationPreset: "smooth"
     property string note: ""
+    property bool normalizePillStrut: false
     property bool seeded: false
     property int pendingRequestId: -1
     property var base: ({})
-    property var pillGapControl: null
-    property var pillOpacityControl: null
 
     readonly property var animationOptions: [
         { label: "Off", value: "off" },
@@ -46,8 +45,6 @@ SettingsSurface {
             r.push({ item: softnessRow, kind: "scrub", bump: function (d) { softnessScrub.bump(d); } });
         r.push({ item: animationRow, kind: "seg", vals: ["off", "fast", "normal", "smooth"],
             get: function () { return root.animationPreset; }, set: function (v) { root.animationPreset = v; root.scheduleWrite(); } });
-        r.push({ item: pillGapRow, kind: "scrub", bump: function (d) { if (root.pillGapControl) root.pillGapControl.bump(d); } });
-        r.push({ item: pillOpacityRow, kind: "scrub", bump: function (d) { if (root.pillOpacityControl) root.pillOpacityControl.bump(d); } });
         return r;
     }
 
@@ -60,6 +57,9 @@ SettingsSurface {
         root.preferencesText = preferencesFile.text();
         var t = root.preferencesText;
         root.gaps = readNumber(t, /^    gaps ([0-9]+(?:\.[0-9]+)?)$/m, 8);
+        var previousPillStrut = t.match(/^        top (-?[0-9]+(?:\.[0-9]+)?)$/m);
+        root.normalizePillStrut = !!previousPillStrut
+            && Number(previousPillStrut[1]) === -root.gaps;
         var hasLegacyOuterStruts = /^        (?:left|right|bottom) (?:[1-9][0-9]*(?:\.[0-9]+)?|0\.(?:[0-9]*[1-9][0-9]*))$/m.test(t);
         if (hasLegacyOuterStruts)
             root.gaps = Math.round(8 * Flags.appGap * root.s * 10) / 10;
@@ -83,11 +83,11 @@ SettingsSurface {
             gaps: root.gaps,
             cornerRadius: root.cornerRadius,
             borderWidth: root.borderWidth,
-            shadowSoftness: root.shadowSoftness,
-            topGap: Flags.topGap,
-            pillOpacity: Flags.pillOpacity
+            shadowSoftness: root.shadowSoftness
         };
         root.seeded = true;
+        if (root.normalizePillStrut)
+            root.scheduleWrite();
     }
 
     function buildPreferences() {
@@ -100,7 +100,7 @@ SettingsSurface {
             + "    struts {\n"
             + "        left 0\n"
             + "        right 0\n"
-            + "        top " + (-gaps) + "\n"
+            + "        top 0\n"
             + "        bottom 0\n"
             + "    }\n"
             + "    border {\n"
@@ -304,19 +304,6 @@ SettingsSurface {
                 FieldRow { id: animationRow; label: "Motion"; caption: "Niri's global animation speed preset"
                     SettingsSeg { s: root.s; options: root.animationOptions; value: root.animationPreset
                         onPicked: v => { root.animationPreset = v; root.scheduleWrite(); } }
-                }
-            }
-
-            Group { id: pillGroup; title: "Pill"
-                FieldRow { id: pillGapRow; label: "Pill gap"; caption: "Space above the pill"
-                    ScrubValue { s: root.s; value: Flags.topGap; openValue: root.base.topGap; from: 0; to: 2; step: 0.1; decimals: 1
-                        Component.onCompleted: root.pillGapControl = this
-                        onEdited: v => Flags.topGap = v }
-                }
-                FieldRow { id: pillOpacityRow; label: "Pill opacity"
-                    ScrubValue { s: root.s; value: Flags.pillOpacity; openValue: root.base.pillOpacity; from: 0.55; to: 1; step: 0.05; decimals: 2
-                        Component.onCompleted: root.pillOpacityControl = this
-                        onEdited: v => Flags.pillOpacity = v }
                 }
             }
 

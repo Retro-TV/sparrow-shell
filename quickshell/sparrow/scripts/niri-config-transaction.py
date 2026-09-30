@@ -949,7 +949,7 @@ def _safe_user_appearance(content: str) -> bool:
         r"    struts \{\n"
         r"        left (?P<left_strut>0)\n"
         r"        right (?P<right_strut>0)\n"
-        r"        top (?P<top_strut>-?(?:0|[1-9][0-9]*(?:\.[0-9]+)?))\n"
+        r"        top (?P<top_strut>0)\n"
         r"        bottom (?P<bottom_strut>0)\n"
         r"    \}\n"
         r"    border \{\n"
@@ -978,7 +978,7 @@ def _safe_user_appearance(content: str) -> bool:
         0 <= gaps <= 40
         and int(match.group("left_strut")) == 0
         and int(match.group("right_strut")) == 0
-        and abs(float(match.group("top_strut")) + gaps) < 0.000001
+        and int(match.group("top_strut")) == 0
         and int(match.group("bottom_strut")) == 0
         and 0 <= values["border"] <= 8
         and 0 <= values["softness"] <= 50

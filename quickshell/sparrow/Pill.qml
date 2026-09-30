@@ -24,6 +24,7 @@ Item {
 
     property real s: 1
     property string screenName: ""
+    property string outputIdentity: ""
     property var barWindow
     property string surface: ""
 
@@ -62,6 +63,7 @@ Item {
     readonly property bool recorderOpen: surface === "recorder"
     readonly property bool sysmonOpen: surface === "sysmon"
     readonly property bool appearanceOpen: surface === "appearance"
+    readonly property bool pillsettingsOpen: surface === "pillsettings"
     readonly property bool displayOpen: surface === "display"
     readonly property bool inputOpen: surface === "input"
     readonly property bool lookOpen: surface === "look"
@@ -69,7 +71,7 @@ Item {
     readonly property bool fontpickerOpen: surface === "fontpicker"
     readonly property bool gettingStartedOpen: surface === "getting-started"
     readonly property bool settingsLike: settingsOpen || appearanceOpen
-        || lookOpen || inputOpen || displayOpen || idlelockOpen || fontpickerOpen
+        || lookOpen || inputOpen || displayOpen || pillsettingsOpen || idlelockOpen || fontpickerOpen
     readonly property bool hasMedia: Players.list.length > 0
 
     readonly property var netDevices: (typeof Networking !== "undefined" && Networking && Networking.devices) ? Networking.devices.values : []
@@ -195,6 +197,7 @@ Item {
         recorder:  { size: () => Qt.size(recorderW, surfaceItem(ldRecorder).implicitHeight + 33 * s), ame: () => surfaceItem(ldRecorder) },
         sysmon:    { size: () => Qt.size(sysmonW, surfaceItem(ldSysmon).implicitHeight + 33 * s), ame: () => surfaceItem(ldSysmon) },
         appearance: { size: () => Qt.size(appearanceW, surfaceItem(ldAppearance).implicitHeight + 29 * s), ame: () => surfaceItem(ldAppearance) },
+        pillsettings: { size: () => Qt.size(displayW, surfaceItem(ldPillSettings).implicitHeight + 29 * s), ame: () => surfaceItem(ldPillSettings) },
         display:    { size: () => Qt.size(displayW, surfaceItem(ldDisplay).implicitHeight + 29 * s), ame: () => surfaceItem(ldDisplay) },
         input:      { size: () => Qt.size(inputW, surfaceItem(ldInput).implicitHeight + 29 * s), ame: () => surfaceItem(ldInput) },
         look:       { size: () => Qt.size(lookW, surfaceItem(ldLook).implicitHeight + 29 * s), ame: () => surfaceItem(ldLook) },
@@ -254,6 +257,8 @@ Item {
             return ldSettings.item;
         if (pill.appearanceOpen)
             return ldAppearance.item;
+        if (pill.pillsettingsOpen)
+            return ldPillSettings.item;
         if (pill.lookOpen)
             return ldLook.item;
         if (pill.inputOpen)
@@ -366,7 +371,8 @@ Item {
             pill.requestSurface("appearance");
             return;
         }
-        if (pill.appearanceOpen || pill.displayOpen || pill.inputOpen || pill.lookOpen || pill.idlelockOpen) {
+        if (pill.appearanceOpen || pill.displayOpen || pill.pillsettingsOpen
+                || pill.inputOpen || pill.lookOpen || pill.idlelockOpen) {
             pill.requestSurface("settings");
             return;
         }
@@ -567,8 +573,8 @@ Item {
         border.width: 1
         border.color: Theme.border
         gradient: Gradient {
-            GradientStop { position: 0.0; color: Qt.alpha(Theme.cardTop, Flags.pillOpacity) }
-            GradientStop { position: 1.0; color: Qt.alpha(Theme.cardBot, Flags.pillOpacity) }
+            GradientStop { position: 0.0; color: Theme.cardTop }
+            GradientStop { position: 1.0; color: Theme.cardBot }
         }
         Behavior on budR { NumberAnimation { duration: Motion.fast; easing.type: Motion.easeStandard } }
         Behavior on opacity { NumberAnimation { duration: Motion.standard } }
@@ -619,8 +625,8 @@ Item {
         border.width: 1
         border.color: Theme.border
         gradient: Gradient {
-            GradientStop { position: 0.0; color: Qt.alpha(Theme.cardTop, Flags.pillOpacity) }
-            GradientStop { position: 1.0; color: Qt.alpha(Theme.cardBot, Flags.pillOpacity) }
+            GradientStop { position: 0.0; color: Theme.cardTop }
+            GradientStop { position: 1.0; color: Theme.cardBot }
         }
 
         layer.enabled: !pill.morphing
@@ -1738,6 +1744,19 @@ Item {
         sourceComponent: Appearance {
             s: pill.s
             open: pill.appearanceOpen
+            morphCloseness: pill.morphCloseness
+            onRequestClose: pill.requestClose()
+            onRequestSurface: (name) => pill.requestSurface(name)
+        }
+    }
+
+    Loader {
+        id: ldPillSettings
+        active: false
+        anchors.fill: parent
+        sourceComponent: PillSettings {
+            s: pill.s
+            open: pill.pillsettingsOpen
             morphCloseness: pill.morphCloseness
             onRequestClose: pill.requestClose()
             onRequestSurface: (name) => pill.requestSurface(name)

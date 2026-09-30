@@ -149,24 +149,23 @@ class TransactionTests(unittest.TestCase):
         shell = (Path(__file__).parents[1] / "shell.qml").read_text(encoding="utf-8")
         self.assertIn('+ "        left 0\\n"', look)
         self.assertIn('+ "        right 0\\n"', look)
-        self.assertIn('+ "        top " + (-gaps) + "\\n"', look)
+        self.assertIn('+ "        top 0\\n"', look)
         self.assertIn('+ "        bottom 0\\n"', look)
         self.assertIn("if (hasLegacyOuterStruts)", look)
-        self.assertIn("Math.round(8 * Flags.appGap * root.s * 10) / 10", look)
-        self.assertIn("? 8 * Flags.appGap * s : root.niriLayoutGaps", shell)
-        self.assertIn("root.niriHasLegacyOuterStruts", shell)
+        self.assertIn("Flags.pillGapForOutput(outputIdentity)", shell)
+        self.assertIn("Math.max(-root.niriLayoutGaps", shell)
         self.assertIn(
-            "restHeight + topGap + appGap - root.niriTopStrut - root.niriLayoutGaps",
+            "restHeight + topGap + pillGapOffset - root.niriTopStrut",
             shell,
         )
 
-        # For S_top=-G, Niri's top contribution S_top+G cancels, while the
-        # reserved panel height leaves one G between the pill and first tile.
+        # Niri keeps its ordinary top gap without a Pill. With a Pill, the
+        # reservation leaves G + offset between the body and the first tile.
         for gap in (0, 1, 6.4, 8, 20, 40):
-            top_strut = -gap
-            reserve = 38 + 8 + gap - top_strut - gap
-            first_window_y = reserve + top_strut + gap
-            self.assertAlmostEqual(first_window_y - (38 + 8), gap)
+            for offset in (-gap, 0, 12):
+                reserve = 38 + 8 + offset
+                first_window_y = reserve + gap
+                self.assertAlmostEqual(first_window_y - (38 + 8), gap + offset)
 
     def test_valid_candidate_commits_backs_up_and_reloads(self):
         candidate = harmless_fragment("#aabbcc")
@@ -190,7 +189,7 @@ class TransactionTests(unittest.TestCase):
             "    struts {\n"
             "        left 0\n"
             "        right 0\n"
-            "        top -6.4\n"
+            "        top 0\n"
             "        bottom 0\n"
             "    }\n"
             "    border {\n"
@@ -220,14 +219,14 @@ class TransactionTests(unittest.TestCase):
             variant = candidate.replace("slowdown 1.0", "slowdown " + slowdown)
             self.assertTrue(TRANSACTION.ConfigTransaction._safe_fragment_payload("user-appearance", variant))
         for gaps in (0, 1, 6.4, 20, 40):
-            variant = candidate.replace("gaps 6.4", f"gaps {gaps}").replace("top -6.4", f"top {-gaps}")
+            variant = candidate.replace("gaps 6.4", f"gaps {gaps}")
             self.assertTrue(TRANSACTION.ConfigTransaction._safe_fragment_payload("user-appearance", variant))
             if gaps:
                 legacy_geometry = (variant.replace("left 0", f"left {gaps}")
                                    .replace("right 0", f"right {gaps}")
                                    .replace("bottom 0", f"bottom {gaps}"))
                 self.assertFalse(TRANSACTION.ConfigTransaction._safe_fragment_payload("user-appearance", legacy_geometry))
-        for strut in ("left 0", "right 0", "bottom 0"):
+        for strut in ("left 0", "right 0", "top 0", "bottom 0"):
             mismatched_strut = candidate.replace(strut, strut.split()[0] + " 12")
             self.assertFalse(TRANSACTION.ConfigTransaction._safe_fragment_payload("user-appearance", mismatched_strut))
         off_variant = candidate.replace("slowdown 1.0", "off")

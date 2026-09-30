@@ -114,6 +114,8 @@ SettingsSurface {
             { item: numberRow, kind: "seg", vals: root.numberOptions(), get: function () { return root.displayNumber(root.selName); }, set: function (v) { root.assignDisplayNumber(v); } },
             { item: startupFocusRow, kind: "toggle", get: function () { return card.pickFocusAtStartup; }, set: function (v) { card.setFocusAtStartup(v); } }
         ];
+        if (root.selMon && root.selMon.enabled)
+            e.push({ item: pillSettingsRow, kind: "nav", surface: "pillsettings" });
         e.push({ item: nightModeRow, kind: "seg", vals: ["off", "on", "scheduled"],
             get: function () { return Flags.nightLightMode; }, set: function (v) { NightLight.setMode(v); } });
         if (Flags.nightLightMode !== "off")
@@ -198,6 +200,12 @@ SettingsSurface {
 
     function displayNumber(name) {
         return Niri.monitorNumberForOutput(name);
+    }
+
+    onRequestSurface: (name) => {
+        if (name === "pillsettings")
+            Flags.pillSettingsOutputIdentity = root.selMon
+                ? String(root.selMon.identity || root.selMon.name) : "";
     }
 
     function numberOptions() {
@@ -513,7 +521,8 @@ SettingsSurface {
             id: crowIcon
             anchors.left: parent.left
             anchors.top: parent.top
-            anchors.topMargin: 5 * root.s
+            anchors.topMargin: Math.max(0,
+                (Math.min(crowInner.childrenRect.height, 32 * root.s) - height) / 2)
             width: 16 * root.s
             height: 16 * root.s
             name: crow.icon
@@ -980,6 +989,37 @@ SettingsSurface {
                                 s: root.s
                                 on: card.pickFocusAtStartup
                                 onToggled: card.setFocusAtStartup(!card.pickFocusAtStartup)
+                            }
+                        }
+                    }
+
+                    CardRow {
+                        id: pillSettingsRow
+                        visible: !!(root.selMon && root.selMon.enabled)
+                        icon: "pill"
+                        Item {
+                            width: parent.width
+                            height: 26 * root.s
+
+                            Text {
+                                anchors.left: parent.left
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: "Pill settings"
+                                color: Theme.cream
+                                font.family: Theme.font
+                                font.pixelSize: 11 * root.s
+                                font.weight: Font.DemiBold
+                            }
+
+                            GlyphIcon {
+                                anchors.right: parent.right
+                                anchors.rightMargin: 8 * root.s
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 14 * root.s
+                                height: 14 * root.s
+                                name: "chevron-right"
+                                color: root.focusRowItem === pillSettingsRow ? Theme.cream : Theme.iconDim
+                                stroke: 2.1
                             }
                         }
                     }

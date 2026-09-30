@@ -199,7 +199,7 @@ class InstallerTests(unittest.TestCase):
         self.assertIn('include "sparrow/appearance.kdl"', root_config)
         self.assertIn('include optional=true "user-appearance.kdl"', appearance)
         self.assertEqual(effective_niri_spacing(self.paths.config), {
-            "gaps": 8, "left": 0, "right": 0, "top": -8, "bottom": 0,
+            "gaps": 8, "left": 0, "right": 0, "top": 0, "bottom": 0,
         })
         self.assertRegex(appearance, r"(?m)^\s*gaps 8$")
         self.assertIn("geometry-corner-radius 12", appearance)
@@ -257,7 +257,7 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(installer.install(), 0)
         self.assertEqual(old_user_appearance.read_bytes(), APPROVED_USER_APPEARANCE_DEFAULT)
         self.assertEqual(effective_niri_spacing(self.paths.config), {
-            "gaps": 8, "left": 0, "right": 0, "top": -8, "bottom": 0,
+            "gaps": 8, "left": 0, "right": 0, "top": 0, "bottom": 0,
         })
         migrated_flags = json.loads(flags_path.read_text())
         self.assertEqual(migrated_flags["topGap"], 1.1)
@@ -293,7 +293,7 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(self.installer().install(), 0)
         self.assertEqual(target.read_bytes(), APPROVED_USER_APPEARANCE_DEFAULT)
         self.assertEqual(effective_niri_spacing(self.paths.config), {
-            "gaps": 8, "left": 0, "right": 0, "top": -8, "bottom": 0,
+            "gaps": 8, "left": 0, "right": 0, "top": 0, "bottom": 0,
         })
 
     def test_customized_appearance_and_pill_gap_are_preserved(self) -> None:
@@ -312,6 +312,24 @@ class InstallerTests(unittest.TestCase):
         preserved_flags = json.loads(flags_path.read_text())
         self.assertEqual(preserved_flags["topGap"], 1.25)
         self.assertEqual(preserved_flags["wallpaperDir"], "/keep/me")
+
+    def test_look_generated_custom_appearance_migrates_only_the_old_pill_top_strut(self) -> None:
+        niri_dir = self.paths.config / "niri/sparrow"
+        niri_dir.mkdir(parents=True)
+        custom = (APPROVED_USER_APPEARANCE_DEFAULT.decode()
+                  .replace("gaps 8", "gaps 11")
+                  .replace("top 0", "top -11")
+                  .replace("width 2", "width 4")
+                  .replace("geometry-corner-radius 12", "geometry-corner-radius 18"))
+        target = niri_dir / "user-appearance.kdl"
+        target.write_text(custom)
+
+        self.assertEqual(self.installer().install(), 0)
+        migrated = target.read_text()
+        self.assertIn("gaps 11", migrated)
+        self.assertIn("top 0", migrated)
+        self.assertIn("width 4", migrated)
+        self.assertIn("geometry-corner-radius 18", migrated)
 
     def test_cachyos_hello_autostart_is_hidden_reversibly_and_only_for_that_app(self) -> None:
         autostart = self.paths.config / "autostart"
@@ -617,12 +635,10 @@ class InstallerTests(unittest.TestCase):
                 mapped_live_files.add(live_rel)
                 repo_text = repo_source.read_text()
                 canonical_defaults = (
-                    "    // One Niri gap supplies both the inner seam and the three unobstructed\n"
-                    "    // outer edges. 8 logical px is a clean 10 physical-pixel baseline\n"
-                    "    // at the reference output's 1.25 scale. The negative top strut cancels\n"
-                    "    // Niri's top gap so the pill's exclusive zone supplies that same gap.\n"
+                    "    // One Niri gap supplies inner and outer window spacing on every display.\n"
+                    "    // Sparrow's Pill reserves its own body space without replacing this gap.\n"
                     "    gaps 8\n"
-                    "    struts {\n        left 0\n        right 0\n        top -8\n        bottom 0\n    }"
+                    "    struts {\n        left 0\n        right 0\n        top 0\n        bottom 0\n    }"
                 )
                 live_struts = (
                     "    // Default global spacing; Sparrow Look stores user overrides separately.\n"
@@ -643,7 +659,7 @@ class InstallerTests(unittest.TestCase):
                 self.assertIn("gaps 8", user_appearance)
                 self.assertIn("left 0", user_appearance)
                 self.assertIn("right 0", user_appearance)
-                self.assertIn("top -8", user_appearance)
+                self.assertIn("top 0", user_appearance)
                 self.assertIn("bottom 0", user_appearance)
                 self.assertIn("geometry-corner-radius 12", (live_home / ".config/niri/sparrow/user-appearance.kdl").read_text())
                 self.assertIn("slowdown 1.5", (live_home / ".config/niri/sparrow/user-appearance.kdl").read_text())

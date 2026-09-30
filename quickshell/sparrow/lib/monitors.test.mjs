@@ -32,6 +32,10 @@ const raw = {
 };
 
 const outputs = Mon.parseNiri(JSON.stringify(raw));
+eq(Mon.pillBaseScale(1920, 1080), 1, "normalize landscape UI from the shorter logical side");
+eq(Mon.pillBaseScale(1080, 1920), 1, "keep UI scale stable after a quarter-turn rotation");
+eq(Mon.pillBaseScale(3840, 2160), 2, "scale high-resolution landscape output by logical dimensions");
+eq(Mon.pillBaseScale(0, 1920), 1, "fall back safely when screen dimensions are unavailable");
 eq(outputs.length, 3, "parse all connected outputs");
 eq(outputs[0].currentMode.refreshMilliHz, 59951, "keep the compositor's exact current refresh");
 eq(outputs[0].modes[1].refreshMilliHz, 240002, "keep the exact high-refresh mode");

@@ -1,355 +1,200 @@
 # Sparrow Shell — Agent Instructions
 
-## Project
+## Project and source of truth
 
 Sparrow Shell is a minimal Niri-centered desktop rice built primarily with
-Quickshell.
-
-Niri owns window management, workspaces, outputs, gestures, and compositor
-behavior. Sparrow should integrate with Niri rather than reimplement those
-features.
-
+Quickshell. Niri owns compositor behavior, outputs, workspaces and window
+management; Sparrow should use those capabilities rather than duplicate them.
 Quickshell owns Sparrow's desktop UI and Pill surfaces.
 
-## Git policy
-
-- `main` is the tested stable branch.
-- `dev` is the integration/development branch.
-- New substantial work should normally branch from `dev`.
-- Never commit directly to `main`.
-- Never force-push `main` or `dev`.
-- Never commit or push unless explicitly requested.
-- `v0.1.0` is the first tested stable baseline.
-
-## Development policy
-
-Before editing:
-
-1. Inspect the relevant implementation.
-2. Inspect related architecture/source-of-truth documentation.
-3. Understand existing ownership and state behavior.
-4. Prefer the smallest change consistent with Sparrow's architecture.
-5. Do not add duplicate implementations when Niri, Quickshell, or an existing
-   Sparrow subsystem already owns the feature.
-
-Do not redesign unrelated components while fixing a focused issue.
-
-## Live-system policy
-
-The repository checkout and installed Sparrow are separate.
-
-Repository:
-`~/sparrow-shell`
-
-Installed/runtime files are deployed by the installer.
-
-Do not modify the live desktop directly unless explicitly requested.
-Prefer changing tracked source and deploying it through the installer.
-
-Do not:
-- change the user's wallpaper
-- alter saved appearance settings
-- disrupt networking
-- pair/remove Bluetooth devices
-- reboot/logout
-- install/remove packages
-- restart critical services
-
-unless required for an explicitly approved test.
-
-## Installer
-
-`./install.sh` is the supported deployment/update path.
-
-Installer reruns must be idempotent.
-
-Preserve user-owned state.
-
-Do not silently overwrite mutable user configuration.
-
-Packages required for a Sparrow feature belong in the installer/package
-manifest rather than being undocumented manual prerequisites.
-
-## UI
-
-Sparrow's visual language is compact and minimal.
-
-Use the existing Appearance and polished Pill surfaces as visual references.
-
-Avoid:
-- explanatory paragraphs inside settings UI
-- unnecessary labels
-- oversized controls
-- inconsistent margins
-- hardcoded colors when semantic Theme roles exist
-- text colliding with controls
-- unnecessary permanent UI
-
-Long text must elide or otherwise fit cleanly.
-
-Respect Sparrow UI scaling.
-
-Use existing shared components and semantic Theme roles where practical.
-
-## Architecture
-
-Read the repository's current source-of-truth and architecture documentation
-before making architectural changes.
-
-Important distinctions:
-
-- tracked canonical configuration
-- generated state
-- machine-specific state
-- mutable user/runtime state
-
-Do not turn generated or machine-specific state into canonical configuration
-without a deliberate reason.
-
-## Validation
-
-Run tests relevant to the change.
-
-Common checks include:
-
-- Qt 6 qmllint, not Qt 5 qmllint
-- Niri config validation
-- installer tests
-- focused Python/QML tests
-- JSON/TOML/shell syntax checks where applicable
-- `git diff --check`
-
-Do not claim a live hardware/UI test was performed when it was not.
-
-# Development workflow
-
-Sparrow Shell uses a protected stable-development workflow.
-
-## Branch roles
-
-- `main` is the stable, tested release branch.
-- `dev` is the integration branch for ongoing development.
-- New independent features should normally use `feature/<short-name>`.
-- Bug fixes should normally use `fix/<short-name>`.
-
-Never develop directly on `main`.
-
-## Starting work
-
-When the user asks to implement a new feature or fix:
-
-1. Read this file and relevant architecture/source-of-truth documentation.
-2. Inspect the existing implementation before editing.
-3. Determine whether the request is a feature, fix, polish change, documentation change, or research task.
-4. Ask the user questions only when an unresolved decision materially affects behavior, architecture, safety, or UX. Otherwise make the smallest reasonable choice consistent with Sparrow.
-5. Ensure the repository is clean enough to safely start work.
-6. Update local remote information before branching.
-7. Base normal development work on the latest `dev`.
-8. Create an appropriately named `feature/*` or `fix/*` branch when the work is an independent change.
-9. Never discard unrelated user work.
-
-The user should not need to know or provide Git commands. Handle repository and branch operations yourself when tools permit.
-
-## Research-only requests
-
-If the user asks to research, inspect, audit, investigate, or propose something:
-
-- Do not modify files unless explicitly asked.
-- Inspect the repository and relevant documentation.
-- Research upstream/current external behavior when appropriate.
-- Explain findings and recommend the smallest appropriate implementation.
-- Do not create unnecessary branches for purely read-only investigation.
-
-## Implementation
-
-When implementing:
-
-- Keep changes focused on the requested feature or fix.
-- Preserve Sparrow's existing architecture and visual language unless the task explicitly changes them.
-- Avoid unrelated cleanup and refactoring.
-- Update tests and documentation when behavior or architecture changes.
-- Run the relevant automated validation before presenting the work for testing.
-- Do not hide failed tests, warnings, incomplete validation, or assumptions.
-
-## Manual testing
-
-When automated work is complete:
-
-1. Clearly explain what changed.
-2. Clearly state what was and was not automatically verified.
-3. Give the user a short, concrete manual test procedure when live verification is needed.
-4. Prefer giving the user the behavior to test rather than requiring them to understand implementation details.
-5. Do not consider visually sensitive or hardware-dependent work fully verified until the required live test has been performed.
-
-If the user reports a problem, continue fixing it on the same feature/fix branch unless a separate change is clearly more appropriate.
-
-## Approval and integration
-
-Do not treat implementation completion as permission to publish stable code.
-
-When the user says the change works, is approved, or asks to finish/publish it:
-
-1. Re-run appropriate final validation.
-2. Review the final diff for unrelated changes, secrets, generated junk, temporary files, and debug code.
-3. Commit the approved work with a concise descriptive commit message.
-4. Push the feature/fix branch.
-5. Integrate it into `dev` only after user approval.
-6. Push the updated `dev`.
-7. Report exactly what was committed and where.
-
-Do not merge into `main` merely because a feature is complete.
-
-## Stable promotion
-
-`main` represents the stable Sparrow Shell state.
-
-Only promote `dev` to `main` when the user explicitly asks to release, publish to main, merge to main, promote dev to stable, or gives an equivalently clear instruction.
-
-Before modifying `main`:
-
-1. Confirm the requested promotion is intentional if the user's wording is ambiguous.
-2. Ensure relevant work is committed.
-3. Ensure `dev` is synchronized with its remote.
-4. Run the appropriate full validation suite.
-5. Check that the working tree is clean.
-6. Review the commits/diff that will enter `main`.
-7. Prefer a fast-forward promotion when branch history permits.
-8. Push `main` only after successful validation.
-9. Never force-push `main`.
-10. Report the resulting commit hash and validation results.
-
-A request such as "push this", "save this", or "commit this" does NOT by itself mean promote to `main`.
-
-## Releases
-
-Do not create release tags automatically.
-
-When the user explicitly asks to create a release/tag:
-
-- verify `main` is at the intended stable commit;
-- use an appropriate version tag;
-- never move or overwrite an existing release tag without explicit instruction;
-- report exactly which commit was tagged.
-
-## Safety
-
-Never:
-
-- force-push `main` or `dev`;
-- use destructive reset/clean operations to solve ordinary repository problems;
-- silently discard local changes;
-- silently overwrite user-owned configuration;
-- expose credentials or secrets;
-- merge untested hardware-dependent behavior while claiming it was tested;
-- modify `main` without explicit user intent.
-
-If repository state is unexpected, stop and explain the problem instead of trying to repair it destructively.
-
-## Natural-language operation
-
-The user is not expected to manage Git manually.
-
-Interpret ordinary instructions according to this workflow.
-
-Examples:
-
-- "I want to add X" → inspect/research it and discuss important decisions before implementation.
-- "Let's do it" → implement it on the appropriate development branch.
-- "Fix this" → investigate and implement the focused fix.
-- "How do I test it?" → provide the shortest useful live test procedure.
-- "Works" → treat the implementation as manually approved, but do not assume this means `main`.
-- "Finish it" → validate, commit, push, and integrate into `dev` when appropriate.
-- "Push this" → push the current approved development work; do not infer `main`.
-- "Put it on main" → perform the stable-promotion procedure.
-- "Release it" → clarify whether the user means main promotion, a version tag/release, or both if not already clear.
-
-Prefer handling routine technical details autonomously while keeping irreversible or stable-release decisions explicit.
-
-## Canonical local development checkout
-
-On Tadej's development machines, the normal local Sparrow repository is:
-
-`~/sparrow-shell`
-
-When that checkout is available to the working environment, it is the canonical
-local development checkout.
-
-For implementation work:
-
-1. Prefer the existing `~/sparrow-shell` checkout.
-2. Inspect its Git state before making changes.
-3. Start independent work from the latest clean `dev`.
-4. Create and switch to an appropriate `feature/*` or `fix/*` branch in that
-   checkout.
-5. Make source changes there.
-6. Run repository validation there.
-7. When live testing is required, deploy from that same checkout using the
-   repository's supported deployment path.
-8. Leave the feature/fix branch available for continued iteration until the
-   work is approved and integrated.
-
-Do not create a second clone, `/tmp` checkout, project mirror, or disposable
-repository merely for isolation when the canonical local checkout is available.
-
-If the execution environment cannot access or write to `~/sparrow-shell`:
-
-- do not silently substitute another checkout and continue as though it were
-  the user's development repository;
-- explain the environment limitation;
-- request access to the canonical checkout when possible;
-- only use a temporary clone when necessary for read-only investigation or when
-  the user explicitly agrees to that workflow.
-
-A temporary clone is never the authoritative local Sparrow checkout.
-
-Do not instruct the user to deploy or install from a temporary clone without
-explicitly explaining why that clone exists and receiving approval.
-
-## Local deployment and testing
-
-Repository state and the currently installed Sparrow desktop are separate.
-
-Before giving deployment/restart commands:
-
-1. Verify the supported deployment method from the current repository.
-2. Verify relevant service/unit names rather than assuming them.
-3. Deploy from the branch/check-out containing the change being tested.
-4. Do not commit merely to make a change testable.
-5. Tell the user exactly what behavior needs manual verification.
-
-When possible, perform non-destructive automated validation before asking the
-user to test manually.
-
-Hardware-dependent and visual behavior must not be reported as verified until
-it has actually been tested in the appropriate live environment.
-
-## Cross-machine synchronization
-
-Before starting implementation on any machine:
-
-1. Fetch the current remote repository state.
-2. Confirm the local development base is synchronized with `origin/dev`.
-3. Do not create a feature/fix branch from a stale local `dev`.
-4. If synchronization can be performed safely as a fast-forward on a clean
-   checkout, handle it automatically.
-5. If local changes, divergence, or another condition makes synchronization
-   unsafe, stop and explain the situation instead of overwriting or discarding
-   work.
-6. Before live testing, consider whether the installed Sparrow runtime matches
-   the expected baseline. If stale installed state could affect the test,
-   update/deploy the current baseline first.
+The canonical repository is `https://github.com/Retro-TV/sparrow-shell`.
+On each development machine, use its existing `~/sparrow-shell` checkout.
+GitHub and the current checkout are canonical; chat history is not a substitute
+for inspecting current code and documentation. Read this file before repository
+work. Use `docs/DEVELOPMENT-MAP.md` to find relevant code and architecture docs.
+
+## Hard safety rules
+
+- `main` is tested stable; `dev` is the development integration branch.
+- Never develop directly on `main`, force-push `main` or `dev`, or create
+  release tags unless explicitly requested.
+- **Do not modify or promote `main` / stable without explicit stable intent.**
+  The request must name `main`, `stable`, or clearly request promotion of
+  `dev` to stable. “Works”, “finish it”, “commit it”, “push it”, “publish it”,
+  “done”, and “feature is done” never authorize stable promotion by themselves.
+- **Repository recovery rule:** Never silently or routinely use destructive
+  `reset`, `clean`, `restore`, stash/discard, or history-rewriting operations to
+  resolve repository state. Preserve unexpected local work and stop/report
+  when it prevents safe progress. Explain any proposed recovery operation and
+  get explicit authorization before using it.
+- Preserve user-owned configuration, secrets, personal media, and runtime
+  state. Never expose credentials.
+- If `~/sparrow-shell` exists but this Work environment cannot write to it,
+  stop before implementation and explain the access limitation. Do not switch
+  to `/tmp`, a project mirror, or another clone.
+
+## Request and implementation lifecycle
+
+1. Inspect the actual checkout and relevant source, docs, ownership, and state.
+2. For research or planning, remain read-only. For a proposed change, explain
+   the approach and resolve only decisions that materially affect behavior,
+   UX, architecture, compatibility, safety, or release state.
+3. Implement only when the user asks to proceed. Keep independent work on a
+   focused `feature/<name>` or `fix/<name>` branch based on current clean `dev`.
+4. Make the smallest change that satisfies the request. Avoid unrelated
+   cleanup, refactors, tests, or background work.
+5. Run focused automated checks. If the change requires live/manual testing,
+   test from the uncommitted feature/fix branch before commit, push, or
+   integration. Never commit merely to make testing possible.
+6. After required testing and user approval, do final checks and review. Follow
+   the natural-language authorization below for commit, push, and `dev`
+   integration. Stop before stable promotion unless explicitly requested.
+
+Natural-language intent:
+
+- “I want to add X” means inspect/research and propose the appropriate change.
+- “Let's do it” / “implement this” authorizes the discussed implementation.
+- “Works” is manual-test approval only. It does not authorize commit, push,
+  integration, or stable promotion.
+- “Commit this” authorizes a commit of approved work to the current feature/fix
+  branch only. It does not authorize push or integration.
+- “Push this” authorizes pushing the current approved feature/fix branch only.
+  It does not authorize integration into `dev` and never means `main`. It does
+  not authorize committing uncommitted changes.
+- “Publish this” requires clarification when the destination is not explicit.
+  Never infer `dev`, `main`, or stable.
+- “Finish it” means, after required testing and approval, perform final
+  validation and review, commit and push the feature/fix branch, integrate into
+  `dev` if it merges cleanly, and push `dev`. If integration is blocked, stop
+  and report it. It never means `main`.
+- “Put it on main” or an equally clear stable-promotion request authorizes the
+  stable procedure below. Clarify “release it” if tag vs. promotion is unclear.
+
+## Checkout, branches, and cross-machine work
+
+Before implementation on any machine:
+
+1. Inspect `git status`, current branch, in-progress Git operations, and recent
+   history in the canonical checkout. Do not assume another machine's state.
+2. Fetch `origin`; treat fetched GitHub refs as canonical for shared branch
+   state, and inspect local `dev` plus any feature/fix branch being continued.
+3. When continuing work, resume the matching fetched remote feature/fix branch
+   if it exists and its checkout is safe. Fast-forward a clean local copy only
+   when it is strictly behind; stop if it is dirty or diverged. Do not create a
+   duplicate branch. If work exists only uncommitted/unpushed on another
+   machine and is absent here, stop and report that the work has not been
+   transferred; do not recreate or guess it. Preserve local-only commits as
+   untransferred work, not as shared remote state.
+4. For new work, fast-forward local `dev` only when the checkout is clean and
+   it is strictly behind `origin/dev`; create the new branch from that tip.
+   Use `fix/<name>` to correct unintended existing behavior and
+   `feature/<name>` for new or intentionally expanded behavior.
+5. If the tree is dirty, branches diverge, or an update/resume is unsafe, stop
+   and report the concrete state, following the repository recovery rule above.
+   Never branch new work from stale `dev`.
+
+Do not create a second clone or disposable checkout when `~/sparrow-shell` is
+available. If a required remote operation or canonical-checkout access is
+blocked, explain that instead of silently using another repository.
+
+## Interrupted or crashed sessions
+
+On resumption, reconstruct what happened from the actual checkout and relevant
+filesystem/runtime state: branch and HEAD, status including untracked files,
+recent commits, reflog when useful, unfinished merge/rebase/cherry-pick state,
+changed files, and relevant installed files/services if deployment may have
+started. Treat earlier messages and plans as clues, not proof of completion.
+Do not repeat completed work blindly or claim a deploy/test succeeded without
+evidence. Resolve state conservatively; ask only when an unresolved decision or
+ownership question materially affects safe continuation.
+
+## Architecture, state, and installer
+
+- Inspect relevant source-of-truth and architecture docs before architectural
+  changes. Preserve the division between tracked portable source, generated
+  output, machine-specific discovery, and mutable user/runtime state.
+- Prefer Niri-native or existing Sparrow ownership over duplicate systems.
+- `./install.sh` is the supported deployment/update path. Verify its current
+  behavior and relevant service names before relying on them.
+- Installer reruns must be idempotent. Preserve user-owned state, back up
+  replaced files through the established policy, and never silently overwrite
+  mutable user configuration.
+- Keep package requirements in the declared installer/package manifests;
+  do not add undocumented manual prerequisites.
+- Repository source and installed Sparrow are separate. Deploy only when
+  needed for approved testing, from the checkout containing the change. Do not
+  modify live desktop settings, packages, services, network, Bluetooth,
+  wallpaper, login state, or hardware configuration unnecessarily.
+- Before claiming live verification, verify the installed runtime contains the
+  branch/change being tested. If it does not, deploy that branch through the
+  supported mechanism first. Report source validation, deployment, and live
+  verification as separate facts.
+
+## UI and implementation quality
+
+Keep Sparrow's UI compact and consistent with its established visual language.
+Use shared components and semantic Theme roles where practical. Avoid
+explanatory paragraphs, oversized or permanent controls, inconsistent spacing,
+hardcoded colors where semantic roles exist, and overflowing text. Respect UI
+scaling and elide long text where needed.
+
+## Validation and manual verification
+
+Validation must be proportional to the change. During iteration, run focused
+checks for the changed code and its direct dependencies. Do not repeatedly run
+broad installer or release suites for unrelated changes. Broader validation
+belongs at relevant integration/release boundaries or when the changed
+subsystem requires it.
+
+Automated validation does not replace required manual testing or user approval.
+For visual, hardware-, network-, display-, Bluetooth-dependent behavior, or
+anything else meaningfully verifiable only in a live environment, require the
+applicable live check before calling that behavior tested. Distinguish source
+inspection, automated checks, simulated checks, and actual live testing. Never
+claim UI, hardware, display, network, or Bluetooth behavior was live-tested
+without doing so.
+
+Common focused checks include Qt 6 `qmllint` (not Qt 5), `niri validate`,
+relevant QML/Python tests, shell/JSON/TOML syntax checks, installer tests when
+installer behavior changed, and `git diff --check`. Do not add or run unrelated
+tests just to increase test volume.
+
+When manual testing is needed, give Tadej a short behavior-focused procedure.
+State what was checked and what remains unverified. For iteration after a
+reported issue, continue on the same feature/fix branch unless a separate
+change is clearly warranted.
+
+## Development completion and stable promotion
+
+For approved development completion:
+
+1. Run appropriate final focused validation and review the diff for unrelated
+   changes, secrets, debug code, generated junk, and accidental artifacts.
+2. Do not commit, push, or integrate until required live/manual verification
+   and user approval are complete. Testing must use the uncommitted feature/fix
+   branch; never commit merely to make it testable.
+3. For “finish it,” commit the approved change, push its feature/fix branch,
+   integrate into `dev` if it merges cleanly, and push the updated `dev`. If
+   integration is blocked, stop and report it. Separate “commit this” and
+   “push this” requests have only the scope defined above.
+   Never infer stable promotion from development approval.
+4. Report the commit(s), destination branches, checks, manual-test status, and
+   final Git state.
+
+For explicit stable promotion only:
+
+1. Verify `dev` is synchronized with `origin/dev`, the checkout is clean, and
+   the incoming commits/diff are understood.
+2. Ensure relevant automated validation passes and every required live/manual
+   test and approval is complete. Automated success alone is insufficient.
+3. Prefer fast-forward promotion. Never force-push `main`.
+4. Push `main` only after the requested promotion succeeds; report the commit
+   and validation evidence. Do not create a version tag unless separately
+   requested.
 
 ## Completion reports
 
-Report:
-
-- what changed
-- why
-- files changed
-- tests performed
-- anything not tested
-- manual verification still needed
-- `git status --short`
-- `git diff --stat`
-
-Do not commit or push unless explicitly requested.
+Keep reports practical. State what changed and why, files changed, validation
+performed, what remains untested, manual verification still needed, and the
+branch plus `git status --short` / `git diff --stat`. Never hide failures,
+warnings, assumptions, or incomplete validation.

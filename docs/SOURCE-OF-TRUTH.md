@@ -11,7 +11,7 @@ personal wallpaper library.
 | Item | Portable representation and reason |
 | --- | --- |
 | Niri root config | Live requires generated colors and contains a Bibata cursor block plus a commented host output. Git makes colors optional until bootstrap, places the same cursor block in conditional `sparrow/cursor.kdl`, and omits the host output comment. |
-| Niri appearance | Live's mutable `user-appearance.kdl` holds the balanced top strut, corner radius/clipping and slowdown. Git promotes these intended defaults into static `appearance.kdl`; fresh users should not need that saved override. Other live appearance directives match. |
+| Niri appearance | Git keeps Niri's normal outer gap on every edge. Pill spacing is reserved by Quickshell and adjusted as an offset from the Niri gap, so displays without a Pill retain the same top gap as other edges. Installer migrates only Sparrow-generated user fragments whose top strut exactly cancels their configured gap; other appearance choices remain intact. |
 | Niri binds | Live invokes Rishot through `$HOME/.local/bin/rishot`; Git invokes `rishot` through `PATH` for portability. Other binds match. |
 | Niri input | Live's `input.kdl` and Git's bridge are byte-identical; live `user-input.kdl` supplies focus-follows-mouse alongside user-specific Num Lock/touchpad choices. The tracked `niri/defaults/user-input.kdl` holds focus-follows-mouse, tap-to-click, and Niri's existing 25/600 keyboard repeat defaults. Do **not** copy live device preferences. |
 | Niri generated colors | Live colors reflect the current bundled default wallpaper. Git contains the wallpaper, Matugen generator, and transaction helper, not a frozen palette. |

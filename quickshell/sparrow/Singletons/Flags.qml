@@ -17,6 +17,10 @@ Singleton {
     property bool flagsFileExisted: false
     property bool onboardingFileMissing: false
     property bool onboardingStateReady: false
+    /** Temporary hand-off used when Display opens the Pill settings for one output. */
+    property string pillSettingsOutputIdentity: ""
+    /** Current Niri layout gap, exposed to Pill controls for a safe negative offset limit. */
+    property real niriLayoutGaps: 8
 
     readonly property bool onboardingCompleted: onboardingAdapter.completed
     readonly property bool onboardingAutoPending: onboardingStateReady
@@ -61,9 +65,11 @@ Singleton {
     property alias wallpaperDir: adapter.wallpaperDir
     property alias randomScope: adapter.randomScope
     property alias uiScale: adapter.uiScale
+    property alias pillByOutput: adapter.pillByOutput
+    property alias pillDisplayMode: adapter.pillDisplayMode
     property alias reduceMotion: adapter.reduceMotion
     property alias uiFont: adapter.uiFont
-    property alias pillOpacity: adapter.pillOpacity
+    property alias pillGap: adapter.pillGap
     property alias topGap: adapter.topGap
     property alias appGap: adapter.appGap
     property alias recordCountdown: adapter.recordCountdown
@@ -125,9 +131,14 @@ Singleton {
             /** Super+B random target: "all" repaints every monitor, "cursor" only the one under the pointer. */
             property string randomScope: "all"
             property real uiScale: 1.0
+            /** "all" shows a Pill on every screen; "selected" uses each output's enabled flag. */
+            property string pillDisplayMode: "all"
+            /** Optional per-output visibility, UI scale, and Pill gap overrides, keyed by Niri output identity. */
+            property var pillByOutput: ({})
             property bool reduceMotion: false
             property string uiFont: ""
-            property real pillOpacity: 1.0
+            /** Offset from Niri's normal layout gap between Pill and tiled windows. */
+            property real pillGap: 0.0
             /** Screen-edge gap as a fraction of the 8px scaled spacing unit. 0 sits the pill flush to the screen edge. */
             property real topGap: 1.1
             // Legacy Pill-to-window spacing retained for migration of old
@@ -151,6 +162,50 @@ Singleton {
             property int nightLightOnMin: 1260
             property int nightLightOffMin: 450
         }
+    }
+
+    function pillOutputValue(identity, key, fallback) {
+        var overrides = pillByOutput || {};
+        var output = overrides[String(identity || "")] || {};
+        return Object.prototype.hasOwnProperty.call(output, key) ? output[key] : fallback;
+    }
+
+    function pillVisibleOnOutput(identity) {
+        return pillDisplayMode !== "selected"
+            || pillOutputValue(identity, "enabled", false) === true;
+    }
+
+    function setPillOutputEnabled(identity, enabled) {
+        setPillOutputValue(identity, "enabled", enabled === true);
+    }
+
+    function setPillOutputValue(identity, key, value) {
+        var id = String(identity || "");
+        if (!id)
+            return;
+        var next = Object.assign({}, pillByOutput || {});
+        var output = Object.assign({}, next[id] || {});
+        if (value === null || value === undefined)
+            delete output[key];
+        else
+            output[key] = value;
+        if (Object.keys(output).length > 0)
+            next[id] = output;
+        else
+            delete next[id];
+        pillByOutput = next;
+    }
+
+    function uiScaleForOutput(identity) {
+        return Number(pillOutputValue(identity, "uiScale", uiScale));
+    }
+
+    function topGapForOutput(identity) {
+        return Number(pillOutputValue(identity, "topGap", topGap));
+    }
+
+    function pillGapForOutput(identity) {
+        return Number(pillOutputValue(identity, "pillGap", pillGap));
     }
 
     FileView {

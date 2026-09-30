@@ -6,11 +6,8 @@ import "Singletons"
 
 /**
  * Labelled dropdown for the display surface: a left caption, a value chip styled
- * like the segmented control's pill, and an inset panel that grows below when open.
- * The panel snaps to its open size and contributes that to implicitHeight at once,
- * so the pill body's height Behavior is the only animator: the body morph alone
- * reveals the panel, and the surface clips anything past the body's current bottom,
- * so an opaque panel rectangle can never paint outside the still-growing body.
+ * like the segmented control's pill, and an inline option list that contributes
+ * to the picker height while open so its options remain inside the owning row.
  * Picking emits picked(value) and the parent closes it; tapping the chip emits
  * requestToggle so the surface keeps only one dropdown open at a time. Resolution
  * labels carry a "×" the picker renders as a smaller, dimmer separator in the shell
@@ -21,6 +18,8 @@ Item {
 
     property real s: 1
     property string label: ""
+    /** Set to zero when the picker is used as a compact value control. */
+    property real labelWidth: 64
     property var options: []
     property var value
     property bool open: false
@@ -45,11 +44,12 @@ Item {
         id: head
         width: parent.width
         height: pick.rowH
-        spacing: 8 * pick.s
+        spacing: pick.labelWidth > 0 ? 8 * pick.s : 0
 
         Text {
             anchors.verticalCenter: parent.verticalCenter
-            width: 64 * pick.s
+            width: pick.labelWidth * pick.s
+            visible: pick.labelWidth > 0
             text: pick.label
             elide: Text.ElideRight
             color: Theme.faint
@@ -62,7 +62,7 @@ Item {
             id: field
             property bool hovered: false
             anchors.verticalCenter: parent.verticalCenter
-            width: parent.width - 72 * pick.s
+            width: parent.width - pick.labelReserve
             height: 24 * pick.s
             radius: 9 * pick.s
             color: pick.open ? Qt.alpha(Theme.onGlow, 0.14) : (field.hovered ? Theme.frameBg : "transparent")
@@ -102,6 +102,9 @@ Item {
         }
     }
 
+    readonly property real labelReserve: pick.labelWidth > 0
+        ? (pick.labelWidth + 8) * pick.s : 0
+
     /**
      * Shadow caster kept separate from the panel. A layer that holds the option
      * text would rasterise the glyphs to an offscreen texture and soften them, so
@@ -128,7 +131,7 @@ Item {
         anchors.top: head.bottom
         anchors.topMargin: pick.open ? pick.gap : 0
         anchors.left: parent.left
-        anchors.leftMargin: 72 * pick.s
+        anchors.leftMargin: pick.labelReserve
         anchors.right: parent.right
         height: pick.listH
         visible: pick.open
@@ -148,34 +151,40 @@ Item {
             boundsBehavior: Flickable.StopAtBounds
             model: pick.options
 
-            delegate: Rectangle {
-                id: optRow
-                required property var modelData
-                readonly property bool current: pick.value === modelData.value
+            delegate: optionDelegate
+        }
+    }
 
-                width: ListView.view.width
-                height: 24 * pick.s
-                radius: 7 * pick.s
-                color: optHover.hovered ? Theme.frameBg
-                    : (optRow.current ? Qt.alpha(Theme.onGlow, 0.16) : "transparent")
+    Component {
+        id: optionDelegate
 
-                HoverHandler { id: optHover }
+        Rectangle {
+            id: optRow
+            required property var modelData
+            readonly property bool current: pick.value === modelData.value
 
-                DisplayLabel {
-                    anchors.left: parent.left
-                    anchors.leftMargin: 9 * pick.s
-                    anchors.verticalCenter: parent.verticalCenter
-                    s: pick.s
-                    text: optRow.modelData.label
-                    color: optRow.current ? Theme.cream : Theme.subtle
-                    weight: optRow.current ? Font.Bold : Font.Medium
-                }
+            width: ListView.view.width
+            height: 24 * pick.s
+            radius: 7 * pick.s
+            color: optHover.hovered ? Theme.frameBg
+                : (optRow.current ? Qt.alpha(Theme.onGlow, 0.16) : "transparent")
 
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: pick.picked(optRow.modelData.value)
-                }
+            HoverHandler { id: optHover }
+
+            DisplayLabel {
+                anchors.left: parent.left
+                anchors.leftMargin: 9 * pick.s
+                anchors.verticalCenter: parent.verticalCenter
+                s: pick.s
+                text: optRow.modelData.label
+                color: optRow.current ? Theme.cream : Theme.subtle
+                weight: optRow.current ? Font.Bold : Font.Medium
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: pick.picked(optRow.modelData.value)
             }
         }
     }

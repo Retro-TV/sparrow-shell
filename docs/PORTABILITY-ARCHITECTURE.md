@@ -19,7 +19,7 @@ generated state separate from portable source.
 | `~/.config/systemd/user/sparrow-{shell,idle,wallpaper,polkit-agent}.service` | Active user services; source unit files are tracked in `quickshell/sparrow/systemd/` | Installer copies units to the canonical systemd user directory, then daemon-reloads and enables selected units. No active unit needs the checkout path. |
 | `~/.config/sparrow/hyprlock.conf` | Simple screenshot-based fallback used only if Sparrow's Quickshell lock IPC is unavailable | An installer should preserve an existing user config and copy the portable fallback only when absent. This host's former Layout 9 config is backed up outside Git. |
 | `~/.local/bin/rishot`, `$XDG_DATA_HOME/rishot`, desktop entry and icon | Pinned upstream Rishot integration, not tracked Sparrow code | Installer checksum-verifies the upstream immutable commit archive; preserves valid PATH installs/user state and owns only unchanged deployed files. |
-| `~/.local/state/sparrow-shell/` | User preferences, selected wallpaper/output map, transaction journals, migrated flags/events and migration backups | Persistent machine/user state; never track. |
+| `~/.local/state/sparrow-shell/` | User preferences, selected wallpaper/output map, Pill display selection and per-output overrides in `flags.json`, transaction journals, migrated flags/events and migration backups | Persistent machine/user state; never track. Pill display preferences use `all` or `selected` mode and output identities. Per-output values are keyed by Niri's make/model/serial identity when available and fall back to the connector name. Missing size, screen spacing, or window-gap offset overrides inherit the global value. |
 | `~/.cache/sparrow-shell/` | Palette, thumbnails, weather location, recording thumbnails and transient outputs | Regenerable cache; never track. Startup migration now creates its root for clean first run. |
 | `~/Pictures/wallpapers/` | User-owned images and videos | Personal assets; not bundled. A missing directory is treated as an empty library. |
 | `~/Videos/Recordings/` | User recording destination | Personal output; not bundled. Recording selection/default path creates or handles it when used. |
@@ -56,8 +56,10 @@ workspace-shadow disablement, Firefox PiP floating, the WezTerm width
 workaround, normal dynamic-workspace keybinds, and the user input bridge. No
 output names, resolutions, scales, focus-at-startup choices, hardware input
 settings, generated Matugen colors, or machine-specific Input/Keybind edits
-are included. Portable Look defaults include the established top strut, 12px
-clipped window corners, and 1.5 animation slowdown. These values were checked
+are included. Portable Look defaults keep Niri's regular outer window gaps on
+all edges, including the top edge when a display has no Pill. The Pill reserves
+its own body height and applies a per-output offset from Niri's normal gap.
+Look also carries 12px clipped window corners and 1.5 animation slowdown. These values were checked
 against the live generated Look output, but are represented as product defaults
 in static `appearance.kdl`; the live generated file remains mutable user state.
 

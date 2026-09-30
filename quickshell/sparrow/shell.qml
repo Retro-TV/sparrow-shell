@@ -6,6 +6,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import "Singletons"
+import "lib/monitors.js" as Mon
 
 /**
  * Washi pill top shell. Each monitor carries two layer-shell windows:
@@ -48,6 +49,7 @@ ShellRoot {
             gapsMatch = appearanceFile.text().match(/^    gaps (-?[0-9]+(?:\.[0-9]+)?)$/m);
         if (gapsMatch)
             root.niriLayoutGaps = Number(gapsMatch[1]);
+        Flags.niriLayoutGaps = Math.max(0, root.niriLayoutGaps);
 
         var strutMatch = userAppearanceFile.text().match(/^        top (-?[0-9]+(?:\.[0-9]+)?)$/m);
         if (!strutMatch)
@@ -123,6 +125,26 @@ ShellRoot {
                 return true;
         }
         return false;
+    }
+
+    function screenPillBaseScale(screen) {
+        if (!screen)
+            return 1;
+        var output = Niri.outputByName(screen.name);
+        var width = output && output.logicalWidth > 0 ? output.logicalWidth : Number(screen.width);
+        var height = output && output.logicalHeight > 0 ? output.logicalHeight : Number(screen.height);
+        return Mon.pillBaseScale(width, height);
+    }
+
+    function outputIdentityForScreen(screen) {
+        if (!screen)
+            return "";
+        var output = Niri.outputByName(screen.name);
+        return output ? String(output.identity || output.name) : String(screen.name);
+    }
+
+    function pillEnabledOnScreen(screen) {
+        return !!screen && Flags.pillVisibleOnOutput(root.outputIdentityForScreen(screen));
     }
 
     Component.onCompleted: {
@@ -291,27 +313,27 @@ ShellRoot {
             id: reserve
             required property var modelData
             readonly property bool monFullscreen: root.hasFullscreenToplevelOnScreen(modelData.name)
-            readonly property real s: modelData ? (modelData.height / 1080) * Flags.uiScale : 1
-            readonly property real topGap: 8 * Flags.topGap * s
+            readonly property bool pillEnabled: root.pillEnabledOnScreen(modelData)
+            readonly property string outputIdentity: root.outputIdentityForScreen(modelData)
+            readonly property real s: root.screenPillBaseScale(modelData) * Flags.uiScaleForOutput(outputIdentity)
+            readonly property real topGap: 8 * Flags.topGapForOutput(outputIdentity) * s
             readonly property real restHeight: 38 * s
-            // Preserve the old visible pill clearance until Look saves the
-            // canonical geometry, then use the one Niri logical-pixel Gap.
-            readonly property real appGap: root.niriHasLegacyOuterStruts
-                ? 8 * Flags.appGap * s : root.niriLayoutGaps
+            readonly property real pillGapOffset: Math.max(-root.niriLayoutGaps,
+                Flags.pillGapForOutput(outputIdentity))
 
-            /** Niri applies top struts and its regular layout gap after the layer's exclusive zone. Cancel those terms so the visible pill-to-window seam is exactly one layout gap. */
+            /** Keep Niri's ordinary outer gap; the Pill reserves only its body, screen spacing, and optional offset from that gap. */
             readonly property real reservedH: Math.max(0,
-                restHeight + topGap + appGap - root.niriTopStrut - root.niriLayoutGaps)
+                restHeight + topGap + pillGapOffset - root.niriTopStrut)
 
             screen: modelData
-            visible: !monFullscreen
+            visible: pillEnabled && !monFullscreen
             color: "transparent"
             exclusionMode: ExclusionMode.Normal
-            exclusiveZone: monFullscreen ? 0 : reservedH
+            exclusiveZone: pillEnabled && !monFullscreen ? reservedH : 0
             aboveWindows: true
 
             anchors { top: true; left: true; right: true }
-            implicitHeight: monFullscreen ? 0 : reservedH
+            implicitHeight: pillEnabled && !monFullscreen ? reservedH : 0
 
             mask: emptyReserve
             Region { id: emptyReserve }
@@ -324,8 +346,9 @@ ShellRoot {
         PanelWindow {
             id: overlay
             required property var modelData
-            readonly property real s: modelData ? (modelData.height / 1080) * Flags.uiScale : 1
-            readonly property real topGap: 8 * Flags.topGap * s
+            readonly property string outputIdentity: root.outputIdentityForScreen(modelData)
+            readonly property real s: root.screenPillBaseScale(modelData) * Flags.uiScaleForOutput(outputIdentity)
+            readonly property real topGap: 8 * Flags.topGapForOutput(outputIdentity) * s
             readonly property string surface: root.openMon === modelData.name ? root.openSurface : ""
             readonly property bool surfaceOpen: surface.length > 0
             readonly property bool modal: !ScreenRec.folderPickerOpen
@@ -334,7 +357,13 @@ ShellRoot {
             /** A fullscreen client always owns this output; no surface or peek
              * state may summon the pill above it. */
             readonly property bool monFullscreen: root.hasFullscreenToplevelOnScreen(modelData.name)
+            readonly property bool pillEnabled: root.pillEnabledOnScreen(modelData)
             readonly property bool pillHidden: monFullscreen
+
+            // A global keybind can temporarily open a disabled output, so the
+            // user can reach settings and change the display selection again.
+            visible: !monFullscreen && !ScreenRec.folderPickerOpen
+                && (pillEnabled || surfaceOpen)
 
             onMonFullscreenChanged: if (monFullscreen) {
                 // Collapse without completing onboarding: a fullscreen
@@ -357,7 +386,6 @@ ShellRoot {
             }
 
             screen: modelData
-            visible: !ScreenRec.folderPickerOpen
             color: "transparent"
             exclusionMode: ExclusionMode.Ignore
             WlrLayershell.layer: WlrLayer.Overlay
@@ -545,6 +573,7 @@ ShellRoot {
                     anchors.horizontalCenter: parent.horizontalCenter
                     s: overlay.s
                     screenName: overlay.modelData.name
+                    outputIdentity: overlay.outputIdentity
                     barWindow: overlay
                     surface: overlay.surface
                     forcePinned: root.peekMon === overlay.modelData.name

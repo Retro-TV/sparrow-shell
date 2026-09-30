@@ -9,15 +9,13 @@ layout {
         off
     }
 
-    // One Niri gap supplies both the inner seam and the three unobstructed
-    // outer edges. 8 logical px is a clean 10 physical-pixel baseline
-    // at the reference output's 1.25 scale. The negative top strut cancels
-    // Niri's top gap so the pill's exclusive zone supplies that same gap.
+    // One Niri gap supplies inner and outer window spacing on every display.
+    // Sparrow's Pill reserves its own body space without replacing this gap.
     gaps 8
     struts {
         left 0
         right 0
-        top -8
+        top 0
         bottom 0
     }
 

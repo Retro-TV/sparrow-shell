@@ -12,6 +12,18 @@ function normalizeTransform(value) {
     return String(value || "normal").toLowerCase().replace(/^flipped(90|180|270)$/, "flipped-$1");
 }
 
+/* Normalize shell UI by the shorter logical screen side; portrait rotation
+ * must not enlarge the pill solely because the screen's height is its long side. */
+function pillBaseScale(width, height, reference = 1080) {
+    var w = Number(width);
+    var h = Number(height);
+    var base = Number(reference);
+    if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0
+            || !Number.isFinite(base) || base <= 0)
+        return 1;
+    return Math.min(w, h) / base;
+}
+
 function parseNiri(jsonText) {
     var raw;
     try {
@@ -431,6 +443,7 @@ if (typeof module !== "undefined" && module.exports) {
     module.exports = {
         VALID_TRANSFORMS,
         normalizeTransform,
+        pillBaseScale,
         parseNiri,
         parseMonitorNumbers,
         monitorNumberAssignments,

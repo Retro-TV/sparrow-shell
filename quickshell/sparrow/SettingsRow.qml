@@ -29,7 +29,8 @@ Item {
 
     HoverHandler {
         id: srowHover
-        onHoveredChanged: if (srow.surface) srow.surface.reportRowHover(srow, hovered)
+        onHoveredChanged: if (srow.surface)
+            srow.surface.reportRowHover(srow, hovered)
     }
 
     Rectangle {

@@ -121,6 +121,150 @@ Common checks include:
 
 Do not claim a live hardware/UI test was performed when it was not.
 
+# Development workflow
+
+Sparrow Shell uses a protected stable-development workflow.
+
+## Branch roles
+
+- `main` is the stable, tested release branch.
+- `dev` is the integration branch for ongoing development.
+- New independent features should normally use `feature/<short-name>`.
+- Bug fixes should normally use `fix/<short-name>`.
+
+Never develop directly on `main`.
+
+## Starting work
+
+When the user asks to implement a new feature or fix:
+
+1. Read this file and relevant architecture/source-of-truth documentation.
+2. Inspect the existing implementation before editing.
+3. Determine whether the request is a feature, fix, polish change, documentation change, or research task.
+4. Ask the user questions only when an unresolved decision materially affects behavior, architecture, safety, or UX. Otherwise make the smallest reasonable choice consistent with Sparrow.
+5. Ensure the repository is clean enough to safely start work.
+6. Update local remote information before branching.
+7. Base normal development work on the latest `dev`.
+8. Create an appropriately named `feature/*` or `fix/*` branch when the work is an independent change.
+9. Never discard unrelated user work.
+
+The user should not need to know or provide Git commands. Handle repository and branch operations yourself when tools permit.
+
+## Research-only requests
+
+If the user asks to research, inspect, audit, investigate, or propose something:
+
+- Do not modify files unless explicitly asked.
+- Inspect the repository and relevant documentation.
+- Research upstream/current external behavior when appropriate.
+- Explain findings and recommend the smallest appropriate implementation.
+- Do not create unnecessary branches for purely read-only investigation.
+
+## Implementation
+
+When implementing:
+
+- Keep changes focused on the requested feature or fix.
+- Preserve Sparrow's existing architecture and visual language unless the task explicitly changes them.
+- Avoid unrelated cleanup and refactoring.
+- Update tests and documentation when behavior or architecture changes.
+- Run the relevant automated validation before presenting the work for testing.
+- Do not hide failed tests, warnings, incomplete validation, or assumptions.
+
+## Manual testing
+
+When automated work is complete:
+
+1. Clearly explain what changed.
+2. Clearly state what was and was not automatically verified.
+3. Give the user a short, concrete manual test procedure when live verification is needed.
+4. Prefer giving the user the behavior to test rather than requiring them to understand implementation details.
+5. Do not consider visually sensitive or hardware-dependent work fully verified until the required live test has been performed.
+
+If the user reports a problem, continue fixing it on the same feature/fix branch unless a separate change is clearly more appropriate.
+
+## Approval and integration
+
+Do not treat implementation completion as permission to publish stable code.
+
+When the user says the change works, is approved, or asks to finish/publish it:
+
+1. Re-run appropriate final validation.
+2. Review the final diff for unrelated changes, secrets, generated junk, temporary files, and debug code.
+3. Commit the approved work with a concise descriptive commit message.
+4. Push the feature/fix branch.
+5. Integrate it into `dev` only after user approval.
+6. Push the updated `dev`.
+7. Report exactly what was committed and where.
+
+Do not merge into `main` merely because a feature is complete.
+
+## Stable promotion
+
+`main` represents the stable Sparrow Shell state.
+
+Only promote `dev` to `main` when the user explicitly asks to release, publish to main, merge to main, promote dev to stable, or gives an equivalently clear instruction.
+
+Before modifying `main`:
+
+1. Confirm the requested promotion is intentional if the user's wording is ambiguous.
+2. Ensure relevant work is committed.
+3. Ensure `dev` is synchronized with its remote.
+4. Run the appropriate full validation suite.
+5. Check that the working tree is clean.
+6. Review the commits/diff that will enter `main`.
+7. Prefer a fast-forward promotion when branch history permits.
+8. Push `main` only after successful validation.
+9. Never force-push `main`.
+10. Report the resulting commit hash and validation results.
+
+A request such as "push this", "save this", or "commit this" does NOT by itself mean promote to `main`.
+
+## Releases
+
+Do not create release tags automatically.
+
+When the user explicitly asks to create a release/tag:
+
+- verify `main` is at the intended stable commit;
+- use an appropriate version tag;
+- never move or overwrite an existing release tag without explicit instruction;
+- report exactly which commit was tagged.
+
+## Safety
+
+Never:
+
+- force-push `main` or `dev`;
+- use destructive reset/clean operations to solve ordinary repository problems;
+- silently discard local changes;
+- silently overwrite user-owned configuration;
+- expose credentials or secrets;
+- merge untested hardware-dependent behavior while claiming it was tested;
+- modify `main` without explicit user intent.
+
+If repository state is unexpected, stop and explain the problem instead of trying to repair it destructively.
+
+## Natural-language operation
+
+The user is not expected to manage Git manually.
+
+Interpret ordinary instructions according to this workflow.
+
+Examples:
+
+- "I want to add X" → inspect/research it and discuss important decisions before implementation.
+- "Let's do it" → implement it on the appropriate development branch.
+- "Fix this" → investigate and implement the focused fix.
+- "How do I test it?" → provide the shortest useful live test procedure.
+- "Works" → treat the implementation as manually approved, but do not assume this means `main`.
+- "Finish it" → validate, commit, push, and integrate into `dev` when appropriate.
+- "Push this" → push the current approved development work; do not infer `main`.
+- "Put it on main" → perform the stable-promotion procedure.
+- "Release it" → clarify whether the user means main promotion, a version tag/release, or both if not already clear.
+
+Prefer handling routine technical details autonomously while keeping irreversible or stable-release decisions explicit.
+
 ## Completion reports
 
 Report:

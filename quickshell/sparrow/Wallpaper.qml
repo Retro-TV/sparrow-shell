@@ -20,7 +20,7 @@ import "Singletons"
  * along the thumb's lower edge and drains on early release.
  *
  * Typing any printable character while the strip is open drops it into a
- * DuckDuckGo image search: a search field reveals at the top, the strip swaps
+ * Wallhaven image search: a search field reveals at the top, the strip swaps
  * its model from local files to remote results (debounced fetch through
  * wallpaper-search.sh), and selecting a result downloads it, applies it and
  * returns to the local strip. Escape, an emptied query or a finished pick all
@@ -38,7 +38,8 @@ PillSurface {
      */
     property bool searching: false
     property string query: ""
-    property var ddgResults: []
+    property var searchResults: []
+    property string searchError: ""
 
     /** Inline folder edit in the header: true while the path field holds focus. */
     property bool editingDir: false
@@ -46,8 +47,8 @@ PillSurface {
     /**
      * Kind filter shared by both views: "all", "still" or "motion". Locally it
      * splits the snapshot by extension (gif and video files count as motion);
-     * in search mode it steers the DDG request (gif type filter) so the chips
-     * act as one control everywhere.
+     * in search mode it selects the online provider so the chips act as one
+     * control everywhere.
      */
     property string kindFilter: "all"
 
@@ -115,7 +116,7 @@ PillSurface {
      * a populated query in search mode shows remote results, anything else the
      * local snapshot.
      */
-    readonly property var items: (searching && query.length > 0) ? ddgResults : localItems
+    readonly property var items: (searching && query.length > 0) ? searchResults : localItems
     readonly property int itemCount: items.length
 
     /**
@@ -235,7 +236,8 @@ PillSurface {
     function exitSearch() {
         searching = false;
         query = "";
-        ddgResults = [];
+        searchResults = [];
+        searchError = "";
         searchField.text = "";
         centerOnCurrent();
     }
@@ -257,7 +259,8 @@ PillSurface {
         searching = false;
         editingDir = false;
         query = "";
-        ddgResults = [];
+        searchResults = [];
+        searchError = "";
         searchField.text = "";
         Walls.refresh();
         centerOnCurrent();
@@ -376,9 +379,15 @@ PillSurface {
         interval: 350
         onTriggered: {
             if (root.query.length === 0) {
-                root.ddgResults = [];
+                root.searchResults = [];
+                root.searchError = "";
                 return;
             }
+            searchProc.running = false;
+            root.searchResults = [];
+            root.searchError = "";
+            searchProc.requestQuery = root.query;
+            searchProc.requestKind = root.kindFilter;
             searchProc.command = ["bash", root.searchScript, "search", root.query, root.kindFilter];
             searchProc.running = true;
         }
@@ -386,17 +395,27 @@ PillSurface {
 
     Process {
         id: searchProc
+        property string requestQuery: ""
+        property string requestKind: ""
         stdout: StdioCollector {
             onStreamFinished: {
+                if (searchProc.requestQuery !== root.query || searchProc.requestKind !== root.kindFilter)
+                    return;
                 var out = [];
                 try {
                     var parsed = JSON.parse(this.text);
-                    if (Array.isArray(parsed))
-                        out = parsed;
+                    if (!parsed || parsed.query !== root.query || parsed.kind !== root.kindFilter)
+                        return;
+                    if (parsed && parsed.ok === true && Array.isArray(parsed.results))
+                        out = parsed.results;
+                    else if (parsed && parsed.ok === false)
+                        root.searchError = parsed.error || "Wallpaper search unavailable";
+                    else
+                        root.searchError = "Wallpaper search unavailable";
                 } catch (e) {
-                    out = [];
+                    root.searchError = "Wallpaper search unavailable";
                 }
-                root.ddgResults = out;
+                root.searchResults = out;
                 root.focusIndex = 0;
                 root.pos = 0;
             }
@@ -979,6 +998,8 @@ PillSurface {
         anchors.centerIn: parent
         visible: root.itemCount === 0 && !searchProc.running
         text: {
+            if (root.searching && root.query.length && root.searchError.length)
+                return "search unavailable";
             if (root.searching && root.query.length)
                 return "no results";
             if (root.kindFilter === "motion")

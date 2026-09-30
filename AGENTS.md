@@ -265,6 +265,64 @@ Examples:
 
 Prefer handling routine technical details autonomously while keeping irreversible or stable-release decisions explicit.
 
+## Canonical local development checkout
+
+On Tadej's development machines, the normal local Sparrow repository is:
+
+`~/sparrow-shell`
+
+When that checkout is available to the working environment, it is the canonical
+local development checkout.
+
+For implementation work:
+
+1. Prefer the existing `~/sparrow-shell` checkout.
+2. Inspect its Git state before making changes.
+3. Start independent work from the latest clean `dev`.
+4. Create and switch to an appropriate `feature/*` or `fix/*` branch in that
+   checkout.
+5. Make source changes there.
+6. Run repository validation there.
+7. When live testing is required, deploy from that same checkout using the
+   repository's supported deployment path.
+8. Leave the feature/fix branch available for continued iteration until the
+   work is approved and integrated.
+
+Do not create a second clone, `/tmp` checkout, project mirror, or disposable
+repository merely for isolation when the canonical local checkout is available.
+
+If the execution environment cannot access or write to `~/sparrow-shell`:
+
+- do not silently substitute another checkout and continue as though it were
+  the user's development repository;
+- explain the environment limitation;
+- request access to the canonical checkout when possible;
+- only use a temporary clone when necessary for read-only investigation or when
+  the user explicitly agrees to that workflow.
+
+A temporary clone is never the authoritative local Sparrow checkout.
+
+Do not instruct the user to deploy or install from a temporary clone without
+explicitly explaining why that clone exists and receiving approval.
+
+## Local deployment and testing
+
+Repository state and the currently installed Sparrow desktop are separate.
+
+Before giving deployment/restart commands:
+
+1. Verify the supported deployment method from the current repository.
+2. Verify relevant service/unit names rather than assuming them.
+3. Deploy from the branch/check-out containing the change being tested.
+4. Do not commit merely to make a change testable.
+5. Tell the user exactly what behavior needs manual verification.
+
+When possible, perform non-destructive automated validation before asking the
+user to test manually.
+
+Hardware-dependent and visual behavior must not be reported as verified until
+it has actually been tested in the appropriate live environment.
+
 ## Completion reports
 
 Report:

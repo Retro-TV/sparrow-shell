@@ -323,6 +323,22 @@ user to test manually.
 Hardware-dependent and visual behavior must not be reported as verified until
 it has actually been tested in the appropriate live environment.
 
+## Cross-machine synchronization
+
+Before starting implementation on any machine:
+
+1. Fetch the current remote repository state.
+2. Confirm the local development base is synchronized with `origin/dev`.
+3. Do not create a feature/fix branch from a stale local `dev`.
+4. If synchronization can be performed safely as a fast-forward on a clean
+   checkout, handle it automatically.
+5. If local changes, divergence, or another condition makes synchronization
+   unsafe, stop and explain the situation instead of overwriting or discarding
+   work.
+6. Before live testing, consider whether the installed Sparrow runtime matches
+   the expected baseline. If stale installed state could affect the test,
+   update/deploy the current baseline first.
+
 ## Completion reports
 
 Report:

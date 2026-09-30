@@ -464,7 +464,7 @@ PillSurface {
         }
     }
 
-    SearchField {
+    SparrowSearchField {
         id: searchField
         anchors.top: parent.top
         anchors.topMargin: 6 * root.s
@@ -765,7 +765,6 @@ PillSurface {
         height: 22 * root.s
         radius: height / 2
         color: Theme.frameBg
-        visible: root.searching
         border.width: 1
         border.color: Theme.hairSoft
 

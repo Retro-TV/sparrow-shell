@@ -193,7 +193,7 @@ PillSurface {
         }
     }
 
-    SearchField {
+    SparrowSearchField {
         id: search
         anchors.top: parent.top
         anchors.left: parent.left

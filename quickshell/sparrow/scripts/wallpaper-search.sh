@@ -5,6 +5,7 @@ cmd="${1:-}"; shift || true
 
 search() {
     local query="${1:-}" kind="${2:-all}"
+    local categories="${3:-110}" purity="${4:-110}" sorting="${5:-toplist}" topRange="${6:-1M}"
     [[ -n "$query" ]] || { echo '{"ok":true,"results":[]}'; return; }
     if [[ "$kind" == motion ]]; then
         UA="$UA" python3 - "$query" <<'PY'
@@ -33,11 +34,20 @@ except Exception:
 PY
         return
     fi
-    python3 - "$query" "$kind" <<'PY'
-import fcntl, json, os, pathlib, sys, time, urllib.error, urllib.parse, urllib.request
+    python3 - "$query" "$kind" "$(dirname "$0")/wallhaven-key.py" "$categories" "$purity" "$sorting" "$topRange" <<'PY'
+import fcntl, importlib.util, json, os, pathlib, sys, time, urllib.error, urllib.parse, urllib.request
 
 query = sys.argv[1]
 kind = sys.argv[2]
+key_path = sys.argv[3]
+categories = sys.argv[4]
+purity = sys.argv[5]
+sorting = sys.argv[6]
+top_range = sys.argv[7]
+sys.dont_write_bytecode = True
+key_spec = importlib.util.spec_from_file_location('wallhaven_key', key_path)
+key_module = importlib.util.module_from_spec(key_spec)
+key_spec.loader.exec_module(key_module)
 cache = pathlib.Path(os.environ.get('XDG_CACHE_HOME', pathlib.Path.home() / '.cache')) / 'sparrow-shell'
 cache.mkdir(parents=True, exist_ok=True)
 lock_path = cache / 'wallhaven-search-rate.lock'
@@ -45,14 +55,33 @@ lock_path = cache / 'wallhaven-search-rate.lock'
 def result(ok, results=(), error=''):
     print(json.dumps({'ok': ok, 'query': query, 'kind': kind, 'results': list(results), **({'error': error} if error else {})}))
 
+class SearchOptionError(Exception):
+    pass
+
 try:
-    params = urllib.parse.urlencode({
+    if not categories or len(categories) != 3 or set(categories) - {'0', '1'} or '1' not in categories:
+        raise SearchOptionError('Select at least one category')
+    if not purity or len(purity) != 3 or set(purity) - {'0', '1'} or '1' not in purity:
+        raise SearchOptionError('Select at least one content rating')
+    if sorting not in ('relevance', 'views', 'toplist', 'date_added'):
+        raise SearchOptionError('Invalid Wallhaven sort order')
+    if top_range not in ('1w', '1M', '1y'):
+        raise SearchOptionError('Invalid Wallhaven toplist period')
+    api_key = key_module.read_key()
+    if purity[2] == '1' and not api_key:
+        raise PermissionError('NSFW search requires a Wallhaven API key')
+    query_params = {
         'q': query,
-        'categories': '111',
-        'purity': '100',
-        'sorting': 'relevance',
+        'categories': categories,
+        'purity': purity,
+        'sorting': sorting,
         'page': '1',
-    })
+    }
+    if sorting == 'toplist':
+        query_params['topRange'] = top_range
+    if api_key:
+        query_params['apikey'] = api_key
+    params = urllib.parse.urlencode(query_params)
     request = urllib.request.Request(
         'https://wallhaven.cc/api/v1/search?' + params,
         headers={'User-Agent': 'SparrowShell/1.0 (wallpaper search)'},
@@ -83,7 +112,8 @@ try:
         thumbs = entry.get('thumbs') or {}
         image = entry.get('path')
         page = entry.get('url')
-        if entry.get('purity') != 'sfw' or not image or not page:
+        allowed_purity = tuple(name for bit, name in zip(purity, ('sfw', 'sketchy', 'nsfw')) if bit == '1')
+        if entry.get('purity') not in allowed_purity or not image or not page:
             continue
         items.append({
             'image': image,
@@ -96,6 +126,8 @@ try:
 except urllib.error.HTTPError as exc:
     message = 'Wallhaven rate limit reached' if exc.code == 429 else f'Wallhaven returned HTTP {exc.code}'
     result(False, error=message)
+except (PermissionError, SearchOptionError) as exc:
+    result(False, error=str(exc))
 except (OSError, TimeoutError, ValueError, json.JSONDecodeError):
     result(False, error='Wallhaven search unavailable')
 PY
@@ -126,7 +158,7 @@ download() {
 }
 
 case "$cmd" in
-    search) search "${1:-}" "${2:-all}" ;;
+    search) search "$@" ;;
     download) download "${1:-}" ;;
     *) echo '[]'; exit 2 ;;
 esac

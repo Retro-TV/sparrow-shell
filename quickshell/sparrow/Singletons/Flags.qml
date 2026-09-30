@@ -63,6 +63,14 @@ Singleton {
     property alias appearanceMode: adapter.appearanceMode
     property alias lockForegroundMode: adapter.lockForegroundMode
     property alias wallpaperDir: adapter.wallpaperDir
+    property alias wallhavenGeneral: adapter.wallhavenGeneral
+    property alias wallhavenAnime: adapter.wallhavenAnime
+    property alias wallhavenPeople: adapter.wallhavenPeople
+    property alias wallhavenSfw: adapter.wallhavenSfw
+    property alias wallhavenSketchy: adapter.wallhavenSketchy
+    property alias wallhavenNsfw: adapter.wallhavenNsfw
+    property alias wallhavenSorting: adapter.wallhavenSorting
+    property alias wallhavenTopRange: adapter.wallhavenTopRange
     property alias randomScope: adapter.randomScope
     property alias uiScale: adapter.uiScale
     property alias pillByOutput: adapter.pillByOutput
@@ -128,6 +136,15 @@ Singleton {
             property string lockForegroundMode: "auto"
             /** Explicit wallpaper folder override. Empty means autodetect: wallpaper.sh's last resolved directory in sparrow-shell/wallpaper-dir, then $HOME/Pictures/wallpapers. Lives in user state, independently of the portable shell configuration. */
             property string wallpaperDir: ""
+            /** Wallhaven search filters are local user preferences, separate from the secret API key. */
+            property bool wallhavenGeneral: true
+            property bool wallhavenAnime: true
+            property bool wallhavenPeople: false
+            property bool wallhavenSfw: true
+            property bool wallhavenSketchy: true
+            property bool wallhavenNsfw: true
+            property string wallhavenSorting: "toplist"
+            property string wallhavenTopRange: "1M"
             /** Super+B random target: "all" repaints every monitor, "cursor" only the one under the pointer. */
             property string randomScope: "all"
             property real uiScale: 1.0

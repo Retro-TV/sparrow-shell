@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Effects
 import QtMultimedia
 import Quickshell
@@ -191,6 +192,22 @@ PillSurface {
         if (itemCount === 0)
             return;
         focusIndex = Math.max(0, Math.min(itemCount - 1, focusIndex + delta));
+    }
+
+    function categoryMask() {
+        return (Flags.wallhavenGeneral ? "1" : "0")
+            + (Flags.wallhavenAnime ? "1" : "0")
+            + (Flags.wallhavenPeople ? "1" : "0");
+    }
+
+    function purityMask() {
+        return (Flags.wallhavenSfw ? "1" : "0")
+            + (Flags.wallhavenSketchy ? "1" : "0")
+            + (Flags.wallhavenNsfw ? "1" : "0");
+    }
+
+    function searchOptionsKey() {
+        return [categoryMask(), purityMask(), Flags.wallhavenSorting, Flags.wallhavenTopRange].join("|");
     }
 
     FrameAnimation {
@@ -388,7 +405,9 @@ PillSurface {
             root.searchError = "";
             searchProc.requestQuery = root.query;
             searchProc.requestKind = root.kindFilter;
-            searchProc.command = ["bash", root.searchScript, "search", root.query, root.kindFilter];
+            searchProc.requestOptions = root.searchOptionsKey();
+            searchProc.command = ["bash", root.searchScript, "search", root.query, root.kindFilter,
+                root.categoryMask(), root.purityMask(), Flags.wallhavenSorting, Flags.wallhavenTopRange];
             searchProc.running = true;
         }
     }
@@ -397,9 +416,11 @@ PillSurface {
         id: searchProc
         property string requestQuery: ""
         property string requestKind: ""
+        property string requestOptions: ""
         stdout: StdioCollector {
             onStreamFinished: {
-                if (searchProc.requestQuery !== root.query || searchProc.requestKind !== root.kindFilter)
+                if (searchProc.requestQuery !== root.query || searchProc.requestKind !== root.kindFilter
+                        || searchProc.requestOptions !== root.searchOptionsKey())
                     return;
                 var out = [];
                 try {
@@ -472,6 +493,235 @@ PillSurface {
         }
     }
 
+    component SearchToggle: Item {
+        id: toggle
+        property string label: ""
+        property bool checked: false
+        signal clicked()
+
+        width: toggleLabel.implicitWidth + 20 * root.s
+        height: 24 * root.s
+
+        Rectangle {
+            anchors.fill: parent
+            radius: 7 * root.s
+            color: toggle.checked ? Qt.alpha(Theme.onGlow, 0.16) : Theme.frameBg
+            border.width: 1
+            border.color: toggle.checked ? Qt.alpha(Theme.onGlow, 0.5) : Theme.hairSoft
+            Behavior on color { ColorAnimation { duration: Motion.fast } }
+            Behavior on border.color { ColorAnimation { duration: Motion.fast } }
+        }
+
+        Text {
+            id: toggleLabel
+            anchors.centerIn: parent
+            text: toggle.label
+            color: toggle.checked ? Theme.cream : Theme.secondaryText
+            font.family: Theme.font
+            font.pixelSize: 9.5 * root.s
+            font.weight: toggle.checked ? Font.DemiBold : Font.Medium
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: toggle.clicked()
+        }
+    }
+
+    component SearchSelect: ComboBox {
+        id: select
+        property string value: ""
+        property var options: []
+        property real choiceWidth: 138 * root.s
+        signal chosen(string value)
+
+        width: choiceWidth
+        height: 25 * root.s
+        model: options
+        textRole: "label"
+        valueRole: "value"
+        currentValue: value
+        onActivated: chosen(currentValue)
+
+        contentItem: Text {
+            leftPadding: 9 * root.s
+            rightPadding: 26 * root.s
+            text: select.displayText
+            color: Theme.cream
+            font.family: Theme.font
+            font.pixelSize: 9.5 * root.s
+            verticalAlignment: Text.AlignVCenter
+            elide: Text.ElideRight
+        }
+
+        indicator: Text {
+            x: select.width - width - 8 * root.s
+            y: (select.height - height) / 2
+            text: "⌄"
+            color: Theme.secondaryText
+            font.family: Theme.font
+            font.pixelSize: 12 * root.s
+        }
+
+        background: Rectangle {
+            radius: 7 * root.s
+            color: Theme.frameBg
+            border.width: 1
+            border.color: select.popup.visible ? Qt.alpha(Theme.onGlow, 0.5) : Theme.hairSoft
+        }
+
+        delegate: ItemDelegate {
+            id: choiceDelegate
+            required property int index
+            required property var modelData
+            width: select.width
+            height: 28 * root.s
+            highlighted: select.highlightedIndex === choiceDelegate.index
+            contentItem: Text {
+                text: choiceDelegate.modelData.label
+                color: choiceDelegate.highlighted ? Theme.cream : Theme.secondaryText
+                font.family: Theme.font
+                font.pixelSize: 9.5 * root.s
+                verticalAlignment: Text.AlignVCenter
+            }
+            background: Rectangle {
+                radius: 5 * root.s
+                color: choiceDelegate.highlighted ? Qt.alpha(Theme.onGlow, 0.18) : "transparent"
+            }
+        }
+
+        popup: Popup {
+            y: select.height + 3 * root.s
+            width: select.width
+            padding: 4 * root.s
+            implicitHeight: Math.min(contentItem.implicitHeight + padding * 2, 150 * root.s)
+            background: Rectangle {
+                radius: 9 * root.s
+                color: Theme.cardTop
+                border.width: 1
+                border.color: Theme.hairSoft
+            }
+            contentItem: ListView {
+                clip: true
+                implicitHeight: contentHeight
+                model: select.popup.visible ? select.delegateModel : null
+                currentIndex: select.highlightedIndex
+                ScrollIndicator.vertical: ScrollIndicator { }
+            }
+        }
+    }
+
+    Text {
+        id: categoryCaption
+        anchors.left: parent.left
+        anchors.leftMargin: 20 * root.s
+        anchors.top: parent.top
+        anchors.topMargin: 38 * root.s
+        text: "CATEGORY"
+        color: Theme.faint
+        font.family: Theme.font
+        font.pixelSize: 8 * root.s
+        font.weight: Font.DemiBold
+        font.letterSpacing: 0.8 * root.s
+        visible: root.searching
+    }
+
+    Row {
+        id: categoryToggles
+        anchors.left: categoryCaption.right
+        anchors.leftMargin: 9 * root.s
+        anchors.verticalCenter: categoryCaption.verticalCenter
+        spacing: 5 * root.s
+        visible: root.searching
+
+        SearchToggle { label: "General"; checked: Flags.wallhavenGeneral; onClicked: { Flags.wallhavenGeneral = !Flags.wallhavenGeneral; debounce.restart(); } }
+        SearchToggle { label: "Anime"; checked: Flags.wallhavenAnime; onClicked: { Flags.wallhavenAnime = !Flags.wallhavenAnime; debounce.restart(); } }
+        SearchToggle { label: "People"; checked: Flags.wallhavenPeople; onClicked: { Flags.wallhavenPeople = !Flags.wallhavenPeople; debounce.restart(); } }
+    }
+
+    Text {
+        id: purityCaption
+        anchors.left: categoryToggles.right
+        anchors.leftMargin: 22 * root.s
+        anchors.verticalCenter: categoryCaption.verticalCenter
+        text: "CONTENT"
+        color: Theme.faint
+        font.family: Theme.font
+        font.pixelSize: 8 * root.s
+        font.weight: Font.DemiBold
+        font.letterSpacing: 0.8 * root.s
+        visible: root.searching
+    }
+
+    Row {
+        id: purityToggles
+        anchors.left: purityCaption.right
+        anchors.leftMargin: 9 * root.s
+        anchors.verticalCenter: purityCaption.verticalCenter
+        spacing: 5 * root.s
+        visible: root.searching
+
+        SearchToggle { label: "SFW"; checked: Flags.wallhavenSfw; onClicked: { Flags.wallhavenSfw = !Flags.wallhavenSfw; debounce.restart(); } }
+        SearchToggle { label: "Sketchy"; checked: Flags.wallhavenSketchy; onClicked: { Flags.wallhavenSketchy = !Flags.wallhavenSketchy; debounce.restart(); } }
+        SearchToggle { label: "NSFW"; checked: Flags.wallhavenNsfw; onClicked: { Flags.wallhavenNsfw = !Flags.wallhavenNsfw; debounce.restart(); } }
+    }
+
+    Row {
+        id: sortControls
+        anchors.left: parent.left
+        anchors.leftMargin: 20 * root.s
+        anchors.top: parent.top
+        anchors.topMargin: 68 * root.s
+        spacing: 7 * root.s
+        visible: root.searching
+
+        Text {
+            anchors.verticalCenter: parent.verticalCenter
+            text: "SORT"
+            color: Theme.faint
+            font.family: Theme.font
+            font.pixelSize: 8 * root.s
+            font.weight: Font.DemiBold
+            font.letterSpacing: 0.8 * root.s
+        }
+
+        SearchSelect {
+            value: Flags.wallhavenSorting
+            choiceWidth: 142 * root.s
+            options: [
+                { label: "Relevance", value: "relevance" },
+                { label: "Toplist", value: "toplist" },
+                { label: "Most viewed", value: "views" },
+                { label: "Newest", value: "date_added" }
+            ]
+            onChosen: (newValue) => { Flags.wallhavenSorting = newValue; debounce.restart(); }
+        }
+
+        Text {
+            visible: Flags.wallhavenSorting === "toplist"
+            anchors.verticalCenter: parent.verticalCenter
+            text: "PERIOD"
+            color: Theme.faint
+            font.family: Theme.font
+            font.pixelSize: 8 * root.s
+            font.weight: Font.DemiBold
+            font.letterSpacing: 0.8 * root.s
+        }
+
+        SearchSelect {
+            visible: Flags.wallhavenSorting === "toplist"
+            value: Flags.wallhavenTopRange
+            choiceWidth: 120 * root.s
+            options: [
+                { label: "Last week", value: "1w" },
+                { label: "Last month", value: "1M" },
+                { label: "Last year", value: "1y" }
+            ]
+            onChosen: (newValue) => { Flags.wallhavenTopRange = newValue; debounce.restart(); }
+        }
+    }
+
     component FilterChip: Item {
         id: fchip
 
@@ -515,6 +765,7 @@ PillSurface {
         height: 22 * root.s
         radius: height / 2
         color: Theme.frameBg
+        visible: root.searching
         border.width: 1
         border.color: Theme.hairSoft
 
@@ -557,8 +808,8 @@ PillSurface {
         anchors.topMargin: 6 * root.s
         anchors.left: parent.left
         anchors.leftMargin: 20 * root.s
-        anchors.right: filterRow.left
-        anchors.rightMargin: 12 * root.s
+        anchors.right: filterRow.visible ? filterRow.left : parent.right
+        anchors.rightMargin: filterRow.visible ? 12 * root.s : 20 * root.s
         height: 30 * root.s
         visible: !root.searching
         z: 30
@@ -689,7 +940,7 @@ PillSurface {
             width: root.slotLerp(root.slotW, ao) * root.s
             height: root.slotLerp(root.slotH, ao) * root.s
             x: root.width / 2 + root.offsetX(off) - width / 2
-            y: (root.height - height) / 2
+            y: root.searching ? (root.height + 110 * root.s - height) / 2 : (root.height - height) / 2
             z: 10 - ao
             visible: ao <= 5
             opacity: edgeFade * (ao <= 4 ? 1 : Math.max(0, 5 - ao))
@@ -996,10 +1247,13 @@ PillSurface {
 
     Text {
         anchors.centerIn: parent
+        width: root.width - 40 * root.s
+        horizontalAlignment: Text.AlignHCenter
+        elide: Text.ElideRight
         visible: root.itemCount === 0 && !searchProc.running
         text: {
             if (root.searching && root.query.length && root.searchError.length)
-                return "search unavailable";
+                return root.searchError;
             if (root.searching && root.query.length)
                 return "no results";
             if (root.kindFilter === "motion")

@@ -21,6 +21,7 @@ SettingsSurface {
         { item: inputRow, kind: "nav", surface: "input" },
         { item: keybindsRow, kind: "nav", surface: "keybinds" },
         { item: idleRow, kind: "nav", surface: "idlelock" },
+        { item: apiKeysRow, kind: "nav", surface: "api-keys" },
         { item: gettingStartedRow, kind: "nav", surface: "getting-started" }
     ]
 
@@ -136,6 +137,21 @@ SettingsSurface {
                 height: 16 * root.s
                 name: "chevron-right"
                 color: root.focusRowItem === idleRow ? Theme.cream : Theme.iconDim
+                stroke: 2.2
+            }
+        }
+
+        SettingsRow {
+            id: apiKeysRow
+            surface: root
+            icon: "lock"
+            name: "API Keys"
+
+            GlyphIcon {
+                width: 16 * root.s
+                height: 16 * root.s
+                name: "chevron-right"
+                color: root.focusRowItem === apiKeysRow ? Theme.cream : Theme.iconDim
                 stroke: 2.2
             }
         }

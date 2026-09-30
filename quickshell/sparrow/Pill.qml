@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 20825)
-Total output lines: 2128
-
 pragma ComponentBehavior: Bound
 
 import QtQuick
@@ -948,7 +945,86 @@ Item {
             spacing: 7 * pill.s
 
             Item {
-        …825 tokens truncated… Behavior on opacity { NumberAnimation { duration: Motion.standard; easing.type: Motion.easeStandard } }
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: 26 * pill.s
+                height: 26 * pill.s
+
+                GlyphIcon {
+                    id: dragGlyph
+                    anchors.fill: parent
+                    stroke: 2
+                    color: dragOverView.accent
+                    name: (pill.dragStage === "bad" || pill.dragStage === "fail" || pill.dragStage === "partial") ? "close"
+                        : (pill.dragStage === "applying" ? "reboot"
+                        : (pill.dragStage === "done" ? "check" : "download"))
+
+                    RotationAnimation on rotation {
+                        running: pill.dragStage === "applying"
+                        loops: Animation.Infinite
+                        from: 0
+                        to: 360
+                        duration: 900
+                    }
+                    onNameChanged: if (pill.dragStage !== "applying") rotation = 0
+                }
+            }
+
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: pill.dragStage === "bad" ? "Wallpaper images only"
+                    : (pill.dragStage === "fail" ? "Couldn't set wallpaper"
+                    : (pill.dragStage === "partial" ? "Some images failed"
+                    : (pill.dragStage === "applying" ? "Setting wallpaper"
+                    : (pill.dragStage === "done" ? "Wallpaper set" : "Drop to set wallpaper"))))
+                color: Theme.cream
+                font.family: Theme.font
+                font.pixelSize: 13 * pill.s
+                font.weight: Font.Medium
+            }
+
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                text: pill.dragName
+                color: Theme.subtle
+                font.family: Theme.font
+                font.pixelSize: 11 * pill.s
+                elide: Text.ElideMiddle
+                maximumLineCount: 1
+            }
+        }
+    }
+
+    Item {
+        id: rest
+        anchors.fill: parent
+        opacity: (pill.expanded || pill.dragActive || pill.mode === "toast" || pill.mode === "osd" || pill.mode === "quickChoose" || pill.mode === "quickCount") ? 0 : Math.pow(pill.morphCloseness, 1.5)
+        visible: opacity > 0.01
+        Behavior on opacity { NumberAnimation { duration: pill.mode === "rest" ? Motion.fast : Math.round(260 * Motion.mult) } }
+
+        Row {
+            id: restRow
+            anchors.centerIn: parent
+            spacing: 9 * pill.s
+            Item {
+                id: restClock
+                anchors.verticalCenter: parent.verticalCenter
+                width: 15 * pill.s
+                height: 18 * pill.s
+
+                /** Audio leaving the speakers flips the clock glyph over to the live waveform. */
+                readonly property bool barsOn: Flags.musicViz && Cava.active
+
+                GlyphIcon {
+                    anchors.centerIn: parent
+                    opacity: !restClock.barsOn ? 1 : 0
+                    width: 17 * pill.s
+                    height: 17 * pill.s
+                    name: "clock"
+                    color: Theme.cream
+                    stroke: 1.7
+                    Behavior on opacity { NumberAnimation { duration: Motion.standard; easing.type: Motion.easeStandard } }
                 }
 
                 MusicBars {

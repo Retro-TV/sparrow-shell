@@ -103,25 +103,47 @@ ShellRoot {
     // fullscreen transitions directly, including fullscreen requested by an
     // application (for example browser video). Prefer the toplevel's output
     // association so fullscreen on one monitor does not hide other pills.
+    // Resolve fullscreen against the active Niri workspace so a fullscreen
+    // window on an inactive workspace does not hide this output's Pill.
+    // Niri supplies the active window ID; Quickshell supplies the fullscreen
+    // state and output association for that same client.
     function hasFullscreenToplevelOnScreen(screenName) {
+        var workspace = Niri.activeWorkspaceForOutput(screenName);
+        if (!workspace || workspace.active_window_id === undefined
+                || workspace.active_window_id === null)
+            return false;
+
+        var activeWindow = null;
+        var windows = Niri.windows;
+        for (var i = 0; i < windows.length; i++) {
+            if (windows[i].id === workspace.active_window_id
+                    && windows[i].workspace_id === workspace.id) {
+                activeWindow = windows[i];
+                break;
+            }
+        }
+        if (!activeWindow)
+            return false;
+
         var toplevels = ToplevelManager.toplevels.values;
-        for (var i = 0; i < toplevels.length; i++) {
-            var toplevel = toplevels[i];
-            if (!toplevel || !toplevel.fullscreen)
+        for (var j = 0; j < toplevels.length; j++) {
+            var toplevel = toplevels[j];
+            if (!toplevel || !toplevel.fullscreen
+                    || toplevel.appId !== activeWindow.app_id
+                    || toplevel.title !== activeWindow.title)
                 continue;
 
-            var screens = toplevel.screens;
-            for (var j = 0; j < screens.length; j++) {
-                if (screens[j] && screens[j].name === screenName)
+            var screens = toplevel.screens || [];
+            for (var k = 0; k < screens.length; k++) {
+                if (screens[k] && screens[k].name === screenName)
                     return true;
             }
 
-            // Some compositors don't provide output association. In that
-            // case, use the active fullscreen toplevel and Niri's focused
-            // output rather than hiding every monitor.
+            // Some compositors omit output association. In that case, limit
+            // the fallback to the active toplevel on Niri's focused output.
             if (screens.length === 0 && toplevel.activated
-                && ToplevelManager.activeToplevel === toplevel
-                && root.focusedScreenName() === screenName)
+                    && ToplevelManager.activeToplevel === toplevel
+                    && root.focusedScreenName() === screenName)
                 return true;
         }
         return false;

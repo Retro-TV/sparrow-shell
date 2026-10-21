@@ -130,8 +130,7 @@ ShellRoot {
         for (var j = 0; j < toplevels.length; j++) {
             var toplevel = toplevels[j];
             if (!toplevel || !toplevel.fullscreen
-                    || toplevel.appId !== activeWindow.app_id
-                    || toplevel.title !== activeWindow.title)
+                    || toplevel.appId !== activeWindow.app_id)
                 continue;
 
             var screens = toplevel.screens || [];
@@ -145,6 +144,25 @@ ShellRoot {
             if (screens.length === 0 && toplevel.activated
                     && ToplevelManager.activeToplevel === toplevel
                     && root.focusedScreenName() === screenName)
+                return true;
+        }
+
+        // Some clients (notably games) can expose a title through the
+        // foreign-toplevel protocol that differs from Niri's title. If the
+        // compositor's active client itself reports fullscreen on this output,
+        // that is sufficient to suppress the edge reveal for this workspace.
+        var activeToplevel = ToplevelManager.activeToplevel;
+        if (activeToplevel && activeToplevel.fullscreen && activeToplevel.activated) {
+            var activeScreens = activeToplevel.screens || [];
+            for (var screenIndex = 0; screenIndex < activeScreens.length; screenIndex++) {
+                if (activeScreens[screenIndex]
+                        && activeScreens[screenIndex].name === screenName)
+                    return true;
+            }
+
+            if (activeScreens.length === 0
+                    && root.focusedScreenName() === screenName
+                    && Niri.focusedWindowId === activeWindow.id)
                 return true;
         }
         return false;
@@ -390,13 +408,21 @@ ShellRoot {
             readonly property bool hoverMode: Flags.pillRevealMode === "hover" || root.noDisplaysSelected
             readonly property bool pillHidden: monFullscreen
             property bool edgeHovered: false
+            property bool pillPointerHovered: false
             property bool hoverRevealed: false
+
+            function syncPillHover() {
+                pill.hovered = hoverMode
+                    ? edgeHovered || pillPointerHovered
+                    : pillPointerHovered;
+            }
 
             function updateHoverReveal() {
                 if (!hoverMode || monFullscreen) {
                     hoverRevealed = false;
                     hideRevealTimer.stop();
-                } else if (edgeHovered || pill.hovered || surfaceOpen || pill.held || pill.quickChoosing) {
+                } else if (edgeHovered || pill.hovered || pill.hoverLatch || surfaceOpen
+                        || pill.held || pill.quickChoosing) {
                     hideRevealTimer.stop();
                     hoverRevealed = true;
                 } else {
@@ -412,13 +438,19 @@ ShellRoot {
             Timer {
                 id: hideRevealTimer
                 interval: 180
-                onTriggered: if (!overlay.edgeHovered && !pill.hovered && !overlay.surfaceOpen
-                        && !pill.held && !pill.quickChoosing)
+                onTriggered: if (!overlay.edgeHovered && !pill.hovered && !pill.hoverLatch
+                        && !overlay.surfaceOpen && !pill.held && !pill.quickChoosing)
                     overlay.hoverRevealed = false
             }
 
-            onHoverModeChanged: updateHoverReveal()
-            onEdgeHoveredChanged: updateHoverReveal()
+            onHoverModeChanged: {
+                syncPillHover();
+                updateHoverReveal();
+            }
+            onEdgeHoveredChanged: {
+                syncPillHover();
+                updateHoverReveal();
+            }
 
             onMonFullscreenChanged: if (monFullscreen) {
                 updateHoverReveal();
@@ -435,6 +467,7 @@ ShellRoot {
                     ScreenRec.quickMon = "";
                 }
                 pill.pinned = false;
+                overlay.pillPointerHovered = false;
                 pill.hovered = false;
                 pill.hoverLatch = false;
             } else {
@@ -518,11 +551,14 @@ ShellRoot {
                 focus: overlay.surfaceOpen || pill.quickChoosing
 
                 HoverHandler {
+                    enabled: !overlay.hoverMode
                     onHoveredChanged: {
-                        pill.hovered = hovered;
+                        overlay.pillPointerHovered = hovered;
+                        overlay.syncPillHover();
                         overlay.updateHoverReveal();
                     }
                 }
+
                 Keys.onEscapePressed: {
                     if (pill.quickChoosing) {
                         ScreenRec.quickChoosing = false;
@@ -660,6 +696,17 @@ ShellRoot {
                     surface: overlay.surface
                     forcePinned: root.peekMon === overlay.modelData.name
 
+                    // Hover mode also has a top-edge hit target, so the
+                    // display-wide focus-scope handler must not hold reveal.
+                    HoverHandler {
+                        enabled: overlay.hoverMode
+                        onHoveredChanged: {
+                            overlay.pillPointerHovered = hovered;
+                            overlay.syncPillHover();
+                            overlay.updateHoverReveal();
+                        }
+                    }
+
                     opacity: overlay.pillHidden || (overlay.hoverMode && !overlay.hoverRevealed)
                         ? 0 : pill.swipeFade
                     Behavior on opacity {
@@ -706,6 +753,7 @@ ShellRoot {
                     if (pill.quickChoosing)
                         focusScope.forceActiveFocus();
                 }
+                function onHoverLatchChanged() { overlay.updateHoverReveal(); }
                 function onHeldChanged() { overlay.updateHoverReveal(); }
                 function onPinnedChanged() { overlay.updateHoverReveal(); }
                 function onWallpaperSearchingChanged() {

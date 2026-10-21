@@ -728,10 +728,11 @@ Item {
     /**
      * Extra input width past the pill's right edge while the media bud sticks
      * out there, so the window mask covers the bud's outer half. pill.hovered is
-     * fed by a window-level HoverHandler in shell.qml: pointer events only exist
-     * inside the input mask, so "window hovered" means "pointer over the pill (or
-     * bud)". That sidesteps the per-item hover flicker the child MouseAreas and
-     * the centred width morph would otherwise cause.
+     * fed by HoverHandlers in shell.qml. Always-visible mode uses a window-level
+     * handler because its input mask is limited to the pill (and bud); hover mode
+     * targets the pill itself because the same mask also contains the reveal edge.
+     * This sidesteps per-item hover flicker from child MouseAreas and the centred
+     * width morph.
      */
     readonly property real inputPadRight: bud.shown ? bud.budR + 2 * s : 0
 

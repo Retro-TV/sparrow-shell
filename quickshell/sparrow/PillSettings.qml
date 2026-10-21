@@ -134,7 +134,10 @@ SettingsSurface {
         var result = [
             { item: modeRow, kind: "seg", vals: ["all", "selected"],
                 get: function () { return Flags.pillDisplayMode; },
-                set: function (value) { Flags.pillDisplayMode = value; } }
+                set: function (value) { Flags.pillDisplayMode = value; } },
+            { item: revealRow, kind: "seg", vals: ["always", "hover"],
+                get: function () { return Flags.pillRevealMode; },
+                set: function (value) { Flags.pillRevealMode = value; } }
         ];
         if (Flags.pillDisplayMode === "selected") {
             result.push({ item: outputSummaryRow, kind: "toggle",
@@ -165,6 +168,12 @@ SettingsSurface {
         );
         return result;
     }
+
+    readonly property bool noOutputsSelected: Flags.pillDisplayMode === "selected"
+        && root.outputs.length > 0
+        && !root.outputs.some(function (output) {
+            return Flags.pillOutputValue(String(output.identity || output.name), "enabled", false) === true;
+        })
 
     onActiveChanged: if (active) chooseInitialOutput()
     onOutputsChanged: if (active) chooseInitialOutput()
@@ -208,6 +217,20 @@ SettingsSurface {
                         options: [{ label: "All", value: "all" }, { label: "Selected", value: "selected" }]
                         value: Flags.pillDisplayMode
                         onPicked: value => Flags.pillDisplayMode = value
+                    }
+                }
+
+                SettingsRow {
+                    id: revealRow
+                    surface: root
+                    icon: "monitor"
+                    name: "Reveal"
+                    sub: root.noOutputsSelected ? "Hover fallback while all displays are hidden" : "Always visible or reveal on hover"
+                    SettingsSeg {
+                        s: root.s
+                        options: [{ label: "Always", value: "always" }, { label: "Hover", value: "hover" }]
+                        value: Flags.pillRevealMode
+                        onPicked: value => Flags.pillRevealMode = value
                     }
                 }
 

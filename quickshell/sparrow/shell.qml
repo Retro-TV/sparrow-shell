@@ -11,16 +11,17 @@ import "lib/monitors.js" as Mon
 /**
  * Washi pill top shell. Each monitor carries two layer-shell windows:
  *
- *  - `reserve` is a zero-content strip that only claims an exclusive zone the
- *    height of the rest pill, so tiled windows always sit below the pill even
- *    while it is expanded or a surface is open.
+ *  - `reserve` is a zero-content strip that claims an exclusive zone while the
+ *    Pill is always visible, so tiled windows sit below it even while expanded
+ *    or a surface is open. Hover mode leaves Niri's normal layout untouched.
  *  - `overlay` is a full-screen transparent Overlay layer hosting the single
  *    morphing pill anchored at top-centre. The pill never moves windows and is
  *    never re-parented; it just grows in place, so every surface grows out of
  *    the rest pill instead of popping up as a separate panel.
  *
  * Input is routed by the window mask. While the pill is collapsed the mask is
- * the pill rect only, so the rest of the screen clicks through to windows.
+ * its rect (or the narrow top-edge reveal target in hover mode), so the rest of
+ * the screen clicks through to windows.
  * While the pill is expanded (hovered/pinned) or a surface is open the mask is
  * cleared so the whole layer catches clicks. A backdrop press dismisses, and
  * keyboard focus is taken on demand so Escape closes the open surface.
@@ -168,6 +169,10 @@ ShellRoot {
     function pillEnabledOnScreen(screen) {
         return !!screen && Flags.pillVisibleOnOutput(root.outputIdentityForScreen(screen));
     }
+
+    readonly property bool noDisplaysSelected: Flags.pillDisplayMode === "selected"
+        && Quickshell.screens.length > 0
+        && !Quickshell.screens.some(function (screen) { return root.pillEnabledOnScreen(screen); })
 
     Component.onCompleted: {
         refresh();
@@ -336,6 +341,7 @@ ShellRoot {
             required property var modelData
             readonly property bool monFullscreen: root.hasFullscreenToplevelOnScreen(modelData.name)
             readonly property bool pillEnabled: root.pillEnabledOnScreen(modelData)
+            readonly property bool hoverMode: Flags.pillRevealMode === "hover" || root.noDisplaysSelected
             readonly property string outputIdentity: root.outputIdentityForScreen(modelData)
             readonly property real s: root.screenPillBaseScale(modelData) * Flags.uiScaleForOutput(outputIdentity)
             readonly property real topGap: 8 * Flags.topGapForOutput(outputIdentity) * s
@@ -348,14 +354,14 @@ ShellRoot {
                 restHeight + topGap + pillGapOffset - root.niriTopStrut)
 
             screen: modelData
-            visible: pillEnabled && !monFullscreen
+            visible: pillEnabled && !hoverMode && !monFullscreen
             color: "transparent"
             exclusionMode: ExclusionMode.Normal
-            exclusiveZone: pillEnabled && !monFullscreen ? reservedH : 0
+            exclusiveZone: pillEnabled && !hoverMode && !monFullscreen ? reservedH : 0
             aboveWindows: true
 
             anchors { top: true; left: true; right: true }
-            implicitHeight: pillEnabled && !monFullscreen ? reservedH : 0
+            implicitHeight: pillEnabled && !hoverMode && !monFullscreen ? reservedH : 0
 
             mask: emptyReserve
             Region { id: emptyReserve }
@@ -380,14 +386,42 @@ ShellRoot {
              * state may summon the pill above it. */
             readonly property bool monFullscreen: root.hasFullscreenToplevelOnScreen(modelData.name)
             readonly property bool pillEnabled: root.pillEnabledOnScreen(modelData)
+            readonly property bool pillEligible: pillEnabled || root.noDisplaysSelected
+            readonly property bool hoverMode: Flags.pillRevealMode === "hover" || root.noDisplaysSelected
             readonly property bool pillHidden: monFullscreen
+            property bool edgeHovered: false
+            property bool hoverRevealed: false
+
+            function updateHoverReveal() {
+                if (!hoverMode || monFullscreen) {
+                    hoverRevealed = false;
+                    hideRevealTimer.stop();
+                } else if (edgeHovered || pill.hovered || surfaceOpen || pill.held || pill.quickChoosing) {
+                    hideRevealTimer.stop();
+                    hoverRevealed = true;
+                } else {
+                    hideRevealTimer.restart();
+                }
+            }
 
             // A global keybind can temporarily open a disabled output, so the
             // user can reach settings and change the display selection again.
             visible: !monFullscreen && !ScreenRec.folderPickerOpen
-                && (pillEnabled || surfaceOpen)
+                && (pillEligible || surfaceOpen)
+
+            Timer {
+                id: hideRevealTimer
+                interval: 180
+                onTriggered: if (!overlay.edgeHovered && !pill.hovered && !overlay.surfaceOpen
+                        && !pill.held && !pill.quickChoosing)
+                    overlay.hoverRevealed = false
+            }
+
+            onHoverModeChanged: updateHoverReveal()
+            onEdgeHoveredChanged: updateHoverReveal()
 
             onMonFullscreenChanged: if (monFullscreen) {
+                updateHoverReveal();
                 // Collapse without completing onboarding: a fullscreen
                 // transition is not a user dismissal of that first-run page.
                 if (root.openMon === modelData.name) {
@@ -404,6 +438,7 @@ ShellRoot {
                 pill.hovered = false;
                 pill.hoverLatch = false;
             } else {
+                updateHoverReveal();
                 root.tryAutoOpenOnboarding();
             }
 
@@ -417,7 +452,8 @@ ShellRoot {
 
             anchors { top: true; left: true; right: true; bottom: true }
 
-            mask: monFullscreen ? hiddenRegion : (modal ? fullRegion : (pillHidden ? hiddenRegion : pillRegion))
+            mask: monFullscreen ? hiddenRegion : (modal ? fullRegion
+                : (hoverMode ? hoverRegion : (pillHidden ? hiddenRegion : pillRegion)))
             Region { id: hiddenRegion }
             Region {
                 id: pillRegion
@@ -431,6 +467,27 @@ ShellRoot {
                 id: fullRegion
                 width: overlay.width
                 height: overlay.height
+            }
+            Region {
+                id: hoverRegion
+                Region { item: revealEdge }
+                Region {
+                    x: pillRegion.x
+                    y: pillRegion.y + revealTranslation.y
+                    width: overlay.hoverRevealed ? pillRegion.width : 0
+                    height: overlay.hoverRevealed ? pillRegion.height : 0
+                }
+            }
+
+            Item {
+                id: revealEdge
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.right: parent.right
+                height: 2 * overlay.s
+                HoverHandler {
+                    onHoveredChanged: overlay.edgeHovered = hovered
+                }
             }
 
             MouseArea {
@@ -461,7 +518,10 @@ ShellRoot {
                 focus: overlay.surfaceOpen || pill.quickChoosing
 
                 HoverHandler {
-                    onHoveredChanged: pill.hovered = hovered
+                    onHoveredChanged: {
+                        pill.hovered = hovered;
+                        overlay.updateHoverReveal();
+                    }
                 }
                 Keys.onEscapePressed: {
                     if (pill.quickChoosing) {
@@ -600,7 +660,8 @@ ShellRoot {
                     surface: overlay.surface
                     forcePinned: root.peekMon === overlay.modelData.name
 
-                    opacity: overlay.pillHidden ? 0 : pill.swipeFade
+                    opacity: overlay.pillHidden || (overlay.hoverMode && !overlay.hoverRevealed)
+                        ? 0 : pill.swipeFade
                     Behavior on opacity {
                         enabled: !slot.swiping
                         NumberAnimation {
@@ -612,7 +673,9 @@ ShellRoot {
                     transform: [
                         Translate { x: pill.swipeX; y: pill.swipeY },
                         Translate {
-                            y: overlay.pillHidden ? -(pill.height + overlay.topGap) : 0
+                            id: revealTranslation
+                            y: overlay.pillHidden || (overlay.hoverMode && !overlay.hoverRevealed)
+                                ? -(pill.height + overlay.topGap) : 0
                             Behavior on y {
                                 NumberAnimation {
                                     duration: Motion.morph
@@ -630,14 +693,21 @@ ShellRoot {
                 }
             }
 
-            onSurfaceOpenChanged: if (surfaceOpen) focusScope.forceActiveFocus()
+            onSurfaceOpenChanged: {
+                updateHoverReveal();
+                if (surfaceOpen)
+                    focusScope.forceActiveFocus();
+            }
 
             Connections {
                 target: pill
                 function onQuickChoosingChanged() {
+                    overlay.updateHoverReveal();
                     if (pill.quickChoosing)
                         focusScope.forceActiveFocus();
                 }
+                function onHeldChanged() { overlay.updateHoverReveal(); }
+                function onPinnedChanged() { overlay.updateHoverReveal(); }
                 function onWallpaperSearchingChanged() {
                     if (!pill.wallpaperSearching && overlay.surfaceOpen)
                         focusScope.forceActiveFocus();

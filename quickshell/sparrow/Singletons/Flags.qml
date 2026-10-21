@@ -75,6 +75,7 @@ Singleton {
     property alias uiScale: adapter.uiScale
     property alias pillByOutput: adapter.pillByOutput
     property alias pillDisplayMode: adapter.pillDisplayMode
+    property alias pillRevealMode: adapter.pillRevealMode
     property alias reduceMotion: adapter.reduceMotion
     property alias uiFont: adapter.uiFont
     property alias pillGap: adapter.pillGap
@@ -150,6 +151,8 @@ Singleton {
             property real uiScale: 1.0
             /** "all" shows a Pill on every screen; "selected" uses each output's enabled flag. */
             property string pillDisplayMode: "all"
+            /** "always" keeps eligible Pills visible; "hover" reveals them from the top edge. */
+            property string pillRevealMode: "always"
             /** Optional per-output visibility, UI scale, and Pill gap overrides, keyed by Niri output identity. */
             property var pillByOutput: ({})
             property bool reduceMotion: false

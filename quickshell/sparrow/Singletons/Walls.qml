@@ -113,7 +113,7 @@ Singleton {
 
     function startSessionRestore() {
         var names = Niri.outputs.map(function(output) { return output.name; }).sort().join(",");
-        if (startupProc.running || names.length === 0 || names === initializedOutputs)
+        if (operationBusy || names.length === 0 || names === initializedOutputs)
             return;
         initializedOutputs = names;
         startupProc.command = ["bash", root.setScript, "init"].concat(contextArgs());
@@ -123,8 +123,13 @@ Singleton {
     property string initializedOutputs: ""
 
     function next() {
-        if (nextProc.running)
-            return;
+        actionRevision++;
+        // Coalesce selections by recency: an older queued selection must not
+        // overwrite a newer manual choice when the active helper finishes.
+        queuedApply = "";
+        queuedOutput = "";
+        if (operationBusy) { queuedNext = true; return; }
+        queuedNext = false;
         nextProc.command = ["bash", root.setScript, "next"].concat(contextArgs());
         nextProc.running = true;
     }
@@ -144,16 +149,103 @@ Singleton {
     property string queuedOutput: ""
 
     function apply(path, output) {
+        actionRevision++;
+        queuedNext = false;
         var out = output === undefined ? "" : output;
-        if (applyProc.running) {
+        if (operationBusy) {
             queuedApply = path;
             queuedOutput = out;
             return;
         }
+        queuedApply = "";
+        queuedOutput = "";
         applyProc.command = out.length > 0
             ? ["bash", root.setScript, "set", path, out].concat(contextArgs())
             : ["bash", root.setScript, "set", path, ""].concat(contextArgs());
         applyProc.running = true;
+    }
+
+    // Action-engine requests share this owner and its helper, never a second
+    // wallpaper controller. Busy requests fail explicitly instead of superseding.
+    property bool queuedNext: false
+    property bool queuedRecolor: false
+    readonly property bool operationBusy: actionBusy || applyProc.running || nextProc.running || startupProc.running || recolorProc.running
+
+    function drainRequests() {
+        if (operationBusy) return;
+        if (queuedApply.length) {
+            var path = queuedApply;
+            var output = queuedOutput;
+            queuedApply = "";
+            queuedOutput = "";
+            apply(path, output);
+        } else if (queuedNext) { queuedNext = false; next(); }
+        else if (queuedRecolor) { queuedRecolor = false; recolor(); }
+        else startSessionRestore();
+    }
+    function recolor() {
+        actionRevision++;
+        if (operationBusy) { queuedRecolor = true; return; }
+        recolorProc.running = true;
+    }
+    Process {
+        id: recolorProc
+        command: ["bash", root.setScript, "recolor"]
+        stderr: StdioCollector {
+            onStreamFinished: if (this.text.trim().length) console.warn(this.text.trim())
+        }
+        onExited: root.drainRequests()
+    }
+    property int actionRevision: 0
+    property int actionSerial: 0
+    property var actionCallback: null
+    property var actionAccepted: null
+    readonly property bool actionBusy: actionCallback !== null
+
+    function runAction(kind, path, output, callback, accepted) {
+        if (kind !== "set" && kind !== "recolor") {
+            callback({ok:false, accepted:false, message:"Unsupported wallpaper operation"}); return;
+        }
+        if (operationBusy || queuedApply.length || queuedNext || queuedRecolor) {
+            callback({ok: false, accepted: false, message: "Wallpaper owner is busy"});
+            return;
+        }
+        actionSerial++;
+        actionCallback = callback;
+        actionAccepted = accepted || null;
+        actionRevision++;
+        actionProc.command = kind === "recolor"
+            ? ["bash", root.setScript, "recolor"].concat(contextArgs())
+            : ["bash", root.setScript, "set", path, output].concat(contextArgs());
+        actionProc.running = true;
+    }
+
+    Process {
+        id: actionProc
+        onStarted: if (root.actionAccepted) root.actionAccepted()
+        onRunningChanged: if (!running) {
+            let serial = root.actionSerial;
+            Qt.callLater(function() {
+            if (root.actionSerial === serial && root.actionCallback) {
+                var callback = root.actionCallback;
+                root.actionCallback = null;
+                root.actionAccepted = null;
+                callback({ok:false, accepted:false, message:"Wallpaper helper did not complete"});
+                root.drainRequests();
+            }
+            });
+        }
+        stderr: StdioCollector { id: actionErrors }
+        onExited: (exitCode, exitStatus) => {
+            var callback = root.actionCallback;
+            root.actionCallback = null;
+            root.actionAccepted = null;
+            stateProc.running = true;
+            if (callback) callback({ok: exitCode === 0, accepted: true,
+                applied: exitCode === 0, guarantee: "degraded",
+                message: actionErrors.text.trim() || "Wallpaper helper failed; state may have changed"});
+            Qt.callLater(root.drainRequests);
+        }
     }
 
     function trash(path) {
@@ -227,18 +319,8 @@ Singleton {
             onStreamFinished: if (this.text.trim().length > 0) console.warn(this.text.trim())
         }
         onExited: {
-            if (root.queuedApply.length) {
-                var next = root.queuedApply;
-                var nextOut = root.queuedOutput;
-                root.queuedApply = "";
-                root.queuedOutput = "";
-                applyProc.command = nextOut.length > 0
-                    ? ["bash", root.setScript, "set", next, nextOut].concat(contextArgs())
-                    : ["bash", root.setScript, "set", next, ""].concat(contextArgs());
-                applyProc.running = true;
-                return;
-            }
             stateProc.running = true;
+            Qt.callLater(root.drainRequests);
         }
     }
 
@@ -247,7 +329,7 @@ Singleton {
         stderr: StdioCollector {
             onStreamFinished: if (this.text.trim().length > 0) console.warn(this.text.trim())
         }
-        onExited: root.refresh()
+        onExited: { root.refresh(); Qt.callLater(root.drainRequests); }
     }
 
     Connections {
@@ -263,7 +345,7 @@ Singleton {
         onExited: {
             outputMapFile.reload();
             root.refresh();
-            Qt.callLater(root.startSessionRestore);
+            Qt.callLater(root.drainRequests);
         }
     }
 

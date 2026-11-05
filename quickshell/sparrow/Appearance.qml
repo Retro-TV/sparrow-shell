@@ -1,8 +1,6 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import Quickshell
-import Quickshell.Io
 import "Singletons"
 
 /** Sparrow's clock, palette source, dynamic palette and UI preferences. */
@@ -91,14 +89,7 @@ SettingsSurface {
         interval: 260
         repeat: false
         onTriggered: {
-            dynamicProc.exec(["bash", Quickshell.shellPath("scripts/wallpaper.sh"), "recolor"]);
-        }
-    }
-
-    Process {
-        id: dynamicProc
-        stderr: StdioCollector {
-            onStreamFinished: if (this.text.trim().length > 0) console.warn(this.text.trim())
+            Walls.recolor();
         }
     }
 

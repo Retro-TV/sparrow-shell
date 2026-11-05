@@ -1,0 +1,4 @@
+module Quickshell
+Singleton Singleton.qml
+singleton Quickshell Quickshell.qml
+ElapsedTimer ElapsedTimer.qml

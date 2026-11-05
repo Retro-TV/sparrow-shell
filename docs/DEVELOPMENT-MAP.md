@@ -34,6 +34,7 @@ Tracked configuration and scripts integrate the remaining desktop services;
 | Shell startup and composition | `quickshell/sparrow/shell.qml` |
 | Pill behavior and per-display settings | `quickshell/sparrow/Pill.qml`, `PillSettings.qml`, `PillSurface.qml`, `Singletons/Flags.qml` |
 | General settings and appearance | `Settings.qml`, `Appearance.qml`, `Look.qml`, `Singletons/Theme.qml`, `Singletons/Flags.qml` |
+| Shared Action Engine (backend only) | `quickshell/sparrow/Singletons/Actions.qml`, `lib/action-engine.js`, and [`SHARED-ACTION-ENGINE.md`](SHARED-ACTION-ENGINE.md) |
 | Runtime state and ownership | `quickshell/sparrow/Singletons/Flags.qml` and [`PORTABILITY-ARCHITECTURE.md#current-runtime-and-ownership`](PORTABILITY-ARCHITECTURE.md#current-runtime-and-ownership) for state/cache ownership. |
 | Wallpaper library, applying wallpapers, and output mapping | `Wallpaper.qml`, `Singletons/Walls.qml`, `scripts/wallpaper.sh`, `scripts/wallpaper-thumbs.sh` |
 | Wallhaven search and API key | `Wallpaper.qml` owns search UI/results; `scripts/wallpaper-search.sh` calls providers and downloads; `scripts/wallhaven-key.py` stores/reads the optional key; `ApiKeys.qml` manages API-key settings; related checks are in `installer/test_wallpaper_search_api.py` and `installer/test_wallhaven_key.py`. |

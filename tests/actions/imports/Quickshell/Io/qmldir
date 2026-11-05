@@ -1,0 +1,4 @@
+module Quickshell.Io
+Process Process.qml
+StdioCollector StdioCollector.qml
+FileView FileView.qml
